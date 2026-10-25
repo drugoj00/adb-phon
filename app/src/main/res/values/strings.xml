@@ -147,7 +147,10 @@
     <string name="pad_scroll_down">Scroll down</string>
     <string name="pad_mouse_hint">Mouse: move the cursor with a finger, tap = click, long press = long click</string>
     <string name="pad_air">Air</string>
-    <string name="air_hint">Air mouse: press and hold the big “Hold and move the phone” button at the top, move the phone like a pointer, release it to stop; tap “Click” to click.</string>
+    <string name="air_hint">Air mouse: the round switch between the buttons chooses the mode. Teal = switching: tap “Air” to turn it on and tap again to turn it off. Plain = hold: it works only while you hold the button. Move the phone like a pointer; tap “Click” to click.</string>
+    <string name="air_state_on">Air ON</string>
+    <string name="air_state_off">Air OFF</string>
+    <string name="air_on">Air ON. Tap to stop</string>
     <string name="air_hold">Hold and move the phone</string>
     <string name="air_click">Click</string>
     <string name="air_center">Center</string>
