@@ -146,7 +146,10 @@
     <string name="pad_scroll_down">Прокрутка вниз</string>
     <string name="pad_mouse_hint">Мышь: двигай курсор пальцем, касание = клик, долгое касание = долгое нажатие</string>
     <string name="pad_air">Воздух</string>
-    <string name="air_hint">Аэромышь: нажми и держи большую кнопку «Держи и води телефоном» вверху, води телефоном как указкой, отпусти, чтобы остановиться; для клика нажми «Клик».</string>
+    <string name="air_hint">Аэромышь: кружок между кнопками выбирает режим. Бирюзовый — переключение: коснись «Воздух», чтобы включить, и ещё раз, чтобы выключить. Цвета фона — удержание: работает, только пока держишь кнопку. Води телефоном как указкой; для клика нажми «Клик».</string>
+    <string name="air_state_on">Воздух вкл</string>
+    <string name="air_state_off">Воздух выкл</string>
+    <string name="air_on">Воздух вкл. Нажми — стоп</string>
     <string name="air_hold">Держи и води телефоном</string>
     <string name="air_click">Клик</string>
     <string name="air_center">В центр</string>
