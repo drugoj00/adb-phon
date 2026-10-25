@@ -2,10 +2,18 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Method;
+import android.os.IBinder;
+import android.os.SystemClock;
+import android.view.InputDevice;
+import android.view.InputEvent;
+import android.view.MotionEvent;
 
 /**
  * Помощник ADB-phon: создаёт на устройстве виртуальную мышь (UHID) и по командам из stdin двигает курсор.
  * Запускается от имени shell через app_process; команды: "m dx dy", "b маска", "w шаг", "q".
+ * Кроме мыши умеет настоящее касание (без запуска «input» на каждое нажатие, он на слабых приставках занимает >1 с):
+ * "td x y" палец вниз, "tm x y" движение, "tu x y" палец вверх, "tap x y", "lp x y" долгое нажатие (координаты в пикселях экрана).
  */
 public class Helper implements Runnable {
     private static RandomAccessFile uhid;
@@ -65,6 +73,36 @@ public class Helper implements Runnable {
         }
     }
 
+    // ---------- настоящее касание через системный InputManager (рефлексия, работает от shell) ----------
+    private static Object inputManager;
+    private static Method injectMethod;
+    private static long downTime;
+
+    private static boolean initInject() {
+        try {
+            Class<?> sm = Class.forName("android.os.ServiceManager");
+            IBinder binder = (IBinder) sm.getMethod("getService", String.class).invoke(null, "input");
+            Class<?> stub = Class.forName("android.hardware.input.IInputManager$Stub");
+            inputManager = stub.getMethod("asInterface", IBinder.class).invoke(null, binder);
+            injectMethod = inputManager.getClass().getMethod("injectInputEvent", InputEvent.class, int.class);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static void touch(int action, float x, float y) {
+        if (injectMethod == null) return;
+        try {
+            long now = SystemClock.uptimeMillis();
+            if (action == MotionEvent.ACTION_DOWN) downTime = now;
+            MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 1.0f, 1.0f, 0, 1.0f, 1.0f, 0, 0);
+            e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+            injectMethod.invoke(inputManager, e, 0);
+            e.recycle();
+        } catch (Throwable ignored) { }
+    }
+
     public void run() {
         byte[] buf = new byte[4380];
         try {
@@ -73,13 +111,18 @@ public class Helper implements Runnable {
     }
 
     public static void main(String[] args) throws Exception {
-        uhid = new RandomAccessFile("/dev/uhid", "rw");
-        // Ядро присылает служебные события (START, OPEN и т. д.): их нужно вычитывать с того же дескриптора
-        Thread drain = new Thread(new Helper());
-        drain.setDaemon(true);
-        drain.start();
-        create();
-        System.out.println("ready");
+        boolean mouseOk = false;
+        try {
+            uhid = new RandomAccessFile("/dev/uhid", "rw");
+            // Ядро присылает служебные события (START, OPEN и т. д.): их нужно вычитывать с того же дескриптора
+            Thread drain = new Thread(new Helper());
+            drain.setDaemon(true);
+            drain.start();
+            create();
+            mouseOk = true;
+        } catch (Throwable ignored) { }
+        boolean touchOk = initInject();
+        System.out.println("ready mouse=" + (mouseOk ? 1 : 0) + " touch=" + (touchOk ? 1 : 0));
         System.out.flush();
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         String line;
@@ -90,17 +133,33 @@ public class Helper implements Runnable {
                 String[] t = line.split("\\s+");
                 char c = t[0].charAt(0);
                 if (c == 'q') break;
-                if (c == 'm' && t.length >= 3) move(Integer.parseInt(t[1]), Integer.parseInt(t[2]));
+                try {
+                if (t[0].equals("td") && t.length >= 3) touch(MotionEvent.ACTION_DOWN, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
+                else if (t[0].equals("tm") && t.length >= 3) touch(MotionEvent.ACTION_MOVE, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
+                else if (t[0].equals("tu") && t.length >= 3) touch(MotionEvent.ACTION_UP, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
+                else if (t[0].equals("tap") && t.length >= 3) {
+                    float x = Float.parseFloat(t[1]), y = Float.parseFloat(t[2]);
+                    touch(MotionEvent.ACTION_DOWN, x, y); Thread.sleep(40); touch(MotionEvent.ACTION_UP, x, y);
+                } else if (t[0].equals("lp") && t.length >= 3) {
+                    float x = Float.parseFloat(t[1]), y = Float.parseFloat(t[2]);
+                    touch(MotionEvent.ACTION_DOWN, x, y); Thread.sleep(700); touch(MotionEvent.ACTION_UP, x, y);
+                } else if (uhid == null) continue;
+                else if (c == 'm' && t.length >= 3) move(Integer.parseInt(t[1]), Integer.parseInt(t[2]));
                 else if (c == 'b' && t.length >= 2) {
                     buttons = Integer.parseInt(t[1]) & 7;
                     report(buttons, 0, 0, 0);
                 } else if (c == 'w' && t.length >= 2) report(buttons, 0, 0, Integer.parseInt(t[1]));
+                } catch (NumberFormatException | IOException bad) {
+                    // испорченная строка не должна останавливать помощника
+                }
             }
         } finally {
-            try {
-                event(1, new byte[0]); // UHID_DESTROY
-            } catch (Throwable ignored) { }
-            uhid.close();
+            if (uhid != null) {
+                try {
+                    event(1, new byte[0]); // UHID_DESTROY
+                } catch (Throwable ignored) { }
+                try { uhid.close(); } catch (Throwable ignored) { }
+            }
         }
     }
 }
