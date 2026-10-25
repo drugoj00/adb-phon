@@ -16,12 +16,12 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 **Version 1.0.** [ADB-phon-1.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `deb7157008a141eb00553e7d403a02139db37c89be24d47009f8056c43724de8`
+SHA-256: `2825e20e5d2034c21832a579ac990476ca8a5f7136ef99e8fa778d1f92f02d17`
 
 ## Features
 
 - **Install APK over ADB.** Pick a file and the app is installed or updated through ADB, no computer needed.
-- **Air mouse and mouse.** The phone’s gyroscope works as a pointer. A real cursor appears on the screen of the controlled device (a helper creates a virtual mouse). Click, scroll, OK, Back, Home, Menu, arrows, volume, sound and microphone on/off.
+- **Air mouse and mouse.** The phone’s gyroscope works as a pointer. A real cursor appears on the screen of the controlled device (a helper creates a virtual mouse). The “Air” button works in two modes picked with a round switch: tap to turn on and tap again to turn off, or hold it while you move the phone. Click, scroll, OK, Back, Home, Menu, arrows, volume, sound and microphone on/off. Touch mode is instant too: the helper injects real touches, so taps and swipes work even on slow TV boxes.
 - **Special access, survives reboot.** Turn on an accessibility service, keep it enabled after a reboot (Android 13–14 often switch it off), remove “restricted settings”, allow writing secure settings, draw over other apps, notifications, usage stats, all files, install unknown apps, no battery limits.
 - **Remote control.** Four switchable modes: Keys, Touch, Mouse, Air. Home, Back, Menu, D-pad and OK, volume, media keys, power, recents, text input, touch pad. For phones, TVs and set-top boxes.
 - **Easy connection.** Finds devices in the network and shows their names, favourites with your own names, manual IP. Android 11+: pairing by code (wireless debugging). Android 8–10: one command from a computer once. Control another device by IP; press and hold a device to disconnect.
@@ -44,7 +44,7 @@ SHA-256: `deb7157008a141eb00553e7d403a02139db37c89be24d47009f8056c43724de8`
 
 ![Remote control: keys, D-pad, volume, media, text input.](screenshots/en/05-remote.png)
 
-![Air mouse: gyroscope pointer, click, arrows, Back, Home, Menu, sound and microphone on/off.](screenshots/en/06-air-mouse.png)
+![Air mouse: “Air on/off” button with a round mode switch (toggle or hold), click, arrows, Back, Home, Menu, volume, player keys.](screenshots/en/06-air-mouse.png)
 
 ![Phone: device info, monitor, screenshot, recording, quick settings.](screenshots/en/07-phone.png)
 
@@ -61,14 +61,14 @@ SHA-256: `deb7157008a141eb00553e7d403a02139db37c89be24d47009f8056c43724de8`
 
 ## Requirements
 
-Android 8.0 or newer (ARMv7, ARM64, x86, x86_64). Wi-Fi for wireless debugging (Android 11+). Android 8–10: one command from a computer once (adb tcpip 5555), repeated after a reboot. Tested on Android 10 (Samsung A7) and Android 15 (Samsung A14).
+Android 8.0 or newer (ARMv7, ARM64, x86, x86_64). Wi-Fi for wireless debugging (Android 11+). Android 8–10: one command from a computer once (adb tcpip 5555), repeated after a reboot. Tested on Android 10 (Samsung A7, S9), Android 15 (Samsung A14) and on a TV box with Android 11.
 
 ## Limitations and warnings
 
 - Actions on system apps can break the phone: be careful, the app asks for confirmation and protects critical packages.
 - ADB-phon works locally and sends nothing anywhere. The cursor helper and the remote control manage a whole device: connect only to your own devices.
 - The app is not on Google Play (it would not be allowed): download the APK here. Android may warn about installing from an unknown source.
-- Tested on two phones (Android 10 and 15). Not yet tested on TVs and set-top boxes, nor on Android 8–9 and 11–14 devices of other makers; reports are welcome.
+- Tested on two phones (Android 10 and 15) and one TV box (Android 11). Not yet tested on Android 8–9 and 11–14 devices of other makers; reports are welcome.
 - Special access settings can differ on Xiaomi, Huawei and other firmwares; on Xiaomi also turn on “USB debugging (security settings)”.
 
 ## Built with
