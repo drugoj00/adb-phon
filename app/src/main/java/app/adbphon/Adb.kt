@@ -116,6 +116,10 @@ object Adb {
 
     val helperRunning: Boolean get() = helperOut != null
 
+    /** Что умеет запущенный помощник на этом устройстве: виртуальная мышь (UHID) и настоящее касание (InputManager). */
+    @Volatile var helperMouse = false
+    @Volatile var helperTouch = false
+
     suspend fun helperStart(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             helperStopNow()
@@ -127,8 +131,30 @@ object Adb {
             val s = mgr.openStream("exec:CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper")
             helperStream = s
             helperOut = s.openOutputStream()
-            kotlinx.coroutines.delay(900)
-            AppLog.i("ADBphon", "helper started")
+            // помощник первой строкой сообщает «ready mouse=1 touch=1»; на слабых приставках запуск занимает больше секунды
+            val ready = StringBuilder()
+            val reader = Thread {
+                runCatching {
+                    val input = s.openInputStream()
+                    while (true) {
+                        val ch = input.read()
+                        if (ch < 0 || ch == '\n'.code) break
+                        ready.append(ch.toChar())
+                    }
+                }
+            }
+            reader.isDaemon = true
+            reader.start()
+            reader.join(6000)
+            val line = ready.toString()
+            helperMouse = line.contains("mouse=1")
+            helperTouch = line.contains("touch=1")
+            if (!line.startsWith("ready")) {
+                // старый помощник без строки «ready» или медленный запуск: считаем, что мышь есть, касание — нет
+                helperMouse = true
+                helperTouch = false
+            }
+            AppLog.i("ADBphon", "helper started: ${line.ifBlank { "(без ответа)" }}")
             Unit
         }.onFailure { AppLog.e("ADBphon", "helper error", it); helperStopNow() }
     }
@@ -138,6 +164,8 @@ object Adb {
         runCatching { helperStream?.close() }
         helperOut = null
         helperStream = null
+        helperMouse = false
+        helperTouch = false
     }
 
     suspend fun helperStop() = withContext(Dispatchers.IO) { helperStopNow() }

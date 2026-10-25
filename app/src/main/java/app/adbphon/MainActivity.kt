@@ -286,7 +286,9 @@ fun ConnectScreen(vm: MainViewModel) {
                     Text(stringResource(R.string.net_last), fontSize = 12.sp)
                     FoundRow(vm, f, askName, dropLink)
                 }
-                vm.found.forEach { f -> FoundRow(vm, f, askName, dropLink) }
+                // устройство из «Последнего подключения» второй раз в списке не показываем
+                vm.found.filter { f -> vm.lastDevice?.let { it.host == f.host && it.port == f.port } != true }
+                    .forEach { f -> FoundRow(vm, f, askName, dropLink) }
                 if (vm.scanned && !vm.scanning && vm.found.isEmpty()) Text(stringResource(R.string.net_none), fontSize = 13.sp)
             }
         }

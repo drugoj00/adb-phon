@@ -207,6 +207,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Сторона окна для пальца во вкладках «Касание» и «Мышь»: справа (по умолчанию) или слева. */
     var padRight by mutableStateOf(true)
 
+    /** «Воздух»: true — касание включает до следующего касания, false — работает, пока держишь кнопку. */
+    var airToggle by mutableStateOf(true)
+
+    fun changeAirToggle(v: Boolean) {
+        airToggle = v
+        prefs.edit().putBoolean("air_toggle", v).apply()
+    }
+
     fun changePadRight(right: Boolean) {
         padRight = right
         prefs.edit().putBoolean("pad_right", right).apply()
@@ -244,6 +252,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         theme = prefs.getString("theme", "auto") ?: "auto"
         lang = prefs.getString("lang", "auto") ?: "auto"
         padRight = prefs.getBoolean("pad_right", true)
+        airToggle = prefs.getBoolean("air_toggle", true)
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
     }
@@ -294,9 +303,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadScreenSize() {
         viewModelScope.launch {
-            val out = runCatching { Adb.shell("wm size") }.getOrDefault("")
-            Regex("(\\d+)x(\\d+)").findAll(out).lastOrNull()?.let {
-                screenW = it.groupValues[1].toInt(); screenH = it.groupValues[2].toInt()
+            // сразу после подключения первый запрос бывает пустым: пробуем до трёх раз
+            repeat(3) { attempt ->
+                val out = runCatching { Adb.shell("wm size") }.getOrDefault("")
+                val m = Regex("(\\d+)x(\\d+)").findAll(out).lastOrNull()
+                if (m != null) {
+                    screenW = m.groupValues[1].toInt(); screenH = m.groupValues[2].toInt()
+                    return@launch
+                }
+                if (attempt < 2) kotlinx.coroutines.delay(800)
             }
         }
     }
@@ -331,15 +346,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun hScroll(n: Int) = Adb.helperSend("w $n")
 
+    /** Настоящее касание через помощника: быстро и плавно. Если помощник касаться не умеет, остаётся медленный `input`. */
+    val touchViaHelper: Boolean get() = helperOn && Adb.helperTouch
+
+    fun hTouch(action: String, x: Int, y: Int) = Adb.helperSend("$action $x $y")
+
+    /** Реальный курсор в центр экрана: сначала в угол, затем на половину (один отсчёт мыши ≈ 1,4 px при обычной скорости указателя). */
+    fun hCenter() {
+        viewModelScope.launch {
+            Adb.helperSend("m -6000 -6000")
+            kotlinx.coroutines.delay(250)
+            Adb.helperSend("m ${(screenW * 0.36f).toInt()} ${(screenH * 0.36f).toInt()}")
+        }
+    }
+
     fun tap(x: Int, y: Int) {
+        if (touchViaHelper) { hTouch("tap", x, y); return }
         viewModelScope.launch { runCatching { Adb.shell("input tap $x $y") } }
     }
 
     fun longPress(x: Int, y: Int) {
+        if (touchViaHelper) { hTouch("lp", x, y); return }
         viewModelScope.launch { runCatching { Adb.shell("input swipe $x $y $x $y 700") } }
     }
 
     fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Int) {
+        if (touchViaHelper) {
+            viewModelScope.launch {
+                // протянуть палец по прямой за указанное время, шагами по ~16 мс
+                hTouch("td", x1, y1)
+                val steps = (ms / 16).coerceIn(2, 40)
+                for (i in 1..steps) {
+                    kotlinx.coroutines.delay((ms / steps).toLong().coerceAtLeast(1))
+                    hTouch("tm", x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps)
+                }
+                hTouch("tu", x2, y2)
+            }
+            return
+        }
         viewModelScope.launch { runCatching { Adb.shell("input swipe $x1 $y1 $x2 $y2 $ms") } }
     }
 
@@ -698,6 +742,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
         padRight = prefs.getBoolean("pad_right", true)
+        airToggle = prefs.getBoolean("air_toggle", true)
         logOn = prefs.getBoolean("log_on", false)
         AppLog.setEnabled(ctx, logOn)
         names.clear()

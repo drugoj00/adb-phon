@@ -13,8 +13,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -52,6 +55,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -90,6 +94,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -267,9 +273,11 @@ private fun humanSize(b: Long): String = when {
 @Composable
 fun RemoteScreen(vm: MainViewModel) {
     var text by remember { mutableStateOf("") }
-    var mode by rememberSaveable { mutableStateOf(0) } // 0 кнопки, 1 касание, 2 мышь, 3 воздух
     LaunchedEffect(Unit) { vm.loadScreenSize() }
     DisposableEffect(Unit) { onDispose { vm.setHelper(false) } }
+    var mode by rememberSaveable { mutableStateOf(0) } // 0 кнопки, 1 касание, 2 мышь, 3 воздух
+    // настоящий курсор нужен в «Мыши» и «Воздухе»: включаем помощника сам, выключатель внизу остаётся для ручного отключения
+    LaunchedEffect(mode) { if (mode >= 1 && !vm.helperOn) vm.setHelper(true) }
     val cursor = remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     var sens by rememberSaveable { mutableStateOf(1.0f) }
     val labels = listOf(R.string.pad_keys, R.string.pad_touch, R.string.pad_mouse, R.string.pad_air)
@@ -300,10 +308,20 @@ fun RemoteScreen(vm: MainViewModel) {
             2 -> {
                 Text(stringResource(R.string.pad_mouse_hint), fontSize = 12.sp)
                 PadArea(vm) { TouchPad(vm, true, cursor) }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().height(34.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val cxm = vm.screenW / 2; val sy = vm.screenH
-                    OutlinedButton({ if (vm.helperOn) vm.hScroll(-3) else vm.swipe(cxm, sy * 7 / 10, cxm, sy * 3 / 10, 300) }) { Text(stringResource(R.string.pad_scroll_down), fontSize = 12.sp) }
-                    OutlinedButton({ if (vm.helperOn) vm.hScroll(3) else vm.swipe(cxm, sy * 3 / 10, cxm, sy * 7 / 10, 300) }) { Text(stringResource(R.string.pad_scroll_up), fontSize = 12.sp) }
+                    // обе кнопки одной высоты, подпись в две строки: «Прокрутка / вниз» и «Прокрутка / вверх»
+                    // толстые стрелки по краям, подпись по центру
+                    OutlinedButton({ if (vm.helperOn) vm.hScroll(-3) else vm.swipe(cxm, sy * 7 / 10, cxm, sy * 3 / 10, 300) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+                        Text(stringResource(R.string.pad_scroll_down).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+                        Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+                    }
+                    OutlinedButton({ if (vm.helperOn) vm.hScroll(3) else vm.swipe(cxm, sy * 3 / 10, cxm, sy * 7 / 10, 300) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
+                        Text(stringResource(R.string.pad_scroll_up).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+                        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
+                    }
                 }
                 QuickKeys(vm)
                 HelperSwitch(vm)
@@ -312,7 +330,7 @@ fun RemoteScreen(vm: MainViewModel) {
                 AirControls(vm, cursor, sens)
                 RemoteKeys(vm) {
                     Text(stringResource(R.string.air_sens), fontSize = 12.sp)
-                    Slider(sens, { sens = it }, valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
+                    Slider(sens, { sens = it }, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
                 }
                 HelperSwitch(vm)
                 Text(stringResource(R.string.air_hint), fontSize = 12.sp)
@@ -323,11 +341,10 @@ fun RemoteScreen(vm: MainViewModel) {
 
 /**
  * Окно для пальца занимает половину ширины экрана, справа (по умолчанию) или слева; на пустой половине кнопки выбора стороны.
- * Если управляемый экран альбомный, окно во всю ширину, а кнопки над ним.
+ * Так же и для альбомного управляемого экрана (ТВ-приставка).
  */
 @Composable
 private fun PadArea(vm: MainViewModel, pad: @Composable () -> Unit) {
-    val landscape = vm.screenW >= vm.screenH
     // одна кнопка на пустой половине: «Окно / слева (или справа) / стрелка» — куда окно переместится по нажатию
     @Composable fun sideButton() {
         val toLeft = vm.padRight
@@ -339,18 +356,14 @@ private fun PadArea(vm: MainViewModel, pad: @Composable () -> Unit) {
             }
         }
     }
-    if (landscape) {
-        sideButton()
-        pad()
-    } else {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (vm.padRight) {
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { sideButton() }
-                Box(Modifier.weight(1f)) { pad() }
-            } else {
-                Box(Modifier.weight(1f)) { pad() }
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { sideButton() }
-            }
+    // окно для пальца всегда на половине ширины сбоку, даже если управляемый экран альбомный (ТВ-приставка)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (vm.padRight) {
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { sideButton() }
+            Box(Modifier.weight(1f)) { pad() }
+        } else {
+            Box(Modifier.weight(1f)) { pad() }
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { sideButton() }
         }
     }
 }
@@ -372,19 +385,20 @@ private fun QuickKeys(vm: MainViewModel) {
     }
 }
 
-private val KEY_H = 56.dp
+private val KEY_H = 56.dp      // блок со стрелками остаётся высоким
+private val HALF_H = 28.dp     // все остальные кнопки панели вдвое ниже
 
 @Composable
-private fun RowScope.TextKey(vm: MainViewModel, label: Int, code: Int, size: Int = 13, weight: Float = 1f) {
-    OutlinedButton({ vm.key(code) }, Modifier.weight(weight).height(KEY_H), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
-        Text(stringResource(label), fontSize = size.sp, maxLines = 2, textAlign = TextAlign.Center, lineHeight = (size + 2).sp)
+private fun RowScope.TextKey(vm: MainViewModel, label: Int, code: Int, size: Int = 13, weight: Float = 1f, h: androidx.compose.ui.unit.Dp = HALF_H) {
+    OutlinedButton({ vm.key(code) }, Modifier.weight(weight).height(h), shape = RoundedCornerShape(if (h == HALF_H) 10.dp else 14.dp), contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
+        Text(stringResource(label), fontSize = size.sp, maxLines = if (h == HALF_H) 1 else 2, textAlign = TextAlign.Center, lineHeight = (size + 2).sp)
     }
 }
 
 @Composable
 private fun RowScope.IconKey(vm: MainViewModel, icon: ImageVector, code: Int) {
-    OutlinedButton({ vm.key(code) }, Modifier.weight(1f).height(KEY_H), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(0.dp)) {
-        Icon(icon, null, Modifier.size(30.dp))
+    OutlinedButton({ vm.key(code) }, Modifier.weight(1f).height(HALF_H), shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) {
+        Icon(icon, null, Modifier.size(22.dp))
     }
 }
 
@@ -412,21 +426,22 @@ private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)?
             TextKey(vm, R.string.k_power, 26); TextKey(vm, R.string.k_mic, 91, weight = 2f)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
-            TextKey(vm, R.string.k_recents, 187); ArrowKey(vm, Icons.Filled.KeyboardArrowUp, 19); TextKey(vm, R.string.k_home, 3)
+            TextKey(vm, R.string.k_recents, 187, h = KEY_H); ArrowKey(vm, Icons.Filled.KeyboardArrowUp, 19); TextKey(vm, R.string.k_home, 3, h = KEY_H)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             ArrowKey(vm, Icons.Filled.KeyboardArrowLeft, 21); OkKey(vm); ArrowKey(vm, Icons.Filled.KeyboardArrowRight, 22)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
-            TextKey(vm, R.string.k_menu, 82); ArrowKey(vm, Icons.Filled.KeyboardArrowDown, 20); TextKey(vm, R.string.k_back, 4)
+            TextKey(vm, R.string.k_menu, 82, h = KEY_H); ArrowKey(vm, Icons.Filled.KeyboardArrowDown, 20); TextKey(vm, R.string.k_back, 4, h = KEY_H)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             TextKey(vm, R.string.k_vol_down, 25); TextKey(vm, R.string.k_vol_up, 24); TextKey(vm, R.string.k_mute, 164, 11)
         }
-        afterVolume?.invoke()
+        // кнопки плеера идут сразу под громкостью, а «Чувствительность» с ползунком (во вкладке «Воздух») — после них
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             IconKey(vm, Icons.Filled.SkipPrevious, 88); IconKey(vm, Icons.Filled.PlayArrow, 85); IconKey(vm, Icons.Filled.SkipNext, 87)
         }
+        afterVolume?.invoke()
     }
 }
 
@@ -435,52 +450,119 @@ private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)?
 private fun AirControls(vm: MainViewModel, cursor: androidx.compose.runtime.MutableState<Offset>, sens: Float) {
     val ctx = LocalContext.current
     var holding by remember { mutableStateOf(false) }
+    var latched by remember { mutableStateOf(false) }   // короткое нажатие включает воздух до следующего нажатия
+    val active = holding || latched
     val gyro = remember { (ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager).getDefaultSensor(Sensor.TYPE_GYROSCOPE) }
-    DisposableEffect(holding, sens) {
+    DisposableEffect(active, sens) {
         val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        if (!holding || gyro == null) {
+        if (!active || gyro == null) {
             onDispose { }
         } else {
             var last = 0L
             var accX = 0f
             var accY = 0f
+            var evN = 0; var maxYaw = 0f; var maxPitch = 0f; var sent = 0; var logT = 0L
+            // вектор силы тяжести в осях телефона: по нему находим «вертикаль», и поворот вправо-влево работает при любом хвате
+            // (экраном вверх, как пульт, или стоя, как камера)
+            val g = floatArrayOf(0f, 0f, 9.8f)
+            val gravSensor = sm.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val gl = object : SensorEventListener {
+                override fun onSensorChanged(e: SensorEvent) {
+                    // для акселерометра (если гравитационного датчика нет) сглаживаем, чтобы выделить гравитацию
+                    val a = if (e.sensor.type == Sensor.TYPE_GRAVITY) 1f else 0.1f
+                    for (i in 0..2) g[i] += a * (e.values[i] - g[i])
+                }
+                override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+            }
             val l = object : SensorEventListener {
                 override fun onSensorChanged(e: SensorEvent) {
                     if (last != 0L) {
                         val dt = (e.timestamp - last) / 1e9f
-                        val k = 0.6f * sens
+                        val gn = kotlin.math.sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]).coerceAtLeast(0.1f)
+                        // скорость поворота вокруг вертикали (рыскание) и вокруг короткой оси телефона (тангаж), рад/с
+                        val yaw = -(e.values[0] * g[0] + e.values[1] * g[1] + e.values[2] * g[2]) / gn
+                        val pitch = -e.values[0]
+                        evN++
+                        if (kotlin.math.abs(yaw) > maxYaw) maxYaw = kotlin.math.abs(yaw)
+                        if (kotlin.math.abs(pitch) > maxPitch) maxPitch = kotlin.math.abs(pitch)
+                        if (e.timestamp - logT > 1_000_000_000L) {
+                            AppLog.i("ADBphon", "air: событий=$evN макс.рыскание=${"%.3f".format(maxYaw)} макс.тангаж=${"%.3f".format(maxPitch)} отправлено=$sent помощник=${vm.helperOn} экран=${vm.screenW}x${vm.screenH}")
+                            logT = e.timestamp; evN = 0; maxYaw = 0f; maxPitch = 0f; sent = 0
+                        }
                         val c = cursor.value
                         if (vm.helperOn) {
-                            accX += -e.values[2] * dt * k * vm.screenW * 0.6f
-                            accY += -e.values[0] * dt * k * vm.screenW * 0.6f
+                            // около 40° поворота ≈ весь экран: один отсчёт мыши даёт ≈1,4 пикселя
+                            val kc = sens * vm.screenW * 0.9f
+                            accX += yaw * dt * kc
+                            accY += pitch * dt * kc
                             val ix = accX.toInt(); val iy = accY.toInt()
-                            if (ix != 0 || iy != 0) { accX -= ix; accY -= iy; vm.hMove(ix, iy) }
+                            if (ix != 0 || iy != 0) { accX -= ix; accY -= iy; sent += kotlin.math.abs(ix) + kotlin.math.abs(iy); vm.hMove(ix, iy) }
                         } else {
-                            cursor.value = Offset((c.x - e.values[2] * dt * k).coerceIn(0f, 1f), (c.y - e.values[0] * dt * k).coerceIn(0f, 1f))
+                            val k = 1.8f * sens
+                            cursor.value = Offset((c.x + yaw * dt * k).coerceIn(0f, 1f), (c.y + pitch * dt * k).coerceIn(0f, 1f))
                         }
                     }
                     last = e.timestamp
                 }
                 override fun onAccuracyChanged(s: Sensor?, a: Int) {}
             }
+            // приставка прячет курсор, если мышь молчит: лёгкое «дрожание» при нажатии сразу показывает его
+            if (vm.helperOn) { vm.hMove(1, 0); vm.hMove(-1, 0) }
             sm.registerListener(l, gyro, SensorManager.SENSOR_DELAY_GAME)
-            onDispose { sm.unregisterListener(l) }
+            if (gravSensor != null) sm.registerListener(gl, gravSensor, SensorManager.SENSOR_DELAY_GAME)
+            onDispose { sm.unregisterListener(l); sm.unregisterListener(gl) }
         }
     }
     if (gyro == null) {
         Text(stringResource(R.string.air_no_sensor), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // состояние режима меняем осознанно: при смене режима всё выключаем
+    LaunchedEffect(vm.airToggle) { latched = false; holding = false }
+    // «Клик», кружок выбора режима и кнопка «Воздух вкл / Воздух выкл» в одном ряду.
+    // Кружок: бирюзовый — «переключение» (касание включает до следующего касания), цвета фона темы — «удержание» (работает, пока держишь)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button({ if (vm.helperOn) vm.hClick() else { val c = cursor.value; vm.tap((c.x * vm.screenW).toInt(), (c.y * vm.screenH).toInt()) } },
+            Modifier.weight(1f).height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E), contentColor = Color.White)) { Text(stringResource(R.string.air_click)) }
         Box(
-            Modifier.fillMaxWidth().height(44.dp)
-                .background(if (holding) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
-                .pointerInput(Unit) { detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false }) },
+            Modifier.size(36.dp)
+                .background(if (vm.airToggle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background, androidx.compose.foundation.shape.CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+                .clickable { vm.changeAirToggle(!vm.airToggle) },
+        )
+        Box(
+            Modifier.weight(1f).height(52.dp)
+                .background(if (active) Color(0xFF6D28D9) else Color(0xFFFF9800), RoundedCornerShape(26.dp))
+                .pointerInput(Unit) {
+                    // палец забираем себе целиком: иначе прокрутка страницы «перехватывает» касание и кнопка отпускается сама
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        if (vm.airToggle) {
+                            latched = !latched
+                            AppLog.i("ADBphon", "air: переключение, включено=" + latched)
+                        } else {
+                            latched = false; holding = true
+                            AppLog.i("ADBphon", "air: удержание начато")
+                        }
+                        do {
+                            val ev = awaitPointerEvent()
+                            ev.changes.forEach { it.consume() }
+                        } while (ev.changes.any { it.pressed })
+                        if (!vm.airToggle) {
+                            holding = false
+                            AppLog.i("ADBphon", "air: удержание закончено")
+                        }
+                    }
+                },
             contentAlignment = Alignment.Center,
-        ) { Text(stringResource(R.string.air_hold), fontWeight = FontWeight.Bold, color = if (holding) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button({ if (vm.helperOn) vm.hClick() else { val c = cursor.value; vm.tap((c.x * vm.screenW).toInt(), (c.y * vm.screenH).toInt()) } }) { Text(stringResource(R.string.air_click)) }
-            OutlinedButton({ cursor.value = Offset(0.5f, 0.5f) }) { Text(stringResource(R.string.air_center)) }
+        ) {
+            Text(
+                stringResource(if (active) R.string.air_state_on else R.string.air_state_off).replace(' ', '\n'),
+                fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 2, textAlign = TextAlign.Center,
+                color = if (active) Color.White else Color(0xFF2B1700),
+            )
         }
     }
 }
@@ -489,10 +571,11 @@ private fun AirControls(vm: MainViewModel, cursor: androidx.compose.runtime.Muta
 private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose.runtime.MutableState<Offset>) {
     var w by remember { mutableStateOf(1) }
     var h by remember { mutableStateOf(1) }
-    val ratio = (vm.screenW.toFloat() / vm.screenH).coerceIn(0.3f, 3f)
+    // окно для пальца всегда квадратное, с контуром; положение пальца переводится в координаты экрана пропорционально
     Box(
-        Modifier.fillMaxWidth(if (ratio < 1) 1f else 0.9f).aspectRatio(ratio)
+        Modifier.fillMaxWidth().aspectRatio(1f)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
             .onSizeChanged { w = it.width.coerceAtLeast(1); h = it.height.coerceAtLeast(1) }
             .pointerInput(vm.screenW, vm.screenH, mouse) {
                 if (mouse) {
@@ -501,32 +584,51 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
                         onLongPress = { if (vm.helperOn) vm.hLongClick() else vm.longPress((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
                     )
                 } else {
-                    detectTapGestures { o -> vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) }
+                    detectTapGestures(
+                        onTap = { o -> vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                        onLongPress = { o -> vm.longPress((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                    )
                 }
             }
             .pointerInput(vm.screenW, vm.screenH, mouse) {
                 if (mouse) {
+                    // один отсчёт мыши на устройстве даёт ≈1,4 пикселя: палец вдоль всего окна ≈ вдоль всего экрана; остатки копим
+                    var mx = 0f; var my = 0f
                     detectDragGestures { c, d ->
                         c.consume()
                         if (vm.helperOn) {
-                            vm.hMove((d.x / w * vm.screenW * 1.5f).toInt(), (d.y / h * vm.screenH * 1.5f).toInt())
+                            mx += d.x / w * vm.screenW * 0.7f; my += d.y / h * vm.screenH * 0.7f
+                            val ix = mx.toInt(); val iy = my.toInt()
+                            if (ix != 0 || iy != 0) { mx -= ix; my -= iy; vm.hMove(ix, iy) }
                         } else {
                             val o = cursor.value
                             cursor.value = Offset((o.x + d.x / w * 1.6f).coerceIn(0f, 1f), (o.y + d.y / h * 1.6f).coerceIn(0f, 1f))
                         }
                     }
                 } else {
-                    var sx = 0f; var sy = 0f; var ex = 0f; var ey = 0f; var t0 = 0L
+                    var sx = 0f; var sy = 0f; var ex = 0f; var ey = 0f; var t0 = 0L; var tLast = 0L
+                    fun px(v: Float) = (v / w * vm.screenW).toInt().coerceIn(0, vm.screenW - 1)
+                    fun py(v: Float) = (v / h * vm.screenH).toInt().coerceIn(0, vm.screenH - 1)
                     detectDragGestures(
-                        onDragStart = { o -> sx = o.x; sy = o.y; ex = o.x; ey = o.y; t0 = System.currentTimeMillis() },
-                        onDrag = { c, d -> c.consume(); ex += d.x; ey += d.y },
-                        onDragEnd = {
-                            val ms = (System.currentTimeMillis() - t0).toInt().coerceIn(80, 800)
-                            vm.swipe(
-                                (sx / w * vm.screenW).toInt().coerceIn(0, vm.screenW), (sy / h * vm.screenH).toInt().coerceIn(0, vm.screenH),
-                                (ex / w * vm.screenW).toInt().coerceIn(0, vm.screenW), (ey / h * vm.screenH).toInt().coerceIn(0, vm.screenH), ms,
-                            )
+                        onDragStart = { o ->
+                            sx = o.x; sy = o.y; ex = o.x; ey = o.y; t0 = System.currentTimeMillis(); tLast = 0L
+                            // с помощником палец ведётся по экрану прямо во время движения
+                            if (vm.touchViaHelper) vm.hTouch("td", px(sx), py(sy))
                         },
+                        onDrag = { c, d ->
+                            c.consume(); ex += d.x; ey += d.y
+                            val now = System.currentTimeMillis()
+                            if (vm.touchViaHelper && now - tLast >= 16) { tLast = now; vm.hTouch("tm", px(ex), py(ey)) }
+                        },
+                        onDragEnd = {
+                            if (vm.touchViaHelper) {
+                                vm.hTouch("tu", px(ex), py(ey))
+                            } else {
+                                val ms = (System.currentTimeMillis() - t0).toInt().coerceIn(80, 800)
+                                vm.swipe(px(sx), py(sy), px(ex), py(ey), ms)
+                            }
+                        },
+                        onDragCancel = { if (vm.touchViaHelper) vm.hTouch("tu", px(ex), py(ey)) },
                     )
                 }
             },
