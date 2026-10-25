@@ -146,7 +146,10 @@
     <string name="pad_scroll_down">Прокрутка вниз</string>
     <string name="pad_mouse_hint">Миша: рухай курсор пальцем, дотик = клік, довгий дотик = довге натискання</string>
     <string name="pad_air">Повітря</string>
-    <string name="air_hint">Аеромиша: натисни й тримай велику кнопку «Тримай і води телефоном» угорі, води телефоном як указкою, відпусти, щоб зупинитись; для кліку натисни «Клік».</string>
+    <string name="air_hint">Аеромиша: кружок між кнопками обирає режим. Бірюзовий — перемикання: торкнись «Повітря», щоб увімкнути, і ще раз, щоб вимкнути. Кольору тла — утримання: працює, лише поки тримаєш кнопку. Води телефоном як указкою; для кліку натисни «Клік».</string>
+    <string name="air_state_on">Повітря вкл</string>
+    <string name="air_state_off">Повітря вимк</string>
+    <string name="air_on">Повітря вкл. Натисни — стоп</string>
     <string name="air_hold">Тримай і води телефоном</string>
     <string name="air_click">Клік</string>
     <string name="air_center">У центр</string>
