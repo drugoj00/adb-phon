@@ -14,18 +14,31 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 1.0.** [ADB-phon-1.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 1.1.** [ADB-phon-1.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `2825e20e5d2034c21832a579ac990476ca8a5f7136ef99e8fa778d1f92f02d17`
+SHA-256: `4f4f6a97010aa54901fea0ad28ad651045f9136d82660139e19dc77498feb810`
+
+## What's new in 1.1
+
+- Install from many sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search and install from the internet (F-Droid, GitHub, a link).
+- Multi-part packages: APKS, APKM, XAPK and ZIP with APK and OBB. The parts are picked for your phone; OBB goes to Android/obb.
+- Batch install and batch uninstall: tick several apps, confirm once.
+- An APK copy is saved before uninstalling, with a window of saved copies. The “Versions” button installs any version (also an older one) from copies, F-Droid or your own file.
+- Cleaner: the “Junk” filter with known unneeded system apps, marks “safe” and “careful”, the “Select safe” button; disabling is reversible.
+- Automatic connection: on Android 11+ the accessibility service pairs without typing a code; on Android 8–10 the app connects by itself to port 5555 after one command from a computer. The card is at the top of the “Link” tab.
+- A “Clean RAM” button in the apps tab: it stops background processes and shows how much memory was freed.
+- Fixed: on Samsung a second icon (a copy in “Dual app”) could appear after installing over ADB.
 
 ## Features
 
-- **Install APK over ADB.** Pick a file and the app is installed or updated through ADB, no computer needed.
+- **Install APK over ADB.** Install or update apps through ADB, no computer needed. Sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search on the internet (F-Droid, GitHub, a link). Multi-part packages APKS, APKM, XAPK and ZIP with APK and OBB: the parts for your phone are picked automatically. Batch install.
 - **Air mouse and mouse.** The phone’s gyroscope works as a pointer. A real cursor appears on the screen of the controlled device (a helper creates a virtual mouse). The “Air” button works in two modes picked with a round switch: tap to turn on and tap again to turn off, or hold it while you move the phone. Click, scroll, OK, Back, Home, Menu, arrows, volume, sound and microphone on/off. Touch mode is instant too: the helper injects real touches, so taps and swipes work even on slow TV boxes.
 - **Special access, survives reboot.** Turn on an accessibility service, keep it enabled after a reboot (Android 13–14 often switch it off), remove “restricted settings”, allow writing secure settings, draw over other apps, notifications, usage stats, all files, install unknown apps, no battery limits.
 - **Remote control.** Four switchable modes: Keys, Touch, Mouse, Air. Home, Back, Menu, D-pad and OK, volume, media keys, power, recents, text input, touch pad. For phones, TVs and set-top boxes.
-- **Easy connection.** Finds devices in the network and shows their names, favourites with your own names, manual IP. Android 11+: pairing by code (wireless debugging). Android 8–10: one command from a computer once. Control another device by IP; press and hold a device to disconnect.
-- **Apps.** Icons, search, filters (user, system, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions, protection of critical packages.
+- **Easy connection.** Finds devices in the network and shows their names, favourites with your own names, manual IP. Android 11+: automatic pairing without typing a code (an accessibility service reads the code from the system window) or pairing by code. Android 8–10: one command from a computer once, then the app connects by itself. Control another device by IP; press and hold a device to disconnect.
+- **Apps.** Icons, search, filters (user, system, junk, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions (including batch uninstall), protection of critical packages, “Clean RAM” button.
+- **Cleaner for junk apps.** The “Junk” filter shows well-known unneeded system apps (Samsung, Google, Microsoft, Facebook services, partner apps) with marks “safe” and “careful”. “Select safe” and disable them; it is reversible (Disabled, then Enable).
+- **Copies and versions.** Before an app is uninstalled its APK is saved. The “Versions” button installs any version, including an older one, from saved copies, from F-Droid or from your own file.
 - **Files.** Browse folders including Android/data, create, rename, copy, move, delete.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
 - **Console.** Any shell command.
@@ -52,9 +65,17 @@ SHA-256: `2825e20e5d2034c21832a579ac990476ca8a5f7136ef99e8fa778d1f92f02d17`
 
 ![Console: any shell command.](screenshots/en/09-console.png)
 
+![Automatic connection: the card is on top of the “Link” tab. Android 11+: the accessibility service pairs without typing a code.](screenshots/en/10-autoconnect.png)
+
+![Cleaner: the “Junk” filter with marks “safe” and “careful” and the “Select safe” button.](screenshots/en/11-junk.png)
+
+![Install apps from a file, a folder, the file manager, Wi-Fi or the internet: APK, APKS, APKM, XAPK, ZIP with OBB.](screenshots/en/12-install.png)
+
+![Versions: install any version from saved copies, F-Droid or your own file.](screenshots/en/13-versions.png)
+
 ## Quick start
 
-1. Download ADB-phon-1.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-1.1.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
