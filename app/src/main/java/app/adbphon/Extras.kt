@@ -753,6 +753,7 @@ fun SettingsScreen(vm: MainViewModel) {
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)
         BackupSection(vm)
+        CopiesSection()
         Text(stringResource(R.string.set_version, vm.appVersion), fontWeight = FontWeight.Medium)
         Text(stringResource(R.string.ver_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         OutlinedButton({ vm.openVersions() }) { Text(stringResource(R.string.ver_btn), fontSize = 12.sp, maxLines = 1) }
@@ -821,4 +822,24 @@ fun RestoreDialog(vm: MainViewModel) {
         },
         confirmButton = { TextButton({ vm.closeRestore() }) { Text(stringResource(R.string.btn_close)) } },
     )
+}
+
+
+/** Копии приложений перед удалением и окно сохранённых копий (там же ставится любая версия). */
+@Composable
+fun CopiesSection() {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(Cfg.backupOnDelete(ctx)) }
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Switch(on, { on = it; Cfg.setBackupOnDelete(ctx, it) })
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.set_backups), fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.backups_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+            }
+        }
+        OutlinedButton({ open = true }) { Text(stringResource(R.string.backups_open), fontSize = 12.sp, maxLines = 1) }
+    }
+    if (open) BackupsDialog { open = false }
 }

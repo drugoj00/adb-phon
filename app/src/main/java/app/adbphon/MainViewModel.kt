@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Filter { USER, SYSTEM, DISABLED, REMOVED, ALL }
+enum class Filter { USER, SYSTEM, BLOAT, DISABLED, REMOVED, ALL }
 
 enum class Act { DISABLE, ENABLE, UNINSTALL, RESTORE, STOP, CLEAR, SAVE }
 
@@ -100,7 +100,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         connected = true
         remoteHost = host.trim().ifEmpty { null }
         message = t(R.string.msg_connected)
-        if (remoteHost == null) loadApps()
+        if (remoteHost == null) { loadApps(); runCatching { Storage.grant(ctx) } }
         refreshInfo()
         listDir("/sdcard")
         runCatching {
@@ -121,6 +121,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs get() = ctx.getSharedPreferences("adbphon", android.content.Context.MODE_PRIVATE)
 
     init {
+        Hooks.refresh = { if (Adb.isConnected) { if (!connected) launchBusy { onConnected("") } } else connected = false }
+        Hooks.reloadApps = { loadApps() }
         prefs.getString("last", null)?.split("|")?.takeIf { it.size == 4 }?.let {
             lastDevice = Found(it[0], it[1].toIntOrNull() ?: 5555, it[2], it[3] == "1")
         }
@@ -222,6 +224,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     var keepScreenOn by mutableStateOf(false)
     var exitOnBack by mutableStateOf(true)
+    var ramSound by mutableStateOf(true)
+    fun changeRamSound(on: Boolean) {
+        ramSound = on
+        prefs.edit().putBoolean("ram_sound", on).apply()
+    }
 
     fun changeKeepScreenOn(on: Boolean) {
         keepScreenOn = on
@@ -255,6 +262,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         airToggle = prefs.getBoolean("air_toggle", true)
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
+        ramSound = prefs.getBoolean("ram_sound", true)
     }
 
     private fun loadFavs() {
@@ -423,6 +431,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             when (filter) {
                 Filter.USER -> !a.system && a.installed
                 Filter.SYSTEM -> a.system && a.installed
+                Filter.BLOAT -> a.installed && Debloat.known.containsKey(a.pkg)
                 Filter.DISABLED -> !a.enabled && a.installed
                 Filter.REMOVED -> !a.installed
                 Filter.ALL -> true
@@ -438,6 +447,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         selected = visibleApps().map { it.pkg }.toSet()
     }
 
+    /** В списке «Мусор» отмечает безопасные включённые приложения (защищённые пропускаются). */
+    fun selectSafeBloat() {
+        selected = visibleApps().filter { Debloat.known[it.pkg]?.risk == Risk.SAFE && it.enabled && it.pkg !in PROTECTED }
+            .map { it.pkg }.toSet()
+    }
+
     fun clearSelection() {
         selected = emptySet()
     }
@@ -450,6 +465,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         launchBusy {
             var ok = 0
             var bad = 0
+            // перед удалением обычных приложений сохраняем их APK (можно вернуть или поставить старую версию)
+            if (act == Act.UNINSTALL && remoteHost == null && Cfg.backupOnDelete(ctx)) {
+                val saved = withContext(Dispatchers.IO) { work.filter { !it.system }.count { runCatching { AppBackups.save(ctx, it.pkg) }.getOrNull() != null } }
+                if (saved > 0) AppLog.i("ADBphon", "copies saved: $saved")
+            }
             for (a in work) {
                 val out = runCatching { Adb.shell(command(act, a)) }
                 val text = out.getOrDefault("")
@@ -686,8 +706,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // команда уходит в отдельный процесс, потому что наше приложение будет перезаписано
             val tmp = "/data/local/tmp/adbphon-rb.apk"
             val lg = "/data/local/tmp/adbphon-rollback.log"
-            val script = "cp $f $tmp && { pm install -r -d $tmp > $lg 2>&1; grep -q DOWNGRADE $lg && " +
-                "{ pm uninstall -k --user 0 ${ctx.packageName} >> $lg 2>&1; pm install -r $tmp >> $lg 2>&1; }; }; rm -f $tmp"
+            val script = "cp $f $tmp && { pm install -r -d --user 0 $tmp > $lg 2>&1; grep -q DOWNGRADE $lg && " +
+                "{ pm uninstall -k --user 0 ${ctx.packageName} >> $lg 2>&1; pm install -r --user 0 $tmp >> $lg 2>&1; }; }; rm -f $tmp"
             // сначала файл-сценарий, потом его запуск: так отдельный процесс надёжно переживает закрытие нашего потока
             val line = "setsid nohup sh -c \"$script\" > /dev/null 2>&1 < /dev/null &\nsleep 2\n"
             val b64 = android.util.Base64.encodeToString(line.toByteArray(), android.util.Base64.NO_WRAP)
@@ -741,6 +761,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         lang = prefs.getString("lang", "auto") ?: "auto"
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
+        ramSound = prefs.getBoolean("ram_sound", true)
         padRight = prefs.getBoolean("pad_right", true)
         airToggle = prefs.getBoolean("air_toggle", true)
         logOn = prefs.getBoolean("log_on", false)

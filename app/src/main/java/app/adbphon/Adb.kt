@@ -99,13 +99,65 @@ object Adb {
         return text
     }
 
-    /** Установить APK потоком (cmd package install -S). */
-    suspend fun installApk(input: InputStream, size: Long): String = withContext(Dispatchers.IO) {
-        val s = mgr.openStream("exec:cmd package install -r -S $size")
+    /**
+     * Ставим только текущему пользователю: без этого Samsung кладёт копию ещё и в «Двойное приложение» (DUAL_APP),
+     * и значки в меню телефона задваиваются.
+     */
+    private suspend fun withUser(flags: String): String {
+        if (flags.contains("--user")) return flags
+        val u = runCatching { shell("am get-current-user").trim().toInt() }.getOrDefault(0)
+        return "$flags --user $u"
+    }
+
+    /** Установить APK потоком (cmd package install -S). flags: например "-r" или "-r -d" (понижение версии). */
+    suspend fun installApk(input: InputStream, size: Long, flags: String = "-r"): String = withContext(Dispatchers.IO) {
+        val s = mgr.openStream("exec:cmd package install ${withUser(flags)} -S $size")
         val out = s.openOutputStream()
         input.copyTo(out)
         out.flush()
         readAll(s, 120_000, "install")
+    }
+
+    /** Ничего не ждёт: в ADB-phon менеджер создаётся сразу (нужно перенесённым модулям). */
+    suspend fun awaitReady() {}
+
+    /** Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает). */
+    suspend fun pull(path: String, dest: java.io.File) = withContext(Dispatchers.IO) {
+        val s = mgr.openStream("exec:cat '" + path.replace("'", "'\\''") + "'")
+        try {
+            s.openInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+        } finally { runCatching { s.close() } }
+    }
+
+    /** Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb). */
+    suspend fun pushStream(input: InputStream, size: Long, dest: String) = withContext(Dispatchers.IO) {
+        fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
+        shell("mkdir -p " + q(dest.substringBeforeLast('/')))
+        val s = mgr.openStream("exec:head -c $size > " + q(dest))
+        val out = s.openOutputStream()
+        input.copyTo(out)
+        out.flush()
+        readAll(s, 600_000, "push")
+        Unit
+    }
+
+    /** Установка одного APK или набора частей одного приложения (сессия установки). flags: например "-r" или "-r -d". */
+    suspend fun installFiles(files: List<java.io.File>, flags: String = "-r"): String {
+        if (files.isEmpty()) return "no files"
+        if (files.size == 1) return files[0].inputStream().use { installApk(it, files[0].length(), flags) }
+        val made = shell("cmd package install-create ${withUser(flags)} -S ${files.sumOf { it.length() }}")
+        val id = Regex("\\[(\\d+)\\]").find(made)?.groupValues?.get(1) ?: return made
+        for (f in files) {
+            val res = withContext(Dispatchers.IO) {
+                val s = mgr.openStream("exec:cmd package install-write -S ${f.length()} $id ${f.name} -")
+                val out = s.openOutputStream()
+                f.inputStream().use { it.copyTo(out) }
+                out.flush()
+                readAll(s, 120_000, "install-write")
+            }
+            if (!res.contains("Success", true)) { runCatching { shell("cmd package install-abandon $id") }; return res }
+        }
+        return shell("cmd package install-commit $id", 120_000)
     }
 
     // ---------- помощник: виртуальная мышь на целевом устройстве (UHID) ----------

@@ -78,6 +78,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,6 +100,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 const val CARD_URL = "https://secure.wayforpay.com/button/bba92579a4647"
@@ -125,6 +127,8 @@ private val Dark = darkColorScheme(
     onSurface = Color(0xFFE5E7EB),
     secondaryContainer = Color(0xFF0F766E),
     onSecondaryContainer = Color.White,
+    primaryContainer = Color(0xFF0F766E),
+    onPrimaryContainer = Color.White,
 )
 private val Light = lightColorScheme(
     primary = Color(0xFF0F766E),
@@ -133,6 +137,8 @@ private val Light = lightColorScheme(
     surfaceVariant = Color(0xFFEEF2F6),
     secondaryContainer = Color(0xFF0F766E),
     onSecondaryContainer = Color.White,
+    primaryContainer = Color(0xFF0F766E),
+    onPrimaryContainer = Color.White,
     surfaceContainerHighest = Color(0xFFE4EEEC),
 )
 
@@ -257,6 +263,7 @@ fun ConnectScreen(vm: MainViewModel) {
         )
         LaunchedEffect(Unit) { if (!vm.connected && !vm.scanned) vm.scanDevices() }
         if (vm.connected) Text(stringResource(R.string.conn_hold_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        AutoConnectCard(vm)
         if (vm.favs.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -416,9 +423,8 @@ private fun actLabel(a: Act): Int = when (a) {
 fun AppsScreen(vm: MainViewModel) {
     val visible = vm.visibleApps()
     var confirm by remember { mutableStateOf<Act?>(null) }
-    val pickApk = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let { vm.installApk(it) }
-    }
+    var installHub by remember { mutableStateOf(false) }
+    var versionsFor by remember { mutableStateOf<AppEntry?>(null) }
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
             vm.query, { vm.query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -426,18 +432,31 @@ fun AppsScreen(vm: MainViewModel) {
         )
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(
-                Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.DISABLED to R.string.f_disabled,
+                Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.BLOAT to R.string.f_bloat, Filter.DISABLED to R.string.f_disabled,
                 Filter.REMOVED to R.string.f_removed, Filter.ALL to R.string.f_all,
             ).forEach { (f, s) ->
                 FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) })
             }
         }
+        if (vm.filter == Filter.BLOAT) {
+            Text(stringResource(R.string.bloat_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        }
         Text(stringResource(R.string.apps_count, visible.size, vm.selected.size), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton({ vm.selectAllVisible() }) { Text(stringResource(R.string.select_all), fontSize = 12.sp, maxLines = 1) }
             TextButton({ vm.clearSelection() }) { Text(stringResource(R.string.select_none), fontSize = 12.sp, maxLines = 1) }
-            TextButton({ pickApk.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) }) {
+            if (vm.filter == Filter.BLOAT) {
+                TextButton({ vm.selectSafeBloat() }) { Text(stringResource(R.string.bloat_pick_safe), fontSize = 12.sp, maxLines = 1) }
+            }
+            TextButton({ installHub = true }) {
                 Text(stringResource(R.string.act_install), fontSize = 12.sp, maxLines = 1)
+            }
+            if (vm.remoteHost == null) {
+                val ramCtx = LocalContext.current
+                val ramScope = rememberCoroutineScope()
+                TextButton({ ramScope.launch { vm.message = Ram.clean(ramCtx) } }) {
+                    Text(stringResource(R.string.act_ram_clean), fontSize = 12.sp, maxLines = 1)
+                }
             }
         }
         LazyColumn(Modifier.weight(1f), state = rememberLazyListState()) {
@@ -456,6 +475,10 @@ fun AppsScreen(vm: MainViewModel) {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
                             if (!a.installed) add(stringResource(R.string.tag_removed))
+                            Debloat.known[a.pkg]?.let { b ->
+                                add(stringResource(Debloat.catLabel(b.cat)))
+                                add(stringResource(Debloat.riskLabel(b.risk)))
+                            }
                             if (a.version.isNotEmpty()) add("v${a.version}")
                         }
                         Text(tags.joinToString(" · "), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
@@ -465,12 +488,15 @@ fun AppsScreen(vm: MainViewModel) {
         }
         PermsDialog(vm)
         SpecialDialog(vm)
+        if (installHub) InstallHub { installHub = false; vm.loadApps() }
+        versionsFor?.let { a -> VersionsDialog(a.pkg, a.label) { versionsFor = null; vm.loadApps() } }
         if (vm.selected.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (vm.selected.size == 1) {
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
                         AssistChip(onClick = { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.loadPerms(it) } }, label = { Text(stringResource(R.string.act_perms), fontSize = 12.sp, maxLines = 1) })
                         AssistChip(onClick = { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.openSpecial(it) } }, label = { Text(stringResource(R.string.act_special), fontSize = 12.sp, maxLines = 1) })
+                        AssistChip(onClick = { versionsFor = vm.apps.firstOrNull { it.pkg in vm.selected } }, label = { Text(stringResource(R.string.act_versions), fontSize = 12.sp, maxLines = 1) })
                     }
                 }
                 listOf(Act.DISABLE, Act.ENABLE, Act.UNINSTALL, Act.RESTORE, Act.STOP, Act.CLEAR, Act.SAVE).chunked(4).forEach { row ->
@@ -493,6 +519,7 @@ fun AppsScreen(vm: MainViewModel) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     if ((act == Act.UNINSTALL || act == Act.DISABLE) && hasSystem) Text(stringResource(R.string.confirm_system))
                     if (act == Act.CLEAR) Text(stringResource(R.string.confirm_clear))
+                    if (act == Act.UNINSTALL && Cfg.backupOnDelete(LocalContext.current)) Text(stringResource(R.string.confirm_copy_saved))
                 }
             },
             confirmButton = { TextButton({ confirm = null; vm.run(act) }) { Text(stringResource(R.string.btn_yes)) } },

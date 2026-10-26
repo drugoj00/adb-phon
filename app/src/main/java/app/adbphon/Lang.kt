@@ -39,6 +39,9 @@ object Lang {
 val LocalLangCode = androidx.compose.runtime.staticCompositionLocalOf { "auto" }
 
 @androidx.compose.runtime.Composable
+fun LangScopePublic(content: @androidx.compose.runtime.Composable () -> Unit) = LangScope(content)
+
+@androidx.compose.runtime.Composable
 private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) {
     val base = androidx.compose.ui.platform.LocalContext.current
     val code = LocalLangCode.current
