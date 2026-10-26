@@ -2,4 +2,5 @@
 <resources>
     <color name="ic_background">#00000000</color>
     <color name="window_bg">#0B0B10</color>
+    <color name="ram_background">#0F766E</color>
 </resources>
