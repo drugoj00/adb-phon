@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- корпус микросхемы: кольцо -->
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M36,36h36v36h-36z M42,42v24h24v-24z" />
+    <!-- ядро -->
+    <path android:fillColor="#FFFFFF" android:pathData="M48,48h12v12h-12z" />
+    <!-- ножки слева и справа -->
+    <path android:fillColor="#FFFFFF" android:pathData="M30,41h6v4h-6z M30,52h6v4h-6z M30,63h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M72,41h6v4h-6z M72,52h6v4h-6z M72,63h6v4h-6z" />
+    <!-- ножки сверху и снизу -->
+    <path android:fillColor="#FFFFFF" android:pathData="M41,30h4v6h-4z M52,30h4v6h-4z M63,30h4v6h-4z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M41,72h4v6h-4z M52,72h4v6h-4z M63,72h4v6h-4z" />
+</vector>
