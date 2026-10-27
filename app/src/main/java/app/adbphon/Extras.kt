@@ -325,7 +325,6 @@ fun RemoteScreen(vm: MainViewModel) {
                 QuickKeys(vm)
             }
             2 -> {
-                Text(stringResource(R.string.pad_mouse_hint), fontSize = 12.sp)
                 PadArea(vm) { TouchPad(vm, true, cursor) }
                 Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val cxm = vm.screenW / 2; val sy = vm.screenH
