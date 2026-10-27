@@ -14,21 +14,29 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 1.2.** [ADB-phon-1.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 2.0.** [ADB-phon-2.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `3610a58513cab00a289e1835c5304a32ee220a7a2c733ed597830b9a6a94ee73`
+SHA-256: `71ffed4f9fc5e0efbf963b4b73fe5742ae5314f728904d130f1c4036c0238d03`
 
-## What's new in 1.2
+## What's new in 2.0
 
-- Compact apps list: a row takes two lines instead of three, the search field is half as tall, so about twice as many apps fit on the screen of a phone.
-- Root (Magisk) instead of ADB: if the device is rooted, the app works without a computer and without debugging — all actions on THIS device go through root (install, uninstall, stop, clear data, permissions, files, virtual mouse). Allow root for the app in Magisk once. Other devices are still connected over ADB. You choose: the switch “Use root automatically” decides what is used at start, and the ADB connect buttons switch to ADB.
+- SSH: terminal and files (SFTP) of a computer or server.
+- PC mouse: the phone as a Bluetooth mouse and keyboard.
+- Remote: “Swipe” tab (swipes = arrow keys, scroll buttons); keys are instant.
+- Autoconnect to the last device at start; the connected device is highlighted.
+- Long press on a device: connect or disconnect; “Connected: name · address”.
+- “Restart launcher” button against stuck arrows on TV boxes.
+- New adaptive icon; button to delete saved old versions; compact interface.
+- Fixed: control tabs shown without a real connection; another device taken for this phone; remote keys lagged about 1 s.
 
 ## Features
 
 - **Install APK over ADB.** Install or update apps through ADB, no computer needed. Sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search on the internet (F-Droid, GitHub, a link). Multi-part packages APKS, APKM, XAPK and ZIP with APK and OBB: the parts for your phone are picked automatically. Batch install.
 - **Air mouse and mouse.** The phone’s gyroscope works as a pointer. A real cursor appears on the screen of the controlled device (a helper creates a virtual mouse). The “Air” button works in two modes picked with a round switch: tap to turn on and tap again to turn off, or hold it while you move the phone. Click, scroll, OK, Back, Home, Menu, arrows, volume, sound and microphone on/off. Touch mode is instant too: the helper injects real touches, so taps and swipes work even on slow TV boxes.
 - **Special access, survives reboot.** Turn on an accessibility service, keep it enabled after a reboot (Android 13–14 often switch it off), remove “restricted settings”, allow writing secure settings, draw over other apps, notifications, usage stats, all files, install unknown apps, no battery limits.
-- **Remote control.** Four switchable modes: Keys, Touch, Mouse, Air. Home, Back, Menu, D-pad and OK, volume, media keys, power, recents, text input, touch pad. For phones, TVs and set-top boxes.
+- **Remote control.** Four switchable modes: Keys, Swipe, Mouse, Air. Home, Back, Menu, D-pad and OK, volume, media keys, power, recents, text input. Swipes act as arrow keys, tap is OK, scroll buttons. Keys are instant. For phones, TVs and set-top boxes.
+- **SSH.** Connect to a computer or server over SSH (Linux, macOS, Windows with an SSH server): terminal and files over SFTP (browse, download, upload, delete). Password login; the server key is remembered on first connect.
+- **PC mouse.** The phone works as a Bluetooth mouse and keyboard for a computer, laptop, tablet, iPhone or TV (Android 9+): touch pad, clicks, scroll, Enter, Esc, arrows, Win, Ctrl+C/V, text input. Nothing to install on the computer.
 - **Easy connection.** Finds devices in the network and shows their names, favourites with your own names, manual IP. Android 11+: automatic pairing without typing a code (an accessibility service reads the code from the system window) or pairing by code. Android 8–10: one command from a computer once, then the app connects by itself. Control another device by IP; press and hold a device to disconnect.
 - **Apps.** Icons, search, filters (user, system, junk, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions (including batch uninstall), protection of critical packages, “Clean RAM” button.
 - **Cleaner for junk apps.** The “Junk” filter shows well-known unneeded system apps (Samsung, Google, Microsoft, Facebook services, partner apps) with marks “safe” and “careful”. “Select safe” and disable them; it is reversible (Disabled, then Enable).
@@ -41,7 +49,7 @@ SHA-256: `3610a58513cab00a289e1835c5304a32ee220a7a2c733ed597830b9a6a94ee73`
 
 ## Screenshots
 
-![Connection: favourites with names and devices found in the network.](screenshots/en/01-connect.png)
+![Connection: the connected device is highlighted, “Connected: name · address”.](screenshots/en/01-connect.png)
 
 ![Apps with icons, search, filters and “Install APK”.](screenshots/en/02-apps.png)
 
@@ -49,7 +57,7 @@ SHA-256: `3610a58513cab00a289e1835c5304a32ee220a7a2c733ed597830b9a6a94ee73`
 
 ![Special access: accessibility service that stays on after a reboot, restricted settings, secure settings.](screenshots/en/04-special-access.png)
 
-![Remote control: keys, D-pad, volume, media, text input.](screenshots/en/05-remote.png)
+![Remote, “Keys”: D-pad, volume, media, text input, restart launcher.](screenshots/en/05-remote.png)
 
 ![Air mouse: “Air on/off” button with a round mode switch (toggle or hold), click, arrows, Back, Home, Menu, volume, player keys.](screenshots/en/06-air-mouse.png)
 
@@ -67,9 +75,13 @@ SHA-256: `3610a58513cab00a289e1835c5304a32ee220a7a2c733ed597830b9a6a94ee73`
 
 ![Versions: install any version from saved copies, F-Droid or your own file.](screenshots/en/13-versions.png)
 
+![Remote, “Swipe”: swipes are arrow keys, tap is OK, scroll buttons.](screenshots/en/14-swipe.png)
+
+![SSH: terminal and files of a computer or server.](screenshots/en/15-ssh.png)
+
 ## Quick start
 
-1. Download ADB-phon-1.2.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-2.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
@@ -84,6 +96,7 @@ Android 8.0 or newer (ARMv7, ARM64, x86, x86_64). Wi-Fi for wireless debugging (
 - ADB-phon works locally and sends nothing anywhere. The cursor helper and the remote control manage a whole device: connect only to your own devices.
 - The app is not on Google Play (it would not be allowed): download the APK here. Android may warn about installing from an unknown source.
 - Tested on two phones (Android 10 and 15) and one TV box (Android 11). Not yet tested on Android 8–9 and 11–14 devices of other makers; reports are welcome.
+- SSH and “PC mouse” are new and tested only partly: SSH against OpenSSH for Windows up to the password step, the Bluetooth mouse is not on every phone (some firmwares switch the HID profile off).
 - Special access settings can differ on Xiaomi, Huawei and other firmwares; on Xiaomi also turn on “USB debugging (security settings)”.
 
 ## Built with
