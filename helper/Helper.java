@@ -7,6 +7,7 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 /**
@@ -103,6 +104,37 @@ public class Helper implements Runnable {
         } catch (Throwable ignored) { }
     }
 
+    // ---------- клавиши через InputManager: в миллисекунды, без запуска «input» (на слабых приставках он занимает ~1 с) ----------
+    private static void key(int action, int code, long downT, int repeat, int flags) {
+        if (injectMethod == null) return;
+        try {
+            long now = SystemClock.uptimeMillis();
+            int src = InputDevice.SOURCE_KEYBOARD | ((code >= 19 && code <= 23) ? InputDevice.SOURCE_DPAD : 0);
+            KeyEvent e = new KeyEvent(downT, now, action, code, repeat, 0, -1, 0, flags, src);
+            injectMethod.invoke(inputManager, e, 0);
+        } catch (Throwable ignored) { }
+    }
+
+    private static void pressKey(int code) {
+        long t = SystemClock.uptimeMillis();
+        key(KeyEvent.ACTION_DOWN, code, t, 0, 0);
+        try { Thread.sleep(12); } catch (InterruptedException ignored) { }
+        key(KeyEvent.ACTION_UP, code, t, 0, 0);
+    }
+
+    private static void longKey(final int code) {
+        new Thread(new Runnable() {
+            public void run() {
+                long t = SystemClock.uptimeMillis();
+                key(KeyEvent.ACTION_DOWN, code, t, 0, 0);
+                try { Thread.sleep(600); } catch (InterruptedException ignored) { }
+                key(KeyEvent.ACTION_DOWN, code, t, 1, KeyEvent.FLAG_LONG_PRESS);
+                try { Thread.sleep(40); } catch (InterruptedException ignored) { }
+                key(KeyEvent.ACTION_UP, code, t, 0, 0);
+            }
+        }).start();
+    }
+
     public void run() {
         byte[] buf = new byte[4380];
         try {
@@ -112,7 +144,9 @@ public class Helper implements Runnable {
 
     public static void main(String[] args) throws Exception {
         boolean mouseOk = false;
+        boolean keysOnly = args.length > 0 && args[0].equals("keys");   // без виртуальной мыши: только касание и клавиши
         try {
+            if (keysOnly) throw new IOException("keys only");
             uhid = new RandomAccessFile("/dev/uhid", "rw");
             // Ядро присылает служебные события (START, OPEN и т. д.): их нужно вычитывать с того же дескриптора
             Thread drain = new Thread(new Helper());
@@ -122,7 +156,7 @@ public class Helper implements Runnable {
             mouseOk = true;
         } catch (Throwable ignored) { }
         boolean touchOk = initInject();
-        System.out.println("ready mouse=" + (mouseOk ? 1 : 0) + " touch=" + (touchOk ? 1 : 0));
+        System.out.println("ready mouse=" + (mouseOk ? 1 : 0) + " touch=" + (touchOk ? 1 : 0) + " key=" + (touchOk ? 1 : 0));
         System.out.flush();
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         String line;
@@ -134,7 +168,9 @@ public class Helper implements Runnable {
                 char c = t[0].charAt(0);
                 if (c == 'q') break;
                 try {
-                if (t[0].equals("td") && t.length >= 3) touch(MotionEvent.ACTION_DOWN, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
+                if (t[0].equals("k") && t.length >= 2) pressKey(Integer.parseInt(t[1]));
+                else if (t[0].equals("kl") && t.length >= 2) longKey(Integer.parseInt(t[1]));
+                else if (t[0].equals("td") && t.length >= 3) touch(MotionEvent.ACTION_DOWN, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
                 else if (t[0].equals("tm") && t.length >= 3) touch(MotionEvent.ACTION_MOVE, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
                 else if (t[0].equals("tu") && t.length >= 3) touch(MotionEvent.ACTION_UP, Float.parseFloat(t[1]), Float.parseFloat(t[2]));
                 else if (t[0].equals("tap") && t.length >= 3) {
