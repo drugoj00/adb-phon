@@ -20,6 +20,12 @@
     <string name="btn_connect_tcp">Подключиться к %1$s:5555</string>
     <string name="btn_disconnect">Отключиться</string>
     <string name="msg_paired">Сопряжено. Теперь нажми «Подключиться».</string>
+    <string name="root_on">Подключено через root (Magisk)</string>
+    <string name="root_title">Root (Magisk)</string>
+    <string name="root_connect_btn">Подключить через root (Magisk)</string>
+    <string name="root_use_title">Использовать root для этого телефона автоматически</string>
+    <string name="root_fail">Root недоступен: разрешите root этому приложению в Magisk</string>
+    <string name="root_hint">Если на этом устройстве есть root (Magisk), ADB и компьютер не нужны: все действия на ЭТОМ устройстве идут через root. Другие устройства по-прежнему подключаются по ADB. При первом запуске разрешите root этому приложению в Magisk. Что использовать при запуске, решает переключатель; кнопки подключения ADB переключают на ADB.</string>
     <string name="msg_connected">Подключено</string>
     <string name="msg_failed">Не получилось: %1$s</string>
     <string name="search_hint">Поиск приложений</string>
