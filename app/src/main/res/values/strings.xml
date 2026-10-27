@@ -217,7 +217,6 @@
     <string name="pad_mouse">Mouse</string>
     <string name="pad_scroll_up">Scroll up</string>
     <string name="pad_scroll_down">Scroll down</string>
-    <string name="pad_mouse_hint">Mouse: move the cursor with a finger, tap = click, long press = long click</string>
     <string name="pad_air">Air</string>
     <string name="air_hint">Air mouse: the round switch between the buttons chooses the mode. Teal = switching: tap “Air” to turn it on and tap again to turn it off. Plain = hold: it works only while you hold the button. Move the phone like a pointer; tap “Click” to click.</string>
     <string name="air_state_on">Air ON</string>
