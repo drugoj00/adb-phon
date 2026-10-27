@@ -21,6 +21,12 @@
     <string name="btn_connect_tcp">Connect to %1$s:5555</string>
     <string name="btn_disconnect">Disconnect</string>
     <string name="msg_paired">Paired. Now press \"Connect\".</string>
+    <string name="root_on">Connected via root (Magisk)</string>
+    <string name="root_title">Root (Magisk)</string>
+    <string name="root_connect_btn">Connect via root (Magisk)</string>
+    <string name="root_use_title">Use root automatically for this phone</string>
+    <string name="root_fail">Root is not available: allow root for this app in Magisk</string>
+    <string name="root_hint">If this device has root (Magisk), ADB and a computer are not needed: all actions on THIS device run through root. Other devices are still connected by ADB. On first start allow root for this app in Magisk. The switch decides what is used at start; the ADB connect buttons switch to ADB.</string>
     <string name="msg_connected">Connected</string>
     <string name="msg_failed">Failed: %1$s</string>
     <string name="search_hint">Search apps</string>
