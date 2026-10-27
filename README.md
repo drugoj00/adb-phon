@@ -26,7 +26,7 @@ SHA-256: `8cf098a9251d53d7d57936dd272408b578e48386b722eb344f52809a40f863bb`
 - Autoconnect to the last device at start; the connected device is highlighted.
 - Long press on a device: connect or disconnect; “Connected: name · address”.
 - “Restart launcher” button against stuck arrows on TV boxes.
-- New adaptive icon; button to delete saved old versions; compact interface.
+- Button to delete saved old versions; compact interface.
 - Fixed: control tabs shown without a real connection; another device taken for this phone; remote keys lagged about 1 s.
 
 ## Features
