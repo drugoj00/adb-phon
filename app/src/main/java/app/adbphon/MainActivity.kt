@@ -19,6 +19,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -109,6 +115,7 @@ import kotlinx.coroutines.withContext
 const val CARD_URL = "https://secure.wayforpay.com/button/bba92579a4647"
 const val USDT_ADDR = "TXk32CLkwJryTqhmkw6urcM5CacJgPsSpJ"
 const val GITHUB_URL = "https://github.com/drugoj00/adb-phon"
+const val ALL_PROGRAMS_URL = "https://drugoj00.github.io/"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -161,7 +168,13 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             var tab by remember { mutableStateOf(0) }
             var showSettings by remember { mutableStateOf(false) }
             val snack = remember { SnackbarHostState() }
-            LaunchedEffect(vm.connected) { if (vm.connected && tab == 0) tab = if (vm.remoteHost != null) 3 else 1 }
+            // при запуске остаёмся на «Связь» (в т.ч. если автоподключение уже сработало); на «Софт»/«Пульт» переходим только после ручного подключения
+            LaunchedEffect(vm.connected, vm.manualConnect) {
+                if (vm.connected && vm.manualConnect) {
+                    if (tab == 0) tab = if (vm.remoteHost != null) 3 else 1
+                    vm.manualConnect = false
+                }
+            }
             LaunchedEffect(vm.message) {
                 vm.message?.let { snack.showSnackbar(it); vm.consumeMessage() }
             }
@@ -189,7 +202,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 containerColor = MaterialTheme.colorScheme.background,
                 snackbarHost = { SnackbarHost(snack) },
                 bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
                         val items = listOf(
                             R.string.tab_connect to Icons.Filled.Link,
                             R.string.tab_apps to Icons.Filled.Apps,
@@ -197,13 +210,18 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                             R.string.tab_remote to Icons.Filled.SettingsRemote,
                             R.string.tab_more to Icons.Filled.MoreHoriz,
                         )
-                        items.forEachIndexed { i, (label, icon) ->
-                            NavigationBarItem(
-                                selected = tab == i,
-                                onClick = { tab = i; showSettings = false },
-                                icon = { Icon(icon, null) },
-                                label = { Text(stringResource(label), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            )
+                        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(54.dp)) {
+                            items.forEachIndexed { i, (label, icon) ->
+                                val col = if (tab == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)
+                                Column(
+                                    Modifier.weight(1f).fillMaxHeight()
+                                        .clickable { tab = i; showSettings = false },
+                                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                                ) {
+                                    Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
+                                    Text(stringResource(label), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col)
+                                }
+                            }
                         }
                     }
                 },
@@ -249,8 +267,6 @@ fun NeedConnection(vm: MainViewModel, content: @Composable () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConnectScreen(vm: MainViewModel) {
-    val haptic = LocalHapticFeedback.current
-    val dropLink: () -> Unit = { if (vm.connected) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.disconnect() } }
     var pairPort by remember { mutableStateOf("") }
     var pairCode by remember { mutableStateOf("") }
     var connPort by remember { mutableStateOf("") }
@@ -258,34 +274,44 @@ fun ConnectScreen(vm: MainViewModel) {
     var favFor by remember { mutableStateOf<Found?>(null) }
     var favName by remember { mutableStateOf("") }
     val askName: (Found) -> Unit = { favName = vm.names[it.host].orEmpty(); favFor = it }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            stringResource(if (!vm.connected) R.string.conn_no else if (Adb.isRoot) R.string.root_on else R.string.conn_ok),
-            fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            if (vm.connected && !Adb.isRoot && vm.remoteHost != null)
+                stringResource(R.string.msg_connected_to, vm.names[vm.remoteHost!!] ?: stringResource(R.string.net_name_unknown), vm.remoteHost!!)
+            else stringResource(if (!vm.connected) R.string.conn_no else if (Adb.isRoot) R.string.root_on else R.string.conn_ok),
+            fontSize = 17.sp, fontWeight = FontWeight.Bold,
             color = if (vm.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
         )
         LaunchedEffect(Unit) { if (!vm.connected && !vm.scanned) vm.scanDevices() }
-        if (vm.connected) Text(stringResource(R.string.conn_hold_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        Text(stringResource(R.string.conn_hold_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         AutoConnectCard(vm)
         if (vm.favs.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.fav_title), fontWeight = FontWeight.Bold)
                     vm.favs.toList().forEach { f ->
-                        Row(Modifier.fillMaxWidth().combinedClickable(onClick = { vm.connectFav(f) }, onLongClick = dropLink).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary)
+                        var menu by remember { mutableStateOf(false) }
+                        val haptic = LocalHapticFeedback.current
+                        val cur = vm.isCurrent(vm.favAsFound(f))   // подключённое: чёрный фон, белый текст
+                        Box {
+                        Row(Modifier.fillMaxWidth().then(if (cur) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+                            .combinedClickable(onClick = { vm.connectFav(f) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true })
+                            .padding(vertical = 4.dp, horizontal = if (cur) 6.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Star, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                Text(f.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(f.host + if (f.kind == "wifi") ":" + f.port else "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                                Text(f.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified)
+                                Text(f.host + if (f.kind == "wifi") ":" + f.port else "", fontSize = 12.sp, color = if (cur) MaterialTheme.colorScheme.onPrimary.copy(alpha = .85f) else MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                             }
-                            IconButton({ vm.removeFav(f) }) { Icon(Icons.Filled.Delete, stringResource(R.string.fav_remove)) }
+                            IconButton({ vm.removeFav(f) }) { Icon(Icons.Filled.Delete, stringResource(R.string.fav_remove), tint = if (cur) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current) }
+                        }
+                        DeviceMenu(vm, vm.favAsFound(f), menu) { menu = false }
                         }
                     }
                 }
             }
         }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.net_title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     OutlinedButton(onClick = { vm.scanDevices() }, enabled = !vm.scanning) {
@@ -294,11 +320,11 @@ fun ConnectScreen(vm: MainViewModel) {
                 }
                 vm.lastDevice?.let { f ->
                     Text(stringResource(R.string.net_last), fontSize = 12.sp)
-                    FoundRow(vm, f, askName, dropLink)
+                    FoundRow(vm, f, askName)
                 }
                 // устройство из «Последнего подключения» второй раз в списке не показываем
                 vm.found.filter { f -> vm.lastDevice?.let { it.host == f.host && it.port == f.port } != true }
-                    .forEach { f -> FoundRow(vm, f, askName, dropLink) }
+                    .forEach { f -> FoundRow(vm, f, askName) }
                 if (vm.scanned && !vm.scanning && vm.found.isEmpty()) Text(stringResource(R.string.net_none), fontSize = 13.sp)
             }
         }
@@ -331,7 +357,7 @@ fun ConnectScreen(vm: MainViewModel) {
             )
         }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.conn_title_wifi), fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.conn_steps_wifi), fontSize = 14.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -361,7 +387,7 @@ fun ConnectScreen(vm: MainViewModel) {
             }
         }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.conn_title_tcp), fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.conn_steps_tcp), fontSize = 14.sp)
                 Button(onClick = { vm.connectTcp(host, 5555) }, enabled = !vm.busy) { Text(stringResource(R.string.btn_connect_tcp, host.ifBlank { "localhost" })) }
@@ -371,7 +397,7 @@ fun ConnectScreen(vm: MainViewModel) {
             val ctxR = LocalContext.current
             var useRoot by remember { mutableStateOf(Cfg.useRoot(ctxR)) }
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.root_title), fontWeight = FontWeight.Bold)
                     Text(stringResource(R.string.root_hint), fontSize = 14.sp)
                     Button(onClick = { vm.connectRoot() }, enabled = !vm.busy) { Text(stringResource(R.string.root_connect_btn)) }
@@ -388,19 +414,42 @@ fun ConnectScreen(vm: MainViewModel) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FoundRow(vm: MainViewModel, f: Found, onStar: (Found) -> Unit, onDrop: () -> Unit) {
+fun FoundRow(vm: MainViewModel, f: Found, onStar: (Found) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val cur = vm.isCurrent(f)   // подключённое устройство: чёрный фон, белый текст
+    val fg = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
+    Box {
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = { vm.connectFound(f) }, onLongClick = onDrop).padding(vertical = 3.dp),
+        Modifier.fillMaxWidth().then(if (cur) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+            .combinedClickable(onClick = { vm.connectFound(f) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true })
+            .padding(vertical = 3.dp, horizontal = if (cur) 6.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary)
-        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+        Icon(Icons.Filled.PhoneAndroid, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
+        Column(Modifier.padding(start = 8.dp).weight(1f)) {
             val addr = f.host + if (f.kind == "wifi") ":" + f.port else ""
-            Text(addr, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(addr, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, color = fg)
             val sub = (vm.names[f.host] ?: stringResource(R.string.net_name_unknown)) + if (f.self) " · " + stringResource(R.string.net_self) else ""
-            Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(sub, fontSize = 12.sp, color = if (cur) MaterialTheme.colorScheme.onPrimary.copy(alpha = .85f) else MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        IconButton({ onStar(f) }) { Icon(Icons.Filled.StarBorder, stringResource(R.string.fav_save)) }
+        IconButton({ onStar(f) }, Modifier.size(36.dp)) { Icon(Icons.Filled.StarBorder, stringResource(R.string.fav_save), tint = if (cur) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current) }
+    }
+    DeviceMenu(vm, f, menu) { menu = false }
+    }
+}
+
+/** Подключённое устройство в списке: фон цвета заголовка статуса (основной цвет темы), текст — контрастный цвет на нём. */
+private fun Modifier.connectedRowStyle(dark: Boolean): Modifier = this
+
+/** Меню долгого нажатия на устройство: «Отключить», если оно подключено, иначе «Подключить». */
+@Composable
+fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, onDismiss: () -> Unit) {
+    androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (vm.isCurrent(f)) androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_disconnect)) }, onClick = { onDismiss(); vm.disconnect() })
+        else androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_connect)) }, onClick = { onDismiss(); vm.connectFound(f) })
     }
 }
 
@@ -607,16 +656,16 @@ fun DeviceScreen(vm: MainViewModel) {
     var dpi by remember { mutableStateOf("") }
     var reboot by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { if (vm.deviceInfo.isEmpty()) vm.refreshInfo() }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.dev_info), fontWeight = FontWeight.Bold)
                 Text(vm.deviceInfo, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                 OutlinedButton(onClick = { vm.refreshInfo() }) { Text(stringResource(R.string.dev_refresh)) }
             }
         }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.dev_quick), fontWeight = FontWeight.Bold)
                 val anim = { v: String ->
                     "settings put global window_animation_scale $v; settings put global transition_animation_scale $v; settings put global animator_duration_scale $v"
@@ -644,7 +693,7 @@ fun DeviceScreen(vm: MainViewModel) {
             }
         }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.dev_reboot), fontWeight = FontWeight.Bold)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AssistChip({ reboot = "reboot" }, { Text(stringResource(R.string.reboot_normal), fontSize = 12.sp) })
@@ -672,7 +721,7 @@ fun DeviceScreen(vm: MainViewModel) {
 fun AboutScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val copied = stringResource(R.string.copied)
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(64.dp))
             Column {
@@ -691,5 +740,6 @@ fun AboutScreen(vm: MainViewModel) {
         }) { Text(stringResource(R.string.about_usdt)) }
         Text(USDT_ADDR, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL))) }) { Text(stringResource(R.string.about_github)) }
+        TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ALL_PROGRAMS_URL))) }) { Text(stringResource(R.string.about_all)) }
     }
 }

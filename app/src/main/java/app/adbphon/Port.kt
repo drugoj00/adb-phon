@@ -126,8 +126,8 @@ fun AutoConnectCard(vm: MainViewModel) {
         while (true) {
             if (!old) autoOn = AutoPairService.isEnabled(ctx)
             // тихие попытки: порт 5555 и (Android 11+) уже сопряжённое устройство по беспроводной отладке
-            if (!Adb.isConnected && !vm.busy && Cfg.useRoot(ctx) && !Adb.rootSuppressed && n == 0) Adb.tryRoot()
-            if (!Adb.isConnected && !vm.busy && n % 2 == 0) {
+            if (!Adb.autoOff && !Adb.isConnected && !vm.busy && Cfg.useRoot(ctx) && !Adb.rootSuppressed && n == 0) Adb.tryRoot()
+            if (!Adb.autoOff && !Adb.isConnected && !vm.busy && n % 2 == 0) {
                 Adb.connectLocal(5555)
                 if (!Adb.isConnected && !old && n % 8 == 0) Adb.connectWireless(ctx, null)
             }
@@ -138,7 +138,7 @@ fun AutoConnectCard(vm: MainViewModel) {
     }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { if (!old) Pairing.stop() } }
     androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
-        androidx.compose.foundation.layout.Column(Modifier.padding(16.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.layout.Column(Modifier.padding(10.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
             if (old) {
                 Text(androidx.compose.ui.res.stringResource(R.string.old_title), fontWeight = FontWeight.Bold)
                 Text(androidx.compose.ui.res.stringResource(R.string.old_hint), fontSize = 14.sp)

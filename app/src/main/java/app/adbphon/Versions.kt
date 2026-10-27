@@ -252,7 +252,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
             Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.pver_title, label), color = t.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(R.string.pver_title, label), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 if (installed != null) stringResource(R.string.ver_installed, installed.first, installed.second) else stringResource(R.string.ver_not_installed),
                 color = t.sub, fontSize = 14.sp,
@@ -279,7 +279,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("${c.versionName} (${c.versionCode})", color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            Text("${c.versionName} (${c.versionCode})", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text("${when_(c.savedAt)} · ${mb(c.size)} " + stringResource(R.string.mb), color = t.hint, fontSize = 12.sp)
                         }
                         Chip(stringResource(R.string.ver_install), installed?.second == c.versionCode) {
@@ -296,7 +296,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.tile).padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("${v.name} (${v.code})", color = t.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text("${v.name} (${v.code})", color = t.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
                             Chip(stringResource(R.string.ver_download_install), installed?.second == v.code) {
                                 run {
                                     val apk = NetSearch.download(ctx, v.url) { mbDone -> status = ctx.getString(R.string.net_downloading, v.name, mbDone.toInt()) }?.file
@@ -329,7 +329,7 @@ fun BackupsDialog(onClose: () -> Unit) {
             Modifier.fillMaxWidth(0.8f).fillMaxHeight(0.85f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.backups_title), color = t.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.backups_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.backups_where, AppBackups.root(ctx).absolutePath), color = t.hint, fontSize = 12.sp)
             Chip(stringResource(R.string.close), true, Modifier.focusRequester(first)) { onClose() }
             if (groups.isEmpty()) Text(stringResource(R.string.backups_empty), color = t.sub, fontSize = 14.sp)
@@ -340,7 +340,7 @@ fun BackupsDialog(onClose: () -> Unit) {
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(list.first().label, color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(list.first().label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(pkg + " · " + stringResource(R.string.backups_n, list.size) + if (AppBackups.installedVersion(ctx, pkg) == null) " · " + stringResource(R.string.ver_not_installed) else "", color = t.hint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Chip(stringResource(R.string.backups_open_versions), false) { open = pkg to list.first().label }

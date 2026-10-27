@@ -46,6 +46,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>().applicationContext
 
     var connected by mutableStateOf(false)
+    /** Подключение начато кнопкой/меню (а не фоновым автоподключением): только тогда после него открывается вкладка «Софт». */
+    var manualConnect by mutableStateOf(false)
+    private var manualPending = false
     var busy by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
 
@@ -67,6 +70,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             helperOn = false
         }
         message = t(R.string.msg_failed, e.message ?: e.javaClass.simpleName)
+        manualConnect = false
+        manualPending = false
     }
 
     // ---------- подключение ----------
@@ -76,12 +81,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun hostOf(h: String): String = h.trim().ifEmpty { "127.0.0.1" }
 
-    fun connectTcp(host: String, port: Int = 5555) = launchBusy {
-        Adb.connectLocal(port, hostOf(host)).onSuccess { onConnected(host) }.onFailure { fail(it) }
+    fun connectTcp(host: String, port: Int = 5555, manual: Boolean = true) = launchBusy {
+        if (manual) { Adb.autoOff = false; manualPending = true }
+        Adb.connectLocal(port, hostOf(host)).onSuccess { onConnected(host) }.onFailure { if (manual) fail(it) else AppLog.i("ADBphon", "автоподключение к последнему устройству не удалось: ${it.message}") }
     }
 
     /** Этот телефон через root (Magisk) вместо ADB. */
     fun connectRoot() = launchBusy {
+        Adb.autoOff = false
+        manualPending = true
         if (Adb.tryRoot(manual = true)) onConnected("") else message = t(R.string.root_fail)
     }
 
@@ -89,11 +97,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Adb.pair(port, code.trim(), hostOf(host)).onSuccess { message = t(R.string.msg_paired) }.onFailure { fail(it) }
     }
 
-    fun connectWireless(host: String, manualPort: Int?) = launchBusy {
-        Adb.connectWireless(ctx, manualPort, hostOf(host)).onSuccess { onConnected(host) }.onFailure { fail(it) }
+    fun connectWireless(host: String, manualPort: Int?, manual: Boolean = true) = launchBusy {
+        if (manual) { Adb.autoOff = false; manualPending = true }
+        Adb.connectWireless(ctx, manualPort, hostOf(host)).onSuccess { onConnected(host) }.onFailure { if (manual) fail(it) else AppLog.i("ADBphon", "автоподключение к последнему устройству не удалось: ${it.message}") }
     }
 
     fun disconnect() = launchBusy {
+        Adb.autoOff = true   // сам не подключать обратно, пока человек не выберет устройство
+        manualConnect = false
+        manualPending = false
         Adb.helperStop()
         helperOn = false
         Adb.disconnect()
@@ -102,18 +114,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun onConnected(host: String) {
-        connected = true
         remoteHost = host.trim().ifEmpty { null }
-        message = t(R.string.msg_connected)
-        if (remoteHost == null) { loadApps(); runCatching { Storage.grant(ctx) } }
-        refreshInfo()
-        listDir("/sdcard")
-        runCatching {
-            val model = Adb.shell("getprop ro.product.manufacturer; getprop ro.product.model").lines().filter { it.isNotBlank() }
+        connected = true
+        if (manualPending) { manualPending = false; manualConnect = true }
+        val model = runCatching {
+            Adb.shell("getprop ro.product.manufacturer; getprop ro.product.model").lines().filter { it.isNotBlank() }
                 .joinToString(" ").trim().replaceFirstChar { it.uppercase() }
+        }.getOrDefault("")
+        val shown = names[remoteHost ?: ""]?.takeIf { it.isNotBlank() } ?: model.ifBlank { t(R.string.net_name_unknown) }
+        val addr = remoteHost ?: t(R.string.net_self)
+        message = t(R.string.msg_connected_to, shown, addr)
+        if (model.isNotBlank()) {
             val keys = if (remoteHost == null) Discovery.myAddresses(ctx) else setOf(remoteHost!!)
             keys.forEach { setName(it, model) }
         }
+        if (remoteHost == null) { loadApps(); runCatching { Storage.grant(ctx) } }
+        refreshInfo()
+        listDir("/sdcard")
     }
 
     // ---------- поиск устройств в сети ----------
@@ -126,11 +143,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs get() = ctx.getSharedPreferences("adbphon", android.content.Context.MODE_PRIVATE)
 
     init {
-        Hooks.refresh = { if (Adb.isConnected) { if (!connected) launchBusy { onConnected("") } } else connected = false }
+        Hooks.refresh = { if (Adb.isConnected) { if (!connected && !busy) launchBusy { onConnected(Adb.currentHost) } } else connected = false }
         Hooks.reloadApps = { loadApps() }
         prefs.getString("last", null)?.split("|")?.takeIf { it.size == 4 }?.let {
             lastDevice = Found(it[0], it[1].toIntOrNull() ?: 5555, it[2], it[3] == "1")
         }
+        // вкладки управления должны показываться только при настоящем подключении: при запуске пробуем последнее чужое устройство
+        lastDevice?.takeIf { !it.self && !Adb.autoOff && !Adb.isConnected }?.let { connectFound(it, manual = false) }
     }
 
     private fun remember(f: Found) {
@@ -161,10 +180,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Подключиться к найденному устройству: свой телефон идёт через localhost, чужие по IP. */
-    fun connectFound(f: Found) {
+    fun connectFound(f: Found, manual: Boolean = true) {
         val host = if (f.self) "" else f.host
-        if (f.kind == "tcp") connectTcp(host, f.port) else connectWireless(host, f.port)
-        remember(f)
+        if (f.kind == "tcp") connectTcp(host, f.port, manual) else connectWireless(host, f.port, manual)
+        if (manual) remember(f)
     }
 
     // ---------- избранные устройства ----------
@@ -294,15 +313,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         persistFavs()
     }
 
-    fun connectFav(f: Fav) {
-        val me = Discovery.myAddresses(ctx)
-        connectFound(Found(f.host, f.port, f.kind, f.host in me))
-    }
+    fun favAsFound(f: Fav) = Found(f.host, f.port, f.kind, f.host in Discovery.myAddresses(ctx))
+
+    fun connectFav(f: Fav) = connectFound(favAsFound(f))
+
+    /** Это устройство сейчас подключено (для пункта меню «Отключить» / «Подключить»). */
+    fun isCurrent(f: Found): Boolean = connected && (if (f.self) remoteHost == null else remoteHost == f.host)
 
     // ---------- пульт ----------
 
+    private var lastInputErr = 0L
+
+    /** Лончер иногда «залипает»: стрелки доходят, но выделение не двигается. Перезапуск лончера (force-stop + «Домой») это лечит. */
+    fun restartLauncher() = launchBusy {
+        val out = runCatching { Adb.shell("cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME") }.getOrDefault("")
+        val pkg = out.lines().map { it.trim() }.lastOrNull { it.contains('/') }?.substringBefore('/')
+        if (pkg.isNullOrBlank() || pkg == "android") {
+            message = t(R.string.launcher_unknown)
+        } else {
+            runCatching { Adb.shell("am force-stop $pkg; input keyevent 3") }
+            message = t(R.string.launcher_restarted, pkg)
+        }
+    }
+
+    /** Быстрые клавиши: помощник без виртуальной мыши (только касание и клавиши). Запускается, когда открыты «Кнопки» или «Свайп». */
+    fun useKeyHelper() {
+        viewModelScope.launch {
+            if (!connected || Adb.helperKeys && !helperOn) return@launch
+            Adb.helperStop()
+            helperOn = false
+            Adb.helperStart(ctx, true)
+        }
+    }
+
+    /** Команда ввода (кнопка, касание, свайп): если устройство ответило ошибкой — показываем причину, а не молчим. */
+    private fun sendInput(cmd: String) {
+        viewModelScope.launch {
+            val out = runCatching { Adb.shell(cmd + " 2>&1") }.getOrElse { it.message ?: it.javaClass.simpleName }.trim()
+            val bad = out.contains("Exception", true) || out.contains("denied", true) || out.contains("not found", true) ||
+                out.contains("INJECT_EVENTS", true) || out.contains("error", true) || out.contains("Stream closed", true)
+            if (bad && System.currentTimeMillis() - lastInputErr > 4000) {
+                lastInputErr = System.currentTimeMillis()
+                message = if (out.contains("INJECT_EVENTS", true) || out.contains("SecurityException", true)) t(R.string.input_denied)
+                else t(R.string.input_failed, out.take(180))
+            }
+        }
+    }
+
     fun key(code: Int) {
-        viewModelScope.launch { runCatching { Adb.shell("input keyevent $code") } }
+        if (Adb.helperKeys) Adb.helperSend("k $code") else sendInput("input keyevent $code")
+    }
+
+    /** Долгое нажатие кнопки (например OK на приставке). */
+    fun keyLong(code: Int) {
+        if (Adb.helperKeys) Adb.helperSend("kl $code") else sendInput("input keyevent --longpress $code")
     }
 
     fun typeText(text: String) {
@@ -337,6 +401,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             Adb.helperStop()
             helperOn = false
+        }
+    }
+
+    private var showTouchesPrev: String? = null
+
+    /** Белые кружки на экране устройства в местах касаний (настройка «Показывать касания»); при выходе возвращается прежнее значение. */
+    fun setShowTouches(on: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                if (on) {
+                    if (showTouchesPrev == null) {
+                        val cur = Adb.shell("settings get system show_touches").trim()
+                        showTouchesPrev = if (cur == "1") "1" else "0"
+                    }
+                    Adb.shell("settings put system show_touches 1")
+                } else {
+                    val p = showTouchesPrev ?: return@runCatching
+                    Adb.shell("settings put system show_touches $p")
+                    showTouchesPrev = null
+                }
+            }
         }
     }
 

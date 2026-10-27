@@ -154,7 +154,7 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
             Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.fb_title), color = t.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.fb_title), color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(stringResource(R.string.fb_src_local), kind == "local") { kind = "local" }
                 Chip(stringResource(R.string.fb_src_adb), kind == "adb") { kind = "adb" }
@@ -221,7 +221,7 @@ private fun FileRow(name: String, info: String, folder: Boolean, onClick: () -> 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(name, color = if (folder) t.accent else t.text, fontSize = 16.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(name, color = if (folder) t.accent else t.text, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (info.isNotEmpty()) Text(info, color = t.hint, fontSize = 12.sp)
     }
 }
@@ -250,7 +250,7 @@ fun UploadDialog(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
             Modifier.clip(RoundedCornerShape(20.dp)).background(t.tile).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(20.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(R.string.wifi_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.wifi_title), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.wifi_hint), color = t.sub, fontSize = 13.sp)
             if (addr != null) Text("http://$addr:${UploadServer.PORT}", color = t.accent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             else Text(stringResource(R.string.wifi_no_net), color = Color(0xFFF59E0B), fontSize = 14.sp)

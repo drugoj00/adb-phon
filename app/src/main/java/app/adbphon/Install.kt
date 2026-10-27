@@ -81,7 +81,7 @@ fun InstallHub(onClose: () -> Unit) {
                 Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(stringResource(R.string.inst_hub_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.inst_hub_title), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.inst_hub_hint), color = t.hint, fontSize = 12.sp)
                 if (busy) Text(stringResource(R.string.working), color = t.accent, fontSize = 13.sp)
                 Chip(stringResource(R.string.inst_pick_file), true, Modifier.fillMaxWidth()) {
@@ -113,7 +113,7 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
             Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.install_title, files.size), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.install_title, files.size), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             if (files.isEmpty()) Text(stringResource(R.string.install_none), color = t.sub, fontSize = 14.sp)
             Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
                 files.forEach { f ->

@@ -92,7 +92,7 @@ fun NetDialog(onClose: () -> Unit) {
             Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.pnet_title), color = t.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.pnet_title), color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.net_hint), color = t.hint, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -135,7 +135,7 @@ fun NetDialog(onClose: () -> Unit) {
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     ) {
-                        Text(app.name, color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(app.name, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (app.summary.isNotBlank()) Text(app.summary, color = t.sub, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }

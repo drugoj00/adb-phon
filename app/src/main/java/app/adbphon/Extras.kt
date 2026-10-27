@@ -274,10 +274,16 @@ private fun humanSize(b: Long): String = when {
 fun RemoteScreen(vm: MainViewModel) {
     var text by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { vm.loadScreenSize() }
-    DisposableEffect(Unit) { onDispose { vm.setHelper(false) } }
+    DisposableEffect(Unit) { onDispose { vm.setHelper(false); vm.setShowTouches(false) } }
     var mode by rememberSaveable { mutableStateOf(0) } // 0 кнопки, 1 касание, 2 мышь, 3 воздух
     // настоящий курсор нужен в «Мыши» и «Воздухе»: включаем помощника сам, выключатель внизу остаётся для ручного отключения
-    LaunchedEffect(mode) { if (mode >= 1 && !vm.helperOn) vm.setHelper(true) }
+    // помощник включён самой панелью (а не выключателем вручную): на вкладке «Кнопки» курсор не нужен, выключаем
+    var helperByPad by remember { mutableStateOf(false) }
+    LaunchedEffect(mode, vm.connected) {
+        if (mode >= 2 && !vm.helperOn) { helperByPad = true; vm.setHelper(true) }
+        else if (mode <= 1) { helperByPad = false; vm.useKeyHelper() }
+    }
+    val arrows = true   // вкладка «Свайп»: свайпы = стрелки, касание = OK
     val cursor = remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     var sens by rememberSaveable { mutableStateOf(1.0f) }
     val labels = listOf(R.string.pad_keys, R.string.pad_touch, R.string.pad_mouse, R.string.pad_air)
@@ -299,16 +305,29 @@ fun RemoteScreen(vm: MainViewModel) {
                     OutlinedTextField(text, { text = it }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.remote_text)) })
                     Button({ vm.typeText(text); text = "" }, enabled = text.isNotBlank()) { Text(stringResource(R.string.btn_send)) }
                 }
+                TextButton({ vm.restartLauncher() }, enabled = !vm.busy) { Text(stringResource(R.string.launcher_restart), fontSize = 12.sp) }
             }
             1 -> {
-                Text(stringResource(R.string.remote_pad), fontSize = 12.sp)
-                PadArea(vm) { TouchPad(vm, false, cursor) }
+                PadArea(vm) { TouchPad(vm, false, cursor, arrows) }
+                // прокрутка страницами: PAGE_DOWN (93) / PAGE_UP (92) — работает без мыши и на приставках
+                Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton({ vm.key(93) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+                        Text(stringResource(R.string.pad_scroll_down).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+                        Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+                    }
+                    OutlinedButton({ vm.key(92) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
+                        Text(stringResource(R.string.pad_scroll_up).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+                        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
+                    }
+                }
                 QuickKeys(vm)
             }
             2 -> {
                 Text(stringResource(R.string.pad_mouse_hint), fontSize = 12.sp)
                 PadArea(vm) { TouchPad(vm, true, cursor) }
-                Row(Modifier.fillMaxWidth().height(34.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val cxm = vm.screenW / 2; val sy = vm.screenH
                     // обе кнопки одной высоты, подпись в две строки: «Прокрутка / вниз» и «Прокрутка / вверх»
                     // толстые стрелки по краям, подпись по центру
@@ -568,30 +587,60 @@ private fun AirControls(vm: MainViewModel, cursor: androidx.compose.runtime.Muta
 }
 
 @Composable
-private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose.runtime.MutableState<Offset>) {
+private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose.runtime.MutableState<Offset>, arrows: Boolean = false) {
     var w by remember { mutableStateOf(1) }
     var h by remember { mutableStateOf(1) }
+    var last by remember { mutableStateOf<Offset?>(null) }
+    var flash by remember { mutableStateOf<String?>(null) }
+    var flashN by remember { mutableStateOf(0) }
+    fun showFlash(t: String) { flash = t; flashN++ }
+    LaunchedEffect(flashN) { if (flash != null) { kotlinx.coroutines.delay(380); flash = null } }
     // окно для пальца всегда квадратное, с контуром; положение пальца переводится в координаты экрана пропорционально
     Box(
         Modifier.fillMaxWidth().aspectRatio(1f)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
             .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
             .onSizeChanged { w = it.width.coerceAtLeast(1); h = it.height.coerceAtLeast(1) }
-            .pointerInput(vm.screenW, vm.screenH, mouse) {
-                if (mouse) {
+            .pointerInput(vm.screenW, vm.screenH, mouse, arrows) {
+                if (!mouse && arrows) {
+                    detectTapGestures(
+                        onTap = { showFlash("OK"); vm.key(23) },
+                        onLongPress = { showFlash("OK ⏺"); vm.keyLong(23) },
+                    )
+                } else if (mouse) {
                     detectTapGestures(
                         onTap = { if (vm.helperOn) vm.hClick() else vm.tap((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
                         onLongPress = { if (vm.helperOn) vm.hLongClick() else vm.longPress((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
                     )
                 } else {
                     detectTapGestures(
-                        onTap = { o -> vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
-                        onLongPress = { o -> vm.longPress((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                        onTap = { o -> last = o; vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                        onLongPress = { o -> last = o; vm.longPress((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
                     )
                 }
             }
-            .pointerInput(vm.screenW, vm.screenH, mouse) {
-                if (mouse) {
+            .pointerInput(vm.screenW, vm.screenH, mouse, arrows) {
+                if (!mouse && arrows) {
+                    // свайп = стрелка: за каждые ~56 dp пути вдоль оси — одно нажатие; короткий быстрый взмах — одно нажатие
+                    var ax = 0f; var ay = 0f; var sent = 0; var tx = 0f; var ty = 0f
+                    val step = 56.dp.toPx()
+                    fun arrow(dx: Float, dy: Float) {
+                        val horiz = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
+                        val (code, sym) = if (horiz) (if (dx > 0) 22 to "→" else 21 to "←") else (if (dy > 0) 20 to "↓" else 19 to "↑")
+                        vm.key(code); showFlash(sym); sent++
+                    }
+                    detectDragGestures(
+                        onDragStart = { ax = 0f; ay = 0f; tx = 0f; ty = 0f; sent = 0 },
+                        onDrag = { c, d ->
+                            c.consume(); ax += d.x; ay += d.y; tx += d.x; ty += d.y
+                            if (kotlin.math.abs(ax) >= step && kotlin.math.abs(ax) >= kotlin.math.abs(ay)) { arrow(ax, 0f); ax = 0f; ay = 0f }
+                            else if (kotlin.math.abs(ay) >= step) { arrow(0f, ay); ax = 0f; ay = 0f }
+                        },
+                        onDragEnd = {
+                            if (sent == 0 && (kotlin.math.abs(tx) > 18.dp.toPx() || kotlin.math.abs(ty) > 18.dp.toPx())) arrow(tx, ty)
+                        },
+                    )
+                } else if (mouse) {
                     // один отсчёт мыши на устройстве даёт ≈1,4 пикселя: палец вдоль всего окна ≈ вдоль всего экрана; остатки копим
                     var mx = 0f; var my = 0f
                     detectDragGestures { c, d ->
@@ -616,7 +665,7 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
                             if (vm.touchViaHelper) vm.hTouch("td", px(sx), py(sy))
                         },
                         onDrag = { c, d ->
-                            c.consume(); ex += d.x; ey += d.y
+                            c.consume(); ex += d.x; ey += d.y; last = Offset(ex, ey)
                             val now = System.currentTimeMillis()
                             if (vm.touchViaHelper && now - tLast >= 16) { tLast = now; vm.hTouch("tm", px(ex), py(ey)) }
                         },
@@ -633,6 +682,17 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
                 }
             },
     ) {
+        if (!mouse && arrows) {
+            flash?.let { Text(it, Modifier.align(Alignment.Center), fontSize = 44.sp, color = MaterialTheme.colorScheme.primary) }
+        }
+        if (!mouse && !arrows) {
+            Canvas(Modifier.fillMaxSize()) {
+                last?.let { o ->
+                    drawCircle(Color(0x553B82F6), radius = 22.dp.toPx(), center = o)
+                    drawCircle(Color(0xFF3B82F6), radius = 22.dp.toPx(), center = o, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                }
+            }
+        }
         if (mouse) {
             Canvas(Modifier.fillMaxSize()) {
                 val c = Offset(cursor.value.x * size.width, cursor.value.y * size.height)
@@ -650,13 +710,15 @@ fun MoreScreen(vm: MainViewModel) {
     var sub by remember { mutableStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(R.string.sub_console, R.string.sub_device, R.string.sub_about).forEachIndexed { i, s ->
+            listOf(R.string.sub_console, R.string.sub_device, R.string.sub_ssh, R.string.sub_bt, R.string.sub_about).forEachIndexed { i, s ->
                 FilterChip(sub == i, { sub = i }, { Text(stringResource(s), maxLines = 1) })
             }
         }
         when (sub) {
             0 -> NeedConnection(vm) { ConsoleScreen(vm) }
             1 -> NeedConnection(vm) { DeviceScreen(vm) }
+            2 -> SshScreen()
+            3 -> BtScreen()
             else -> AboutScreen(vm)
         }
     }
@@ -668,14 +730,14 @@ fun MoreScreen(vm: MainViewModel) {
 fun DeviceExtras(vm: MainViewModel) {
     LaunchedEffect(Unit) { vm.refreshMonitor() }
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.mon_title), fontWeight = FontWeight.Bold)
             Text(vm.monitor, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             OutlinedButton({ vm.refreshMonitor() }) { Text(stringResource(R.string.dev_refresh)) }
         }
     }
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AssistChip({ vm.screenshot() }, { Text(stringResource(R.string.shot), fontSize = 12.sp) })
                 AssistChip({ vm.record() }, { Text(stringResource(R.string.rec), fontSize = 12.sp) })
@@ -684,7 +746,7 @@ fun DeviceExtras(vm: MainViewModel) {
         }
     }
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             val groups = listOf(
                 listOf(R.string.q_dark_on to "cmd uimode night yes", R.string.q_dark_off to "cmd uimode night no"),
                 listOf(R.string.q_wifi_on to "svc wifi enable", R.string.q_wifi_off to "svc wifi disable"),
@@ -715,7 +777,7 @@ fun DeviceExtras(vm: MainViewModel) {
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.set_theme), fontWeight = FontWeight.Medium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).forEach { (code, label) ->
@@ -756,7 +818,26 @@ fun SettingsScreen(vm: MainViewModel) {
         CopiesSection()
         Text(stringResource(R.string.set_version, vm.appVersion), fontWeight = FontWeight.Medium)
         Text(stringResource(R.string.ver_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-        OutlinedButton({ vm.openVersions() }) { Text(stringResource(R.string.ver_btn), fontSize = 12.sp, maxLines = 1) }
+        var clearVer by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+        val noneMsg = stringResource(R.string.ver_none)
+        val clearedFmt = stringResource(R.string.ver_cleared)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton({ vm.openVersions() }) { Text(stringResource(R.string.ver_btn), fontSize = 12.sp, maxLines = 1) }
+            OutlinedButton({
+                val files = VersionKeeper.oldFiles(ctx)
+                if (files.isEmpty()) Toast.makeText(ctx, noneMsg, Toast.LENGTH_SHORT).show()
+                else clearVer = files.size to files.sumOf { it.length() }
+            }) { Text(stringResource(R.string.ver_clear_btn), fontSize = 12.sp, maxLines = 1) }
+        }
+        clearVer?.let { (n, bytes) ->
+            AlertDialog(
+                onDismissRequest = { clearVer = null },
+                title = { Text(stringResource(R.string.ver_clear_btn)) },
+                text = { Text(stringResource(R.string.ver_clear_confirm, n, bytes / 1048576)) },
+                confirmButton = { TextButton({ val k = VersionKeeper.clearOld(ctx); clearVer = null; Toast.makeText(ctx, String.format(clearedFmt, k), Toast.LENGTH_SHORT).show() }) { Text(stringResource(R.string.ssh_delete)) } },
+                dismissButton = { TextButton({ clearVer = null }) { Text(stringResource(R.string.btn_cancel)) } },
+            )
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedButton({ vm.showLog() }) { Text(stringResource(R.string.log_show), fontSize = 12.sp, maxLines = 1) }
             OutlinedButton({

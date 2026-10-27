@@ -17,12 +17,21 @@ object Adb {
     fun init(context: Context) {
         appCtx = context.applicationContext
         mgr = AdbConn(context.applicationContext)
+        autoOff = appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("auto_off", false)   // отключение помнится и после перезапуска
     }
 
     /** Команды этого телефона идут через root (Magisk), а не через ADB: компьютер и отладка по Wi-Fi не нужны. */
     @Volatile private var rootOn = false
     /** Пользователь сам отключился: сами к root не возвращаемся, пока он не нажмёт «Подключить через root». */
     @Volatile var rootSuppressed = false
+    /** Пользователь сам отключил устройство: фоновое автоподключение молчит, пока он не подключит что-либо вручную. */
+    /** Адрес устройства, к которому подключены сейчас ("" — этот телефон). Нужен, чтобы фоновое обновление не принимало чужое устройство за этот телефон. */
+    @Volatile var currentHost = ""
+    @Volatile var autoOff = false
+        set(v) {
+            field = v
+            if (::appCtx.isInitialized) appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("auto_off", v).apply()
+        }
     val isRoot: Boolean get() = rootOn
 
     val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && mgr.isConnected)
@@ -36,7 +45,7 @@ object Adb {
         if (rootSuppressed) return@withContext false
         val ok = runCatching { rootRun("id", null, 30_000).contains("uid=0") }
             .onFailure { AppLog.i("ADBphon", "root недоступен: ${it.message}") }.getOrDefault(false)
-        if (ok) { runCatching { mgr.disconnect() }; rootOn = true }
+        if (ok) { runCatching { mgr.disconnect() }; rootOn = true; currentHost = "" }
         AppLog.i("ADBphon", "root=$ok")
         ok
     }
@@ -86,6 +95,7 @@ object Adb {
                 last = r.exceptionOrNull() ?: IllegalStateException("connect failed")
             }
             if (!done) throw last ?: IllegalStateException("connect failed")
+            currentHost = if (host == "127.0.0.1") "" else host
         }.onFailure { AppLog.e("ADBphon", "connect error", it) }
     }
 
@@ -105,10 +115,11 @@ object Adb {
             }
             if (!ok && manualPort != null) ok = mgr.connect(host, manualPort)
             if (!ok) error("connect failed")
+            currentHost = if (host == "127.0.0.1") "" else host
         }.onFailure { AppLog.e("ADBphon", "wireless connect error", it) }
     }
 
-    suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; runCatching { mgr.disconnect() } }
+    suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; currentHost = ""; runCatching { mgr.disconnect() } }
 
     /** Выполнить команду оболочки и вернуть её вывод. */
     suspend fun shell(cmd: String, timeoutMs: Long = 25_000): String = withContext(Dispatchers.IO) {
@@ -247,17 +258,19 @@ object Adb {
     /** Что умеет запущенный помощник на этом устройстве: виртуальная мышь (UHID) и настоящее касание (InputManager). */
     @Volatile var helperMouse = false
     @Volatile var helperTouch = false
+    /** Помощник умеет быстро нажимать клавиши (команда «k код»): миллисекунды вместо ~1 с на «input keyevent». */
+    @Volatile var helperKeys = false
 
-    suspend fun helperStart(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun helperStart(context: Context, keysOnly: Boolean = false): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             helperStopNow()
             val bytes = context.assets.open("helper.jar").use { it.readBytes() }
-            if (rootOn) { helperStartRoot(bytes); return@runCatching }
+            if (rootOn) { helperStartRoot(bytes, keysOnly); return@runCatching }
             val up = mgr.openStream("exec:cat > /data/local/tmp/adbphon-helper.jar")
             up.openOutputStream().apply { write(bytes); flush() }
             runCatching { up.close() }
             kotlinx.coroutines.delay(500)
-            val s = mgr.openStream("exec:CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper")
+            val s = mgr.openStream("exec:CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper${if (keysOnly) " keys" else ""}")
             helperStream = s
             helperOut = s.openOutputStream()
             // помощник первой строкой сообщает «ready mouse=1 touch=1»; на слабых приставках запуск занимает больше секунды
@@ -278,10 +291,12 @@ object Adb {
             val line = ready.toString()
             helperMouse = line.contains("mouse=1")
             helperTouch = line.contains("touch=1")
+            helperKeys = line.contains("key=1")
             if (!line.startsWith("ready")) {
-                // старый помощник без строки «ready» или медленный запуск: считаем, что мышь есть, касание — нет
-                helperMouse = true
+                // старый помощник без строки «ready» или медленный запуск: считаем, что мышь есть, касание и клавиши — нет
+                helperMouse = !keysOnly
                 helperTouch = false
+                helperKeys = false
             }
             AppLog.i("ADBphon", "helper started: ${line.ifBlank { "(без ответа)" }}")
             Unit
@@ -291,9 +306,9 @@ object Adb {
     private var helperProc: Process? = null
 
     /** Помощник на этом телефоне от root: тот же Helper, но процесс запускается через su. */
-    private fun helperStartRoot(bytes: ByteArray) {
+    private fun helperStartRoot(bytes: ByteArray, keysOnly: Boolean = false) {
         rootRun("cat > /data/local/tmp/adbphon-helper.jar", java.io.ByteArrayInputStream(bytes), 30_000)
-        val p = ProcessBuilder("su", "-c", "CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper").redirectErrorStream(true).start()
+        val p = ProcessBuilder("su", "-c", "CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper" + (if (keysOnly) " keys" else "")).redirectErrorStream(true).start()
         helperProc = p
         helperOut = p.outputStream
         val ready = StringBuilder()
@@ -313,7 +328,8 @@ object Adb {
         val line = ready.toString()
         helperMouse = line.contains("mouse=1")
         helperTouch = line.contains("touch=1")
-        if (!line.startsWith("ready")) { helperMouse = true; helperTouch = false }
+        helperKeys = line.contains("key=1")
+        if (!line.startsWith("ready")) { helperMouse = !keysOnly; helperTouch = false; helperKeys = false }
         AppLog.i("ADBphon", "helper (root) started: ${line.ifBlank { "(без ответа)" }}")
     }
 
@@ -326,6 +342,7 @@ object Adb {
         helperStream = null
         helperMouse = false
         helperTouch = false
+        helperKeys = false
     }
 
     suspend fun helperStop() = withContext(Dispatchers.IO) { helperStopNow() }
