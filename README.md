@@ -6,7 +6,7 @@
 
 # ADB-phon
 
-Free ADB manager right on your phone: install APKs over ADB, air mouse and remote control, special access that survives a reboot. No computer, no root.
+Free ADB manager right on your phone: install APKs over ADB, air mouse and remote control, special access that survives a reboot. No computer needed, root is optional (with root even ADB is not needed).
 
 ADB-phon connects to the ADB of the same phone (or of another device in your network) and runs commands with shell rights, as if the phone were plugged into a computer.
 
@@ -14,20 +14,14 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 1.1.** [ADB-phon-1.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 1.2.** [ADB-phon-1.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `4f4f6a97010aa54901fea0ad28ad651045f9136d82660139e19dc77498feb810`
+SHA-256: `3610a58513cab00a289e1835c5304a32ee220a7a2c733ed597830b9a6a94ee73`
 
-## What's new in 1.1
+## What's new in 1.2
 
-- Install from many sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search and install from the internet (F-Droid, GitHub, a link).
-- Multi-part packages: APKS, APKM, XAPK and ZIP with APK and OBB. The parts are picked for your phone; OBB goes to Android/obb.
-- Batch install and batch uninstall: tick several apps, confirm once.
-- An APK copy is saved before uninstalling, with a window of saved copies. The “Versions” button installs any version (also an older one) from copies, F-Droid or your own file.
-- Cleaner: the “Junk” filter with known unneeded system apps, marks “safe” and “careful”, the “Select safe” button; disabling is reversible.
-- Automatic connection: on Android 11+ the accessibility service pairs without typing a code; on Android 8–10 the app connects by itself to port 5555 after one command from a computer. The card is at the top of the “Link” tab.
-- A “Clean RAM” button in the apps tab: it stops background processes and shows how much memory was freed.
-- Fixed: on Samsung a second icon (a copy in “Dual app”) could appear after installing over ADB.
+- Compact apps list: a row takes two lines instead of three, the search field is half as tall, so about twice as many apps fit on the screen of a phone.
+- Root (Magisk) instead of ADB: if the device is rooted, the app works without a computer and without debugging — all actions on THIS device go through root (install, uninstall, stop, clear data, permissions, files, virtual mouse). Allow root for the app in Magisk once. Other devices are still connected over ADB. You choose: the switch “Use root automatically” decides what is used at start, and the ADB connect buttons switch to ADB.
 
 ## Features
 
@@ -75,7 +69,7 @@ SHA-256: `4f4f6a97010aa54901fea0ad28ad651045f9136d82660139e19dc77498feb810`
 
 ## Quick start
 
-1. Download ADB-phon-1.1.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-1.2.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
