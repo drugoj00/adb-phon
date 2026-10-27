@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.border
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -257,7 +260,7 @@ fun ConnectScreen(vm: MainViewModel) {
     val askName: (Found) -> Unit = { favName = vm.names[it.host].orEmpty(); favFor = it }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            stringResource(if (vm.connected) R.string.conn_ok else R.string.conn_no),
+            stringResource(if (!vm.connected) R.string.conn_no else if (Adb.isRoot) R.string.root_on else R.string.conn_ok),
             fontSize = 20.sp, fontWeight = FontWeight.Bold,
             color = if (vm.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
         )
@@ -364,6 +367,21 @@ fun ConnectScreen(vm: MainViewModel) {
                 Button(onClick = { vm.connectTcp(host, 5555) }, enabled = !vm.busy) { Text(stringResource(R.string.btn_connect_tcp, host.ifBlank { "localhost" })) }
             }
         }
+        if (host.isBlank()) {
+            val ctxR = LocalContext.current
+            var useRoot by remember { mutableStateOf(Cfg.useRoot(ctxR)) }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.root_title), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.root_hint), fontSize = 14.sp)
+                    Button(onClick = { vm.connectRoot() }, enabled = !vm.busy) { Text(stringResource(R.string.root_connect_btn)) }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        androidx.compose.material3.Switch(useRoot, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } })
+                        Text(stringResource(R.string.root_use_title), fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
         if (vm.connected) OutlinedButton(onClick = { vm.disconnect() }) { Text(stringResource(R.string.btn_disconnect)) }
     }
 }
@@ -372,13 +390,13 @@ fun ConnectScreen(vm: MainViewModel) {
 @Composable
 fun FoundRow(vm: MainViewModel, f: Found, onStar: (Found) -> Unit, onDrop: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = { vm.connectFound(f) }, onLongClick = onDrop).padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = { vm.connectFound(f) }, onLongClick = onDrop).padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Filled.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             val addr = f.host + if (f.kind == "wifi") ":" + f.port else ""
-            Text(addr, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(addr, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = (vm.names[f.host] ?: stringResource(R.string.net_name_unknown)) + if (f.self) " · " + stringResource(R.string.net_self) else ""
             Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -393,7 +411,7 @@ private object IconCache {
 }
 
 @Composable
-fun AppIcon(pkg: String) {
+fun AppIcon(pkg: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
     val ctx = LocalContext.current
     val bmp by produceState<ImageBitmap?>(IconCache.map[pkg], pkg) {
         if (value == null) {
@@ -404,7 +422,7 @@ fun AppIcon(pkg: String) {
             }
         }
     }
-    Box(Modifier.size(40.dp)) {
+    Box(Modifier.size(size)) {
         bmp?.let { Image(it, null, Modifier.fillMaxSize()) }
     }
 }
@@ -425,10 +443,25 @@ fun AppsScreen(vm: MainViewModel) {
     var confirm by remember { mutableStateOf<Act?>(null) }
     var installHub by remember { mutableStateOf(false) }
     var versionsFor by remember { mutableStateOf<AppEntry?>(null) }
+    // компактный вид (просьба владелицы 26.10.2026): без лишней высоты у флажков и чипов, поиск вдвое ниже, строка приложения в две строки
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            vm.query, { vm.query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            placeholder = { Text(stringResource(R.string.search_hint)) }, singleLine = true,
+        androidx.compose.foundation.text.BasicTextField(
+            value = vm.query, onValueChange = { vm.query = it }, singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+            decorationBox = { inner ->
+                Box(
+                    Modifier.fillMaxWidth().height(40.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (vm.query.isEmpty()) Text(stringResource(R.string.search_hint), fontSize = 14.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .5f))
+                    inner()
+                }
+            },
         )
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(
@@ -462,15 +495,14 @@ fun AppsScreen(vm: MainViewModel) {
         LazyColumn(Modifier.weight(1f), state = rememberLazyListState()) {
             items(visible, key = { it.pkg }) { a ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { vm.toggle(a.pkg) }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    Modifier.fillMaxWidth().clickable { vm.toggle(a.pkg) }.padding(horizontal = 12.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg) })
-                    AppIcon(a.pkg)
-                    Spacer(Modifier.width(10.dp))
+                    Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg) }, Modifier.size(32.dp))
+                    AppIcon(a.pkg, 32.dp)
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                        Text(a.pkg, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                        Text(a.label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                         val tags = buildList {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
@@ -481,7 +513,16 @@ fun AppsScreen(vm: MainViewModel) {
                             }
                             if (a.version.isNotEmpty()) add("v${a.version}")
                         }
-                        Text(tags.joinToString(" · "), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
+                        // вторая строка: пакет и версия серым, метки («система», «мусор», «безопасно»…) цветом
+                        val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
+                        val acc = MaterialTheme.colorScheme.primary
+                        Text(
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                withStyle(androidx.compose.ui.text.SpanStyle(color = dim)) { append(a.pkg) }
+                                if (tags.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = acc)) { append(" · " + tags.joinToString(" · ")) }
+                            },
+                            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -508,6 +549,7 @@ fun AppsScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
     }
     confirm?.let { act ->
         val label = stringResource(actLabel(act))

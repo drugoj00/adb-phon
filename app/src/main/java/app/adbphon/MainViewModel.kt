@@ -80,6 +80,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Adb.connectLocal(port, hostOf(host)).onSuccess { onConnected(host) }.onFailure { fail(it) }
     }
 
+    /** Этот телефон через root (Magisk) вместо ADB. */
+    fun connectRoot() = launchBusy {
+        if (Adb.tryRoot(manual = true)) onConnected("") else message = t(R.string.root_fail)
+    }
+
     fun pair(host: String, port: Int, code: String) = launchBusy {
         Adb.pair(port, code.trim(), hostOf(host)).onSuccess { message = t(R.string.msg_paired) }.onFailure { fail(it) }
     }

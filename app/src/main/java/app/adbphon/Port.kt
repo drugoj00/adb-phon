@@ -99,6 +99,9 @@ object Cfg {
     private fun sp(ctx: android.content.Context) = ctx.getSharedPreferences("adbphon", android.content.Context.MODE_PRIVATE)
     fun backupOnDelete(ctx: android.content.Context): Boolean = sp(ctx).getBoolean("backup_on_delete", true)
     fun setBackupOnDelete(ctx: android.content.Context, v: Boolean) { sp(ctx).edit().putBoolean("backup_on_delete", v).apply() }
+    /** Пробовать права root (Magisk) для этого телефона вместо ADB. */
+    fun useRoot(ctx: android.content.Context): Boolean = sp(ctx).getBoolean("use_root", true)
+    fun setUseRoot(ctx: android.content.Context, v: Boolean) { sp(ctx).edit().putBoolean("use_root", v).apply() }
 }
 
 object Conn {
@@ -123,6 +126,7 @@ fun AutoConnectCard(vm: MainViewModel) {
         while (true) {
             if (!old) autoOn = AutoPairService.isEnabled(ctx)
             // тихие попытки: порт 5555 и (Android 11+) уже сопряжённое устройство по беспроводной отладке
+            if (!Adb.isConnected && !vm.busy && Cfg.useRoot(ctx) && !Adb.rootSuppressed && n == 0) Adb.tryRoot()
             if (!Adb.isConnected && !vm.busy && n % 2 == 0) {
                 Adb.connectLocal(5555)
                 if (!Adb.isConnected && !old && n % 8 == 0) Adb.connectWireless(ctx, null)

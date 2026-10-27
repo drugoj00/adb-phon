@@ -12,13 +12,67 @@ import java.io.InputStream
 object Adb {
     private lateinit var mgr: AdbConn
 
+    private lateinit var appCtx: Context
+
     fun init(context: Context) {
+        appCtx = context.applicationContext
         mgr = AdbConn(context.applicationContext)
     }
 
-    val isConnected: Boolean get() = ::mgr.isInitialized && mgr.isConnected
+    /** Команды этого телефона идут через root (Magisk), а не через ADB: компьютер и отладка по Wi-Fi не нужны. */
+    @Volatile private var rootOn = false
+    /** Пользователь сам отключился: сами к root не возвращаемся, пока он не нажмёт «Подключить через root». */
+    @Volatile var rootSuppressed = false
+    val isRoot: Boolean get() = rootOn
+
+    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && mgr.isConnected)
+
+    /**
+     * Проверяет, дал ли Magisk (или другой su) права root этому приложению. При первом запуске появится запрос Magisk:
+     * ждём ответа до 30 секунд. Успех включает режим root для всех команд на этом телефоне.
+     */
+    suspend fun tryRoot(manual: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (manual) rootSuppressed = false
+        if (rootSuppressed) return@withContext false
+        val ok = runCatching { rootRun("id", null, 30_000).contains("uid=0") }
+            .onFailure { AppLog.i("ADBphon", "root недоступен: ${it.message}") }.getOrDefault(false)
+        if (ok) { runCatching { mgr.disconnect() }; rootOn = true }
+        AppLog.i("ADBphon", "root=$ok")
+        ok
+    }
+
+    fun disableRoot() { rootOn = false }
+
+    private fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
+
+    /**
+     * Выполняет команду от root: `su -c`. [input] (если есть) подаётся в стандартный ввод команды (установка пакета, запись файла).
+     * Возвращает объединённый вывод; по тайм-ауту процесс убивается.
+     */
+    private fun rootRun(cmd: String, input: InputStream?, timeoutMs: Long): String {
+        val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
+        val out = java.io.ByteArrayOutputStream()
+        val reader = Thread { runCatching { p.inputStream.copyTo(out) } }
+        reader.start()
+        val writer = Thread { runCatching { p.outputStream.use { o -> input?.copyTo(o) } } }
+        writer.start()
+        val t0 = System.currentTimeMillis()
+        var finished = false
+        while (System.currentTimeMillis() - t0 < timeoutMs) {
+            if (runCatching { p.exitValue() }.isSuccess) { finished = true; break }
+            Thread.sleep(50)
+        }
+        if (!finished) { AppLog.w("ADBphon", "timeout root: ${cmd.take(100)}"); p.destroy() }
+        reader.join(2000)
+        writer.join(500)
+        return synchronized(out) { out.toString("UTF-8") }.trim()
+    }
+
+    /** Подключение к ЧУЖОМУ устройству отменяет режим root: команды должны идти туда, а не на этот телефон. */
+    private fun leaveRoot() { rootOn = false }
 
     suspend fun connectLocal(port: Int, host: String = "127.0.0.1"): Result<Unit> = withContext(Dispatchers.IO) {
+        leaveRoot()   // выбран ADB: команды идут по ADB, а не через root
         runCatching {
             // Первое подключение к новому устройству: пока человек нажимает «Разрешить», попытка обрывается; вторая проходит сразу
             var last: Throwable? = null
@@ -41,6 +95,7 @@ object Adb {
 
     /** Беспроводная отладка: порт ищется сам (mDNS), при неудаче используется порт, введённый вручную. */
     suspend fun connectWireless(context: Context, manualPort: Int?, host: String = "127.0.0.1"): Result<Unit> = withContext(Dispatchers.IO) {
+        leaveRoot()   // выбран ADB: команды идут по ADB, а не через root
         runCatching {
             runCatching { mgr.disconnect() }
             var ok = false
@@ -53,13 +108,13 @@ object Adb {
         }.onFailure { AppLog.e("ADBphon", "wireless connect error", it) }
     }
 
-    suspend fun disconnect() = withContext(Dispatchers.IO) { runCatching { mgr.disconnect() } }
+    suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; runCatching { mgr.disconnect() } }
 
     /** Выполнить команду оболочки и вернуть её вывод. */
     suspend fun shell(cmd: String, timeoutMs: Long = 25_000): String = withContext(Dispatchers.IO) {
         AppLog.i("ADBphon", "shell> ${cmd.take(300)}")
         val t0 = System.currentTimeMillis()
-        val res = runCatching { readAll(mgr.openStream("shell:$cmd"), timeoutMs, cmd) }
+        val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else readAll(mgr.openStream("shell:$cmd"), timeoutMs, cmd) }
         AppLog.i("ADBphon", "shell< ${System.currentTimeMillis() - t0} мс, ${res.getOrNull()?.length ?: -1} симв: ${(res.getOrNull() ?: res.exceptionOrNull()?.message).orEmpty().take(300).replace("\n", " ⏎ ")}")
         res.getOrThrow()
     }
@@ -111,6 +166,13 @@ object Adb {
 
     /** Установить APK потоком (cmd package install -S). flags: например "-r" или "-r -d" (понижение версии). */
     suspend fun installApk(input: InputStream, size: Long, flags: String = "-r"): String = withContext(Dispatchers.IO) {
+        if (rootOn) {
+            val tmp = java.io.File(appCtx.cacheDir, "root-install-" + System.nanoTime() + ".apk")
+            try {
+                tmp.outputStream().use { input.copyTo(it) }
+                return@withContext rootRun("cmd package install ${withUser(flags)} -S ${tmp.length()} < " + q(tmp.absolutePath), null, 600_000)
+            } finally { tmp.delete() }
+        }
         val s = mgr.openStream("exec:cmd package install ${withUser(flags)} -S $size")
         val out = s.openOutputStream()
         input.copyTo(out)
@@ -123,6 +185,14 @@ object Adb {
 
     /** Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает). */
     suspend fun pull(path: String, dest: java.io.File) = withContext(Dispatchers.IO) {
+        if (rootOn) {
+            val p = ProcessBuilder("su", "-c", "cat " + q(path)).start()
+            runCatching { p.outputStream.close() }
+            Thread { runCatching { p.errorStream.copyTo(java.io.ByteArrayOutputStream()) } }.start()
+            p.inputStream.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            p.waitFor()
+            return@withContext
+        }
         val s = mgr.openStream("exec:cat '" + path.replace("'", "'\\''") + "'")
         try {
             s.openInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
@@ -131,8 +201,13 @@ object Adb {
 
     /** Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb). */
     suspend fun pushStream(input: InputStream, size: Long, dest: String) = withContext(Dispatchers.IO) {
-        fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
         shell("mkdir -p " + q(dest.substringBeforeLast('/')))
+        if (rootOn) {
+            rootRun("head -c $size > " + q(dest), input, 1_800_000)
+            val m = Regex("^(.*/Android/(?:obb|data))/([^/]+)/").find(dest)
+            if (m != null) runCatching { rootRun("chown -R \$(stat -c %u:%g " + q(m.groupValues[1]) + ") " + q(m.groupValues[1] + "/" + m.groupValues[2]), null, 60_000) }
+            return@withContext Unit
+        }
         val s = mgr.openStream("exec:head -c $size > " + q(dest))
         val out = s.openOutputStream()
         input.copyTo(out)
@@ -149,6 +224,7 @@ object Adb {
         val id = Regex("\\[(\\d+)\\]").find(made)?.groupValues?.get(1) ?: return made
         for (f in files) {
             val res = withContext(Dispatchers.IO) {
+                if (rootOn) return@withContext f.inputStream().use { rootRun("cmd package install-write -S ${f.length()} $id ${q(f.name)} - < " + q(f.absolutePath), null, 600_000) }
                 val s = mgr.openStream("exec:cmd package install-write -S ${f.length()} $id ${f.name} -")
                 val out = s.openOutputStream()
                 f.inputStream().use { it.copyTo(out) }
@@ -176,6 +252,7 @@ object Adb {
         runCatching {
             helperStopNow()
             val bytes = context.assets.open("helper.jar").use { it.readBytes() }
+            if (rootOn) { helperStartRoot(bytes); return@runCatching }
             val up = mgr.openStream("exec:cat > /data/local/tmp/adbphon-helper.jar")
             up.openOutputStream().apply { write(bytes); flush() }
             runCatching { up.close() }
@@ -211,8 +288,39 @@ object Adb {
         }.onFailure { AppLog.e("ADBphon", "helper error", it); helperStopNow() }
     }
 
+    private var helperProc: Process? = null
+
+    /** Помощник на этом телефоне от root: тот же Helper, но процесс запускается через su. */
+    private fun helperStartRoot(bytes: ByteArray) {
+        rootRun("cat > /data/local/tmp/adbphon-helper.jar", java.io.ByteArrayInputStream(bytes), 30_000)
+        val p = ProcessBuilder("su", "-c", "CLASSPATH=/data/local/tmp/adbphon-helper.jar app_process / Helper").redirectErrorStream(true).start()
+        helperProc = p
+        helperOut = p.outputStream
+        val ready = StringBuilder()
+        val reader = Thread {
+            runCatching {
+                val input = p.inputStream
+                while (true) {
+                    val ch = input.read()
+                    if (ch < 0 || ch == '\n'.code) break
+                    ready.append(ch.toChar())
+                }
+            }
+        }
+        reader.isDaemon = true
+        reader.start()
+        reader.join(6000)
+        val line = ready.toString()
+        helperMouse = line.contains("mouse=1")
+        helperTouch = line.contains("touch=1")
+        if (!line.startsWith("ready")) { helperMouse = true; helperTouch = false }
+        AppLog.i("ADBphon", "helper (root) started: ${line.ifBlank { "(без ответа)" }}")
+    }
+
     private fun helperStopNow() {
         runCatching { helperOut?.apply { write("q\n".toByteArray()); flush() } }
+        runCatching { helperProc?.destroy() }
+        helperProc = null
         runCatching { helperStream?.close() }
         helperOut = null
         helperStream = null
