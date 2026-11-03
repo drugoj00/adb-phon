@@ -14,20 +14,18 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 2.0.** [ADB-phon-2.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 3.0.** [ADB-phon-3.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `8cf098a9251d53d7d57936dd272408b578e48386b722eb344f52809a40f863bb`
+SHA-256: `252e2eea12a4841b8537ad7a16514562dc03892e91c293a6255c3a360d412ede`
 
-## What's new in 2.0
+## What's new in 3.0
 
-- SSH: terminal and files (SFTP) of a computer or server.
-- PC mouse: the phone as a Bluetooth mouse and keyboard.
-- Remote: “Swipe” tab (swipes = arrow keys, scroll buttons); keys are instant.
-- Autoconnect to the last device at start; the connected device is highlighted.
-- Long press on a device: connect or disconnect; “Connected: name · address”.
-- “Restart launcher” button against stuck arrows on TV boxes.
-- Button to delete saved old versions; compact interface.
-- Fixed: control tabs shown without a real connection; another device taken for this phone; remote keys lagged about 1 s.
+- Backup of any app with its data and restore: with root fully, over ADB where Android allows it.
+- The only home screen cannot be disabled or deleted; the program offers to download App Menu from GitHub and installs it as a spare in one tap.
+- Updates: check for a new version and update in one tap; automatic daily check can be switched on in Settings.
+- PC mouse: a clearly visible touch window, even rows of keys (arrows, Enter, Ctrl+C and others), text field across the whole width.
+- Light vibration on remote and mouse buttons (and an optional quiet click); both can be switched in Settings.
+- Fixed: with root on Android 11 and newer, commands did not see other apps’ data folders.
 
 ## Features
 
@@ -41,6 +39,9 @@ SHA-256: `8cf098a9251d53d7d57936dd272408b578e48386b722eb344f52809a40f863bb`
 - **Apps.** Icons, search, filters (user, system, junk, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions (including batch uninstall), protection of critical packages, “Clean RAM” button.
 - **Cleaner for junk apps.** The “Junk” filter shows well-known unneeded system apps (Samsung, Google, Microsoft, Facebook services, partner apps) with marks “safe” and “careful”. “Select safe” and disable them; it is reversible (Disabled, then Enable).
 - **Copies and versions.** Before an app is uninstalled its APK is saved. The “Versions” button installs any version, including an older one, from saved copies, from F-Droid or from your own file.
+- **Backup with data.** A copy of any app together with its data, and restore. With root all data is saved; over ADB only what the system allows (external data and, for apps that allow it, internal data on Android 10 and older). The program taps the system confirmation window itself.
+- **Safe launcher disabling.** The only home screen cannot be disabled or deleted by mistake: if there is no spare one, the program offers to download App Menu from GitHub and installs it in one tap (internet needed).
+- **Updates.** Checks GitHub for a new version on request and offers to update in one tap; in Settings you can switch on an automatic check once a day (off by default).
 - **Files.** Browse folders including Android/data, create, rename, copy, move, delete.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
 - **Console.** Any shell command.
@@ -78,6 +79,10 @@ SHA-256: `8cf098a9251d53d7d57936dd272408b578e48386b722eb344f52809a40f863bb`
 ![Remote, “Swipe”: swipes are arrow keys, tap is OK, scroll buttons.](screenshots/en/14-swipe.png)
 
 ![SSH: terminal and files of a computer or server.](screenshots/en/15-ssh.png)
+
+![PC mouse: the phone as a Bluetooth mouse and keyboard, touch window, mouse buttons, arrows and keys, text field.](screenshots/en/16-pc-mouse.png)
+
+![Apps, actions panel: “Backup with data” and restore, next to permissions, versions and save APK.](screenshots/en/17-full-backup.png)
 
 ## Quick start
 
