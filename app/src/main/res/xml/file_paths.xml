@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path name="versions_ext" path="versions/" />
+    <files-path name="versions_int" path="versions/" />
+</paths>
