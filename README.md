@@ -23,6 +23,7 @@ SHA-256: `252e2eea12a4841b8537ad7a16514562dc03892e91c293a6255c3a360d412ede`
 - Backup of any app with its data and restore: with root fully, over ADB where Android allows it.
 - The only home screen cannot be disabled or deleted; the program offers to download App Menu from GitHub and installs it as a spare in one tap.
 - Updates: check for a new version and update in one tap; automatic daily check can be switched on in Settings.
+- The interface has been redesigned.
 - PC mouse: a clearly visible touch window, even rows of keys (arrows, Enter, Ctrl+C and others), text field across the whole width.
 - Light vibration on remote and mouse buttons (and an optional quiet click); both can be switched in Settings.
 - Fixed: with root on Android 11 and newer, commands did not see other apps’ data folders.
