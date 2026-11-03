@@ -52,6 +52,28 @@ object Adb {
 
     fun disableRoot() { rootOn = false }
 
+    /**
+     * Magisk: `su -mm` запускает команду в общем (главном) пространстве файловой системы. Без него на Android 11 и новее
+     * приложение видит только свою папку в /data/data (изоляция данных приложений), и полные копии других приложений пустые.
+     * null: ещё не проверяли; false: su не знает этот ключ (другой su), используется обычный `su -c`.
+     */
+    @Volatile private var suMountMaster: Boolean? = null
+
+    private fun suArgs(cmd: String): List<String> {
+        var mm = suMountMaster
+        if (mm == null) {
+            mm = runCatching {
+                val pr = ProcessBuilder("su", "-mm", "-c", "id").redirectErrorStream(true).start()
+                val txt = pr.inputStream.bufferedReader().readText()
+                pr.waitFor()
+                txt.contains("uid=0")
+            }.getOrDefault(false)
+            suMountMaster = mm
+            AppLog.i("ADBphon", "su -mm: $mm")
+        }
+        return if (mm) listOf("su", "-mm", "-c", cmd) else listOf("su", "-c", cmd)
+    }
+
     private fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
 
     /**
@@ -59,7 +81,7 @@ object Adb {
      * Возвращает объединённый вывод; по тайм-ауту процесс убивается.
      */
     private fun rootRun(cmd: String, input: InputStream?, timeoutMs: Long): String {
-        val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
+        val p = ProcessBuilder(suArgs(cmd)).redirectErrorStream(true).start()
         val out = java.io.ByteArrayOutputStream()
         val reader = Thread { runCatching { p.inputStream.copyTo(out) } }
         reader.start()
@@ -197,7 +219,7 @@ object Adb {
     /** Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает). */
     suspend fun pull(path: String, dest: java.io.File) = withContext(Dispatchers.IO) {
         if (rootOn) {
-            val p = ProcessBuilder("su", "-c", "cat " + q(path)).start()
+            val p = ProcessBuilder(suArgs("cat " + q(path))).start()
             runCatching { p.outputStream.close() }
             Thread { runCatching { p.errorStream.copyTo(java.io.ByteArrayOutputStream()) } }.start()
             p.inputStream.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }

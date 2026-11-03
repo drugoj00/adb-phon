@@ -14,6 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -23,6 +24,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,28 +63,21 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -301,10 +296,8 @@ fun RemoteScreen(vm: MainViewModel) {
         when (mode) {
             0 -> {
                 RemoteKeys(vm)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(text, { text = it }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.remote_text)) })
-                    Button({ vm.typeText(text); text = "" }, enabled = text.isNotBlank()) { Text(stringResource(R.string.btn_send)) }
-                }
+                OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.remote_text)) })
+                Button({ vm.typeText(text); text = "" }, Modifier.fillMaxWidth(), enabled = text.isNotBlank()) { Text(stringResource(R.string.btn_send)) }
                 TextButton({ vm.restartLauncher() }, enabled = !vm.busy) { Text(stringResource(R.string.launcher_restart), fontSize = 12.sp) }
             }
             1 -> {
@@ -398,8 +391,10 @@ private fun HelperSwitch(vm: MainViewModel) {
 /** Короткий ряд под сенсорной панелью: назад, домой, недавние, меню. */
 @Composable
 private fun QuickKeys(vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextKey(vm, R.string.k_back, 4, 11); TextKey(vm, R.string.k_home, 3, 11); TextKey(vm, R.string.k_recents, 187, 11); TextKey(vm, R.string.k_menu, 82, 11)
+    }
     }
 }
 
@@ -438,6 +433,7 @@ private fun RowScope.OkKey(vm: MainViewModel) {
 @Composable
 private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)? = null) {
     val gap = Arrangement.spacedBy(8.dp)
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = gap) {
         // над джойстиком: питание (1 столбец) и микрофон (2 столбца)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
@@ -460,6 +456,7 @@ private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)?
             IconKey(vm, Icons.Filled.SkipPrevious, 88); IconKey(vm, Icons.Filled.PlayArrow, 85); IconKey(vm, Icons.Filled.SkipNext, 87)
         }
         afterVolume?.invoke()
+    }
     }
 }
 
@@ -592,6 +589,7 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
     var last by remember { mutableStateOf<Offset?>(null) }
     var flash by remember { mutableStateOf<String?>(null) }
     var flashN by remember { mutableStateOf(0) }
+    val padCtx = LocalContext.current
     fun showFlash(t: String) { flash = t; flashN++ }
     LaunchedEffect(flashN) { if (flash != null) { kotlinx.coroutines.delay(380); flash = null } }
     // окно для пальца всегда квадратное, с контуром; положение пальца переводится в координаты экрана пропорционально
@@ -603,18 +601,18 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
             .pointerInput(vm.screenW, vm.screenH, mouse, arrows) {
                 if (!mouse && arrows) {
                     detectTapGestures(
-                        onTap = { showFlash("OK"); vm.key(23) },
-                        onLongPress = { showFlash("OK ⏺"); vm.keyLong(23) },
+                        onTap = { Feedback.tick(padCtx); showFlash("OK"); vm.key(23) },
+                        onLongPress = { Feedback.tick(padCtx); showFlash("OK ⏺"); vm.keyLong(23) },
                     )
                 } else if (mouse) {
                     detectTapGestures(
-                        onTap = { if (vm.helperOn) vm.hClick() else vm.tap((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
-                        onLongPress = { if (vm.helperOn) vm.hLongClick() else vm.longPress((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
+                        onTap = { Feedback.tick(padCtx); if (vm.helperOn) vm.hClick() else vm.tap((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
+                        onLongPress = { Feedback.tick(padCtx); if (vm.helperOn) vm.hLongClick() else vm.longPress((cursor.value.x * vm.screenW).toInt(), (cursor.value.y * vm.screenH).toInt()) },
                     )
                 } else {
                     detectTapGestures(
-                        onTap = { o -> last = o; vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
-                        onLongPress = { o -> last = o; vm.longPress((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                        onTap = { o -> Feedback.tick(padCtx); last = o; vm.tap((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
+                        onLongPress = { o -> Feedback.tick(padCtx); last = o; vm.longPress((o.x / w * vm.screenW).toInt(), (o.y / h * vm.screenH).toInt()) },
                     )
                 }
             }
@@ -708,17 +706,32 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
 fun MoreScreen(vm: MainViewModel) {
     var sub by remember { mutableStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(R.string.sub_console, R.string.sub_device, R.string.sub_ssh, R.string.sub_bt, R.string.sub_about).forEachIndexed { i, s ->
-                FilterChip(sub == i, { sub = i }, { Text(stringResource(s), maxLines = 1) })
+        // верхние кнопки в два ряда, каждый ряд на всю ширину экрана
+        val subs = listOf(R.string.sub_console, R.string.sub_device, R.string.sub_bt, R.string.sub_ssh)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            subs.withIndex().toList().chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { (i, s) ->
+                        val on = sub == i
+                        Box(
+                            Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(10.dp))
+                                .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+                                .clickable { sub = i },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(stringResource(s), fontSize = 13.sp, maxLines = 1, textAlign = TextAlign.Center,
+                                color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
+                }
             }
         }
         when (sub) {
             0 -> NeedConnection(vm) { ConsoleScreen(vm) }
             1 -> NeedConnection(vm) { DeviceScreen(vm) }
-            2 -> SshScreen()
-            3 -> BtScreen()
-            else -> AboutScreen(vm)
+            2 -> BtScreen()
+            else -> SshScreen()
         }
     }
 }
@@ -774,22 +787,63 @@ fun DeviceExtras(vm: MainViewModel) {
     }
 }
 
+class EqBtn(val label: String, val enabled: Boolean = true, val onClick: () -> Unit)
+class EqChoice(val label: String, val selected: Boolean, val onClick: () -> Unit)
+
+/** Кнопки ровными рядами по perRow штук на всю ширину; длинные подписи переносятся на вторую строку. */
+@Composable
+fun EqButtons(items: List<EqBtn>, perRow: Int = items.size) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.chunked(perRow).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { b ->
+                    OutlinedButton(
+                        b.onClick, Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = 40.dp), enabled = b.enabled,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                    ) { Text(b.label, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, textAlign = TextAlign.Center) }
+                }
+            }
+        }
+    }
+}
+
+/** Варианты выбора (тема, язык) такими же рядами; выбранный залит цветом. */
+@Composable
+fun EqChoices(items: List<EqChoice>, perRow: Int = items.size) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.chunked(perRow).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { c ->
+                    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = 40.dp).clip(shape)
+                            .background(if (c.selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .border(1.dp, if (c.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, shape)
+                            .clickable { c.onClick() }.padding(horizontal = 6.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(c.label, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 2, textAlign = TextAlign.Center,
+                            color = if (c.selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.set_theme), fontWeight = FontWeight.Medium)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).forEach { (code, label) ->
-                FilterChip(vm.theme == code, { vm.changeTheme(code) }, { Text(stringResource(label), maxLines = 1) })
-            }
-        }
+        EqChoices(listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).map { (code, label) ->
+            EqChoice(stringResource(label), vm.theme == code) { vm.changeTheme(code) }
+        })
         Text(stringResource(R.string.set_lang), fontWeight = FontWeight.Medium)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(vm.lang == "auto", { vm.changeLang("auto") }, { Text(stringResource(R.string.lang_auto), maxLines = 1) })
-            listOf("ru" to "Русский", "uk" to "Українська", "en" to "English").forEach { (code, name) ->
-                FilterChip(vm.lang == code, { vm.changeLang(code) }, { Text(name, maxLines = 1) })
-            }
-        }
+        EqChoices(
+            listOf(EqChoice(stringResource(R.string.lang_auto), vm.lang == "auto") { vm.changeLang("auto") }) +
+                listOf("ru" to "Русский", "uk" to "Українська", "en" to "English").map { (code, name) -> EqChoice(name, vm.lang == code) { vm.changeLang(code) } },
+            perRow = 2,
+        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Switch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) })
             Column(Modifier.weight(1f)) {
@@ -813,6 +867,20 @@ fun SettingsScreen(vm: MainViewModel) {
         }
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Switch(Feedback.vibro, { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) })
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.fb_vibro), fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.fb_vibro_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Switch(Feedback.beep, { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) })
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.fb_beep), fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.fb_beep_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+            }
+        }
         BackupSection(vm)
         CopiesSection()
         Text(stringResource(R.string.set_version, vm.appVersion), fontWeight = FontWeight.Medium)
@@ -820,13 +888,18 @@ fun SettingsScreen(vm: MainViewModel) {
         var clearVer by remember { mutableStateOf<Pair<Int, Long>?>(null) }
         val noneMsg = stringResource(R.string.ver_none)
         val clearedFmt = stringResource(R.string.ver_cleared)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton({ vm.openVersions() }) { Text(stringResource(R.string.ver_btn), fontSize = 12.sp, maxLines = 1) }
-            OutlinedButton({
+        EqButtons(listOf(
+            EqBtn(stringResource(R.string.ver_btn)) { vm.openVersions() },
+            EqBtn(stringResource(R.string.ver_clear_btn)) {
                 val files = VersionKeeper.oldFiles(ctx)
                 if (files.isEmpty()) Toast.makeText(ctx, noneMsg, Toast.LENGTH_SHORT).show()
                 else clearVer = files.size to files.sumOf { it.length() }
-            }) { Text(stringResource(R.string.ver_clear_btn), fontSize = 12.sp, maxLines = 1) }
+            },
+        ))
+        EqButtons(listOf(EqBtn(stringResource(R.string.upd_check)) { vm.checkUpdate(true) }))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(vm.autoUpdate, { vm.changeAutoUpdate(it) })
+            Text(stringResource(R.string.upd_auto), fontSize = 14.sp)
         }
         clearVer?.let { (n, bytes) ->
             AlertDialog(
@@ -837,17 +910,19 @@ fun SettingsScreen(vm: MainViewModel) {
                 dismissButton = { TextButton({ clearVer = null }) { Text(stringResource(R.string.btn_cancel)) } },
             )
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton({ vm.showLog() }) { Text(stringResource(R.string.log_show), fontSize = 12.sp, maxLines = 1) }
-            OutlinedButton({
+        EqButtons(listOf(
+            EqBtn(stringResource(R.string.log_show)) { vm.showLog() },
+            EqBtn(stringResource(R.string.log_copy)) {
                 val text = (AppLog.lastCrash().takeIf { it.isNotBlank() }?.let { "== СБОЙ ==\n$it\n\n" }.orEmpty()) + AppLog.tail(300)
                 val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("ADB-phon log", text))
                 Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
-            }) { Text(stringResource(R.string.log_copy), fontSize = 12.sp, maxLines = 1) }
-            OutlinedButton({ vm.saveLog() }, enabled = vm.connected) { Text(stringResource(R.string.log_save), fontSize = 12.sp, maxLines = 1) }
-            OutlinedButton({ AppLog.clear(); vm.hideLog() }) { Text(stringResource(R.string.log_clear), fontSize = 12.sp, maxLines = 1) }
-        }
+            },
+            EqBtn(stringResource(R.string.log_save), vm.connected) { vm.saveLog() },
+            EqBtn(stringResource(R.string.log_clear)) { AppLog.clear(); vm.hideLog() },
+        ), perRow = 2)
+        androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp))
+        AboutScreen(vm, embedded = true)
     }
     VersionsDialog(vm)
     RestoreDialog(vm)
@@ -879,11 +954,11 @@ fun BackupSection(vm: MainViewModel) {
         if (folder == null) stringResource(R.string.bk_no_folder) else stringResource(R.string.bk_folder, SettingsBackup.folderLabel(folder)),
         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f),
     )
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedButton({ picker.launch(folder) }) { Text(stringResource(R.string.bk_pick), fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ vm.makeBackup() }, enabled = folder != null) { Text(stringResource(R.string.bk_make), fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ vm.openRestore() }, enabled = folder != null) { Text(stringResource(R.string.bk_restore), fontSize = 12.sp, maxLines = 1) }
-    }
+    EqButtons(listOf(EqBtn(stringResource(R.string.bk_pick)) { picker.launch(folder) }))
+    EqButtons(listOf(
+        EqBtn(stringResource(R.string.bk_make), folder != null) { vm.makeBackup() },
+        EqBtn(stringResource(R.string.bk_restore), folder != null) { vm.openRestore() },
+    ))
 }
 
 @Composable
@@ -919,7 +994,7 @@ fun CopiesSection() {
                 Text(stringResource(R.string.backups_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
         }
-        OutlinedButton({ open = true }) { Text(stringResource(R.string.backups_open), fontSize = 12.sp, maxLines = 1) }
+        EqButtons(listOf(EqBtn(stringResource(R.string.backups_open)) { open = true }))
     }
     if (open) BackupsDialog { open = false }
 }

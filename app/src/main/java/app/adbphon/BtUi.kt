@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -21,18 +22,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -108,6 +111,7 @@ private fun BtPairing(ctx: Context) {
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.BtControls(host: String) {
     var text by remember { mutableStateOf("") }
+    val padCtx = androidx.compose.ui.platform.LocalContext.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.bt_connected, host), Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
         TextButton({ BtHid.disconnect() }) { Text(stringResource(R.string.ssh_disconnect), fontSize = 12.sp) }
@@ -115,15 +119,16 @@ private fun androidx.compose.foundation.layout.ColumnScope.BtControls(host: Stri
     // тачпад + полоса прокрутки справа
     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
-            Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+            Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                 .pointerInput(Unit) {
-                    detectTapGestures(onTap = { BtHid.click(1) }, onDoubleTap = { BtHid.click(1, 2) }, onLongPress = { BtHid.click(2) })
+                    detectTapGestures(onTap = { Feedback.tick(padCtx); BtHid.click(1) }, onDoubleTap = { Feedback.tick(padCtx); BtHid.click(1, 2) }, onLongPress = { Feedback.tick(padCtx); BtHid.click(2) })
                 }
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag -> change.consume(); BtHid.move(drag.x * SENS / 2f, drag.y * SENS / 2f) }
                 },
             contentAlignment = Alignment.Center,
-        ) { Text(stringResource(R.string.bt_pad_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        ) { Text(stringResource(R.string.bt_pad_hint), Modifier.fillMaxWidth().padding(horizontal = 12.dp), fontSize = 11.sp, lineHeight = 15.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.primary) }
         var acc by remember { mutableStateOf(0f) }
         Box(
             Modifier.width(44.dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
@@ -137,24 +142,39 @@ private fun androidx.compose.foundation.layout.ColumnScope.BtControls(host: Stri
                     }
                 },
             contentAlignment = Alignment.Center,
-        ) { Text("⇅", fontSize = 18.sp) }
+        ) { Text("⇅", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSecondaryContainer) }
     }
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
+    val pad = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+    val primary = MaterialTheme.colorScheme.primary
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedButton({ BtHid.click(1) }, Modifier.weight(1f)) { Text(stringResource(R.string.bt_left), fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ BtHid.click(4) }, Modifier.weight(1f)) { Text(stringResource(R.string.bt_middle), fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ BtHid.click(2) }, Modifier.weight(1f)) { Text(stringResource(R.string.bt_right), fontSize = 12.sp, maxLines = 1) }
+        Button({ BtHid.click(1) }, Modifier.weight(1f), contentPadding = pad) { Text(stringResource(R.string.bt_left), fontSize = 12.sp, maxLines = 1) }
+        Button(
+            { BtHid.click(4) }, Modifier.weight(1f), contentPadding = pad,
+            colors = ButtonDefaults.buttonColors(containerColor = primary.copy(alpha = 0.14f), contentColor = primary),
+            border = BorderStroke(2.dp, primary),
+        ) { Text(stringResource(R.string.bt_middle), fontSize = 12.sp, maxLines = 1) }
+        Button({ BtHid.click(2) }, Modifier.weight(1f), contentPadding = pad) { Text(stringResource(R.string.bt_right), fontSize = 12.sp, maxLines = 1) }
     }
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf("Enter" to 0x28, "Esc" to 0x29, "⌫" to 0x2A, "Tab" to 0x2B, "←" to 0x50, "↑" to 0x52, "↓" to 0x51, "→" to 0x4F, "Del" to 0x4C, "Home" to 0x4A, "End" to 0x4D, "PgUp" to 0x4B, "PgDn" to 0x4E).forEach { (l, c) ->
-            OutlinedButton({ BtHid.key(0, c) }) { Text(l, fontSize = 12.sp, maxLines = 1) }
+    // клавиши: ровными рядами по 5, всё помещается на экране
+    // ряд стрелок: вверх и вниз как у остальных клавиш, влево и вправо шире
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("←" to 0x50, "↓" to 0x51, "↑" to 0x52, "→" to 0x4F).forEach { (l, c) ->
+            val w = if (l == "←" || l == "→") 1.5f else 1f
+            OutlinedButton({ BtHid.key(0, c) }, Modifier.weight(w).height(36.dp), contentPadding = pad) { Text(l, fontSize = 12.sp, maxLines = 1) }
         }
-        OutlinedButton({ BtHid.key(8, 0) }) { Text("Win", fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ BtHid.key(1, 0x06) }) { Text("Ctrl+C", fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ BtHid.key(1, 0x19) }) { Text("Ctrl+V", fontSize = 12.sp, maxLines = 1) }
-        OutlinedButton({ BtHid.key(4, 0x3D) }) { Text("Alt+F4", fontSize = 12.sp, maxLines = 1) }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(text, { text = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text(stringResource(R.string.bt_text_hint)) })
-        Button({ BtHid.typeText(text); text = "" }, enabled = text.isNotEmpty()) { Text(stringResource(R.string.btn_send)) }
+    val keys = listOf(
+        "Enter" to { BtHid.key(0, 0x28) }, "Esc" to { BtHid.key(0, 0x29) }, "⌫" to { BtHid.key(0, 0x2A) }, "Tab" to { BtHid.key(0, 0x2B) }, "Del" to { BtHid.key(0, 0x4C) },
+        "Home" to { BtHid.key(0, 0x4A) }, "End" to { BtHid.key(0, 0x4D) }, "Win" to { BtHid.key(8, 0) }, "PgUp" to { BtHid.key(0, 0x4B) }, "PgDn" to { BtHid.key(0, 0x4E) },
+        "Ctrl+C" to { BtHid.key(1, 0x06) }, "Ctrl+V" to { BtHid.key(1, 0x19) }, "Alt+F4" to { BtHid.key(4, 0x3D) },
+    )
+    keys.chunked(5).forEach { row ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            row.forEach { (l, act) -> OutlinedButton({ act() }, Modifier.weight(1f).height(36.dp), contentPadding = pad) { Text(l, fontSize = 12.sp, maxLines = 1) } }
+        }
     }
+    }
+    OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(stringResource(R.string.bt_text_hint), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) })
+    Button({ BtHid.typeText(text); text = "" }, Modifier.fillMaxWidth(), enabled = text.isNotEmpty()) { Text(stringResource(R.string.btn_send)) }
 }

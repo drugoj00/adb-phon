@@ -277,6 +277,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val favs = mutableStateListOf<Fav>()
 
+    var autoUpdate by mutableStateOf(false)
+
     init {
         loadNames()
         loadFavs()
@@ -287,6 +289,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
         ramSound = prefs.getBoolean("ram_sound", true)
+        autoUpdate = prefs.getBoolean("auto_update", false)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(8000)
+            if (autoUpdate && System.currentTimeMillis() - prefs.getLong("upd_last", 0L) > 24 * 3600_000L) checkUpdate(false)
+        }
     }
 
     private fun loadFavs() {
@@ -547,12 +554,104 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         selected = emptySet()
     }
 
+    /** Полная копия выбранных приложений вместе с данными (с root или по ADB), см. FullBackup. */
+    fun fullBackup() {
+        val targets = apps.filter { it.pkg in selected && it.installed }
+        if (targets.isEmpty()) return
+        val lc = Lang.wrap(ctx, lang)
+        launchBusy {
+            val lines = ArrayList<String>()
+            for ((i, a) in targets.withIndex()) {
+                val head = if (targets.size > 1) "(${i + 1}/${targets.size}) " else ""
+                lines += runCatching { FullBackup.backup(lc, a) { message = head + it } }
+                    .getOrElse { AppLog.e("ADBphon", "full backup", it); t(R.string.fbk_failed) + ": " + a.label + " " + (it.message ?: "") }
+            }
+            message = lines.joinToString("\n")
+        }
+    }
+
+    // ---------- защита от потери главного экрана (запасной лончер: Меню приложений из assets)
+    data class LauncherGuard(val names: List<String>, val menuInstalled: Boolean)
+    var launcherGuard by mutableStateOf<LauncherGuard?>(null)
+    fun dismissGuard() { launcherGuard = null }
+
+    fun installMenuApp() {
+        launcherGuard = null
+        val lc = Lang.wrap(ctx, lang)
+        launchBusy {
+            message = t(R.string.lg_installing)
+            message = runCatching { Launchers.installMenu(lc) }.getOrElse { AppLog.e("ADBphon", "install menu", it); t(R.string.lg_failed, it.message ?: "error") }
+            loadApps()
+        }
+    }
+
+    fun openMenuApp() {
+        launcherGuard = null
+        if (!Launchers.openMenu(ctx)) message = t(R.string.lg_open_failed)
+    }
+
+    // ---------- обновление самой программы (GitHub, drugoj00/adb-phon)
+    var updateRelease by mutableStateOf<Updater.Release?>(null)
+
+    fun changeAutoUpdate(on: Boolean) { autoUpdate = on; prefs.edit().putBoolean("auto_update", on).apply() }
+
+    private fun verParts(s: String): List<Int> = Regex("\\d+").findAll(s).map { it.value.toInt() }.toList()
+
+    private fun cmpVer(a: String, b: String): Int {
+        val x = verParts(a)
+        val y = verParts(b)
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val d = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 })
+            if (d != 0) return d
+        }
+        return 0
+    }
+
+    fun checkUpdate(manual: Boolean) {
+        viewModelScope.launch {
+            if (manual) message = t(R.string.upd_checking)
+            val res = runCatching { withContext(Dispatchers.IO) { Updater.fetch() } }
+            prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
+            res.onSuccess { list ->
+                val best = list.maxWithOrNull { a, b -> cmpVer(a.tag, b.tag) }
+                if (best != null && cmpVer(best.tag, appVersion) > 0) updateRelease = best
+                else if (manual) message = t(R.string.upd_none)
+            }.onFailure { AppLog.e("ADBphon", "update check", it); if (manual) message = t(R.string.upd_failed) }
+        }
+    }
+
+    /** Обновление: сначала через ADB этого телефона, иначе системным установщиком. */
+    fun installUpdate() {
+        val r = updateRelease ?: return
+        updateRelease = null
+        if (connected && remoteHost == null) { installVersion(Ver(r.tag, null, r)); return }
+        launchBusy {
+            message = t(R.string.ver_downloading, r.tag)
+            val f = withContext(Dispatchers.IO) { runCatching { Updater.download(ctx, r) } }
+                .getOrElse { AppLog.e("ADBphon", "download", it); message = t(R.string.ver_dl_failed, it.message ?: "error"); return@launchBusy }
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+            ctx.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+
     /** Действие над выбранными приложениями; возвращает пропущенные защищённые. */
     fun run(act: Act) {
         val targets = apps.filter { it.pkg in selected }
         val skipped = targets.filter { it.pkg in PROTECTED && act != Act.SAVE && act != Act.STOP }.map { it.pkg }
         val work = targets.filter { it.pkg !in skipped }
         launchBusy {
+            // нельзя отключить или удалить ВСЕ главные экраны: сначала запасной (Меню приложений из assets)
+            if (act == Act.DISABLE || act == Act.UNINSTALL) {
+                val homes = runCatching { Launchers.homePackages(ctx, remoteHost != null) }.getOrDefault(emptyList())
+                val hit = work.filter { it.pkg in homes }
+                if (hit.isNotEmpty() && homes.all { h -> work.any { it.pkg == h } }) {
+                    launcherGuard = LauncherGuard(hit.map { it.label }, runCatching { Launchers.menuInstalled(ctx, remoteHost != null) }.getOrDefault(false))
+                    return@launchBusy
+                }
+            }
             var ok = 0
             var bad = 0
             // перед удалением обычных приложений сохраняем их APK (можно вернуть или поставить старую версию)
@@ -567,7 +666,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (good) ok++ else bad++
             }
             message = buildString {
-                append(if (act == Act.SAVE) t(R.string.saved_to) + " — " else "")
+                append(if (act == Act.SAVE) t(R.string.saved_to) + ": " else "")
                 append(t(R.string.result_ok_fail, ok, bad))
                 if (skipped.isNotEmpty()) append("\n" + t(R.string.protected_skipped, skipped.joinToString(", ")))
             }

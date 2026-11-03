@@ -24,6 +24,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,26 +60,20 @@ import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -116,6 +113,7 @@ const val CARD_URL = "https://secure.wayforpay.com/button/bba92579a4647"
 const val USDT_ADDR = "TXk32CLkwJryTqhmkw6urcM5CacJgPsSpJ"
 const val GITHUB_URL = "https://github.com/drugoj00/adb-phon"
 const val ALL_PROGRAMS_URL = "https://drugoj00.github.io/"
+const val TELEGRAM_URL = "https://t.me/PhoneInWindowSound"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,6 +160,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             WindowCompat.getInsetsController(w, w.decorView).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
         }
     }
+    Feedback.host = (baseCtx as? ComponentActivity)?.window?.decorView
     CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang) {
     MaterialTheme(colorScheme = if (dark) Dark else Light) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -197,6 +196,15 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     else -> act?.moveTaskToBack(true)
                 }
             }
+            vm.updateRelease?.let { r ->
+                LAlertDialog(
+                    onDismissRequest = { vm.updateRelease = null },
+                    title = { Text(stringResource(R.string.upd_title)) },
+                    text = { Text(stringResource(R.string.upd_text, r.tag, vm.appVersion)) },
+                    confirmButton = { TextButton({ vm.installUpdate() }) { Text(stringResource(R.string.upd_yes)) } },
+                    dismissButton = { TextButton({ vm.updateRelease = null }) { Text(stringResource(R.string.upd_later)) } },
+                )
+            }
             Scaffold(
                 modifier = Modifier.imePadding(),
                 containerColor = MaterialTheme.colorScheme.background,
@@ -209,17 +217,23 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                             R.string.tab_files to Icons.Filled.Folder,
                             R.string.tab_remote to Icons.Filled.SettingsRemote,
                             R.string.tab_more to Icons.Filled.MoreHoriz,
+                            R.string.tab_settings to Icons.Filled.Settings,
                         )
                         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(54.dp)) {
                             items.forEachIndexed { i, (label, icon) ->
-                                val col = if (tab == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)
+                                val selected = if (i == items.lastIndex) showSettings else (!showSettings && tab == i)
+                                val col = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)
                                 Column(
                                     Modifier.weight(1f).fillMaxHeight()
-                                        .clickable { tab = i; showSettings = false },
+                                        .clickable { if (i == items.lastIndex) showSettings = true else { tab = i; showSettings = false } },
                                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                                 ) {
-                                    Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
-                                    Text(stringResource(label), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col)
+                                    if (i == items.lastIndex) {
+                                        Icon(icon, stringResource(label), tint = col, modifier = Modifier.size(28.dp))
+                                    } else {
+                                        Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
+                                        Text(stringResource(label), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col)
+                                    }
                                 }
                             }
                         }
@@ -227,12 +241,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 },
             ) { pad ->
                 Column(Modifier.padding(pad).statusBarsPadding().fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (showSettings) stringResource(R.string.sub_settings) else "ADB-phon", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        IconButton({ showSettings = !showSettings }) {
-                            Icon(Icons.Filled.Settings, stringResource(R.string.sub_settings), tint = if (showSettings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
-                        }
-                    }
+                    Spacer(Modifier.height(4.dp))
                     if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     if (showSettings) SettingsScreen(vm) else when (tab) {
                         0 -> ConnectScreen(vm)
@@ -476,6 +485,31 @@ fun AppIcon(pkg: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
     }
 }
 
+@Composable
+private fun EqChipRow(items: List<Pair<String, () -> Unit>>) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.forEach { (label, click) ->
+            OutlinedButton(
+                onClick = click, modifier = Modifier.weight(1f).height(36.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+            ) {
+                Text(label, fontSize = 12.sp, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.EqTextButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick, Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = 40.dp),
+        shape = androidx.compose.ui.graphics.RectangleShape,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(label, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
 private fun actLabel(a: Act): Int = when (a) {
     Act.DISABLE -> R.string.act_disable
     Act.ENABLE -> R.string.act_enable
@@ -486,12 +520,20 @@ private fun actLabel(a: Act): Int = when (a) {
     Act.SAVE -> R.string.act_save
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AppsScreen(vm: MainViewModel) {
     val visible = vm.visibleApps()
     var confirm by remember { mutableStateOf<Act?>(null) }
     var installHub by remember { mutableStateOf(false) }
     var versionsFor by remember { mutableStateOf<AppEntry?>(null) }
+    var showBackups by remember { mutableStateOf(false) }
+    // панель действий открывается круглой кнопкой с галочкой, а не сама при выборе приложения
+    var showActions by remember { mutableStateOf(false) }
+    // долгий тап по приложению: окно с полными сведениями, которые не поместились в строке
+    var infoFor by remember { mutableStateOf<AppEntry?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(vm.selected.isEmpty()) { if (vm.selected.isEmpty()) showActions = false }
     // компактный вид (просьба владелицы 26.10.2026): без лишней высоты у флажков и чипов, поиск вдвое ниже, строка приложения в две строки
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
     Column(Modifier.fillMaxSize()) {
@@ -514,44 +556,61 @@ fun AppsScreen(vm: MainViewModel) {
         )
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(
-                Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.BLOAT to R.string.f_bloat, Filter.DISABLED to R.string.f_disabled,
-                Filter.REMOVED to R.string.f_removed, Filter.ALL to R.string.f_all,
+                Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.ALL to R.string.f_all, Filter.DISABLED to R.string.f_disabled,
+                Filter.REMOVED to R.string.f_removed, Filter.BLOAT to R.string.f_bloat,
             ).forEach { (f, s) ->
                 FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) })
             }
         }
         if (vm.filter == Filter.BLOAT) {
-            Text(stringResource(R.string.bloat_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+            Text(stringResource(R.string.bloat_hint), fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         }
         Text(stringResource(R.string.apps_count, visible.size, vm.selected.size), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton({ vm.selectAllVisible() }) { Text(stringResource(R.string.select_all), fontSize = 12.sp, maxLines = 1) }
-            TextButton({ vm.clearSelection() }) { Text(stringResource(R.string.select_none), fontSize = 12.sp, maxLines = 1) }
-            if (vm.filter == Filter.BLOAT) {
-                TextButton({ vm.selectSafeBloat() }) { Text(stringResource(R.string.bloat_pick_safe), fontSize = 12.sp, maxLines = 1) }
-            }
-            TextButton({ installHub = true }) {
-                Text(stringResource(R.string.act_install), fontSize = 12.sp, maxLines = 1)
-            }
-            if (vm.remoteHost == null) {
-                val ramCtx = LocalContext.current
-                val ramScope = rememberCoroutineScope()
-                TextButton({ ramScope.launch { vm.message = Ram.clean(ramCtx) } }) {
-                    Text(stringResource(R.string.act_ram_clean), fontSize = 12.sp, maxLines = 1)
+        val ramCtx = LocalContext.current
+        val ramScope = rememberCoroutineScope()
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                EqTextButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
+                val canAct = vm.selected.isNotEmpty()
+                val prim = MaterialTheme.colorScheme.primary
+                Box(
+                    Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (canAct) prim else prim.copy(alpha = .3f))
+                        .border(2.dp, if (canAct) prim else prim.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)
+                        .clickable(enabled = canAct) { showActions = !showActions },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Check, stringResource(R.string.act_open_panel),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(26.dp),
+                    )
                 }
+                EqTextButton(stringResource(R.string.select_none)) { vm.clearSelection() }
+                if (vm.filter == Filter.BLOAT) EqTextButton(stringResource(R.string.bloat_pick_safe)) { vm.selectSafeBloat() }
+            }
+            Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                EqTextButton(stringResource(R.string.act_install)) { installHub = true }
+                EqTextButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
+                if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
             }
         }
         LazyColumn(Modifier.weight(1f), state = rememberLazyListState()) {
             items(visible, key = { it.pkg }) { a ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { vm.toggle(a.pkg) }.padding(horizontal = 12.dp, vertical = 2.dp),
+                    Modifier.fillMaxWidth()
+                        .combinedClickable(
+                            onClick = { vm.toggle(a.pkg) },
+                            onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); infoFor = a },
+                        )
+                        .padding(horizontal = 12.dp, vertical = 0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg) }, Modifier.size(32.dp))
                     AppIcon(a.pkg, 32.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(a.label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        Text(a.label, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                         val tags = buildList {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
@@ -570,7 +629,7 @@ fun AppsScreen(vm: MainViewModel) {
                                 withStyle(androidx.compose.ui.text.SpanStyle(color = dim)) { append(a.pkg) }
                                 if (tags.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = acc)) { append(" · " + tags.joinToString(" · ")) }
                             },
-                            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -580,22 +639,40 @@ fun AppsScreen(vm: MainViewModel) {
         SpecialDialog(vm)
         if (installHub) InstallHub { installHub = false; vm.loadApps() }
         versionsFor?.let { a -> VersionsDialog(a.pkg, a.label) { versionsFor = null; vm.loadApps() } }
-        if (vm.selected.isNotEmpty()) {
+        vm.launcherGuard?.let { g ->
+            LAlertDialog(
+                onDismissRequest = { vm.dismissGuard() },
+                title = { Text(stringResource(R.string.lg_title)) },
+                text = { Text(stringResource(if (g.menuInstalled) R.string.lg_text_installed else R.string.lg_text, g.names.joinToString(", "))) },
+                confirmButton = {
+                    TextButton({ if (g.menuInstalled) vm.openMenuApp() else vm.installMenuApp() }) {
+                        Text(stringResource(if (g.menuInstalled) R.string.lg_open else R.string.lg_install))
+                    }
+                },
+                dismissButton = { TextButton({ vm.dismissGuard() }) { Text(stringResource(R.string.btn_cancel)) } },
+            )
+        }
+        if (showBackups) FullBackupsDialog { showBackups = false; vm.loadApps() }
+        infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }
+        if (showActions && vm.selected.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val lPerms = stringResource(R.string.act_perms)
+                val lSpecial = stringResource(R.string.act_special)
+                val lVersions = stringResource(R.string.act_versions)
+                val lFull = stringResource(R.string.act_fullbackup)
                 if (vm.selected.size == 1) {
-                    Row(Modifier.horizontalScroll(rememberScrollState())) {
-                        AssistChip(onClick = { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.loadPerms(it) } }, label = { Text(stringResource(R.string.act_perms), fontSize = 12.sp, maxLines = 1) })
-                        AssistChip(onClick = { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.openSpecial(it) } }, label = { Text(stringResource(R.string.act_special), fontSize = 12.sp, maxLines = 1) })
-                        AssistChip(onClick = { versionsFor = vm.apps.firstOrNull { it.pkg in vm.selected } }, label = { Text(stringResource(R.string.act_versions), fontSize = 12.sp, maxLines = 1) })
-                    }
+                    EqChipRow(listOf(
+                        lPerms to { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.loadPerms(it) }; Unit },
+                        lSpecial to { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.openSpecial(it) }; Unit },
+                        lVersions to { versionsFor = vm.apps.firstOrNull { it.pkg in vm.selected } },
+                    ))
                 }
-                listOf(Act.DISABLE, Act.ENABLE, Act.UNINSTALL, Act.RESTORE, Act.STOP, Act.CLEAR, Act.SAVE).chunked(4).forEach { row ->
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { act ->
-                            AssistChip(onClick = { confirm = act }, label = { Text(stringResource(actLabel(act)), fontSize = 12.sp, maxLines = 1) })
-                        }
-                    }
-                }
+                val actLabels = Act.values().associateWith { stringResource(actLabel(it)) }
+                fun act(x: Act) = actLabels.getValue(x) to { confirm = x }
+                EqChipRow(listOf(act(Act.DISABLE), act(Act.ENABLE), act(Act.UNINSTALL)))
+                EqChipRow(listOf(act(Act.RESTORE), act(Act.STOP)))
+                EqChipRow(listOf(act(Act.CLEAR), act(Act.SAVE)))
+                EqChipRow(listOf(lFull to { vm.fullBackup() }))
             }
         }
     }
@@ -619,6 +696,47 @@ fun AppsScreen(vm: MainViewModel) {
     }
 }
 
+/** Полные сведения о приложении: имя, пакет, версия, состояние, категория и пути APK. */
+@Composable
+fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    val copied = stringResource(R.string.copied)
+    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
+    val state = buildList {
+        if (a.system) add(stringResource(R.string.tag_system))
+        if (!a.enabled) add(stringResource(R.string.tag_disabled))
+        if (!a.installed) add(stringResource(R.string.tag_removed))
+    }
+    val known = Debloat.known[a.pkg]
+    LAlertDialog(
+        onDismissRequest = onClose,
+        title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppIcon(a.pkg, 40.dp)
+            Text(a.label, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        } },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                @Composable fun row(k: Int, v: String) {
+                    Column { Text(stringResource(k), fontSize = 11.sp, color = dim); Text(v, fontSize = 14.sp) }
+                }
+                row(R.string.info_pkg, a.pkg)
+                if (a.version.isNotEmpty()) row(R.string.info_ver, a.version)
+                row(R.string.info_state, if (state.isEmpty()) stringResource(R.string.info_state_user) else state.joinToString(", "))
+                if (known != null) row(R.string.info_cat, stringResource(Debloat.catLabel(known.cat)) + ", " + stringResource(Debloat.riskLabel(known.risk)))
+                if (a.paths.isNotEmpty()) row(R.string.info_paths, a.paths.joinToString("\n"))
+            }
+        },
+        confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
+        dismissButton = {
+            TextButton({
+                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("package", a.pkg))
+                Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
+            }) { Text(stringResource(R.string.info_copy)) }
+        },
+    )
+}
+
 // ---------------------------------------------------------------- консоль
 
 @Composable
@@ -638,14 +756,14 @@ fun ConsoleScreen(vm: MainViewModel) {
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                cmd, { cmd = it }, Modifier.weight(1f), singleLine = true,
-                placeholder = { Text(stringResource(R.string.console_hint)) },
-            )
-            Button(onClick = { vm.runConsole(cmd); cmd = "" }, enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
+        OutlinedTextField(
+            cmd, { cmd = it }, Modifier.fillMaxWidth(), singleLine = true,
+            placeholder = { Text(stringResource(R.string.console_hint)) },
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
+            OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
         }
-        TextButton(onClick = { vm.clearConsole() }) { Text(stringResource(R.string.btn_clear)) }
     }
 }
 
@@ -718,10 +836,10 @@ fun DeviceScreen(vm: MainViewModel) {
 // ---------------------------------------------------------------- о программе
 
 @Composable
-fun AboutScreen(vm: MainViewModel) {
+fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
     val ctx = LocalContext.current
     val copied = stringResource(R.string.copied)
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(64.dp))
             Column {
@@ -741,5 +859,6 @@ fun AboutScreen(vm: MainViewModel) {
         Text(USDT_ADDR, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL))) }) { Text(stringResource(R.string.about_github)) }
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ALL_PROGRAMS_URL))) }) { Text(stringResource(R.string.about_all)) }
+        TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TELEGRAM_URL))) }) { Text(stringResource(R.string.about_tg)) }
     }
 }

@@ -62,6 +62,7 @@ fun InstallHub(onClose: () -> Unit) {
     val ctx = LocalContext.current
     val t = LocalTh.current
     val scope = rememberCoroutineScope()
+    val vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var stage by remember { mutableStateOf("menu") }
     var files by remember { mutableStateOf<List<ApkFile>?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -78,7 +79,8 @@ fun InstallHub(onClose: () -> Unit) {
         stage == "net" -> NetDialog { stage = "menu" }
         else -> HDialog(onDismissRequest = onClose) {
             Column(
-                Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth(),
+                Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth()
+                    .heightIn(max = 640.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.inst_hub_title), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -93,6 +95,7 @@ fun InstallHub(onClose: () -> Unit) {
                 Chip(stringResource(R.string.fb_open), false, Modifier.fillMaxWidth()) { stage = "browser" }
                 Chip(stringResource(R.string.wifi_open), false, Modifier.fillMaxWidth()) { stage = "wifi" }
                 Chip(stringResource(R.string.net_open), false, Modifier.fillMaxWidth()) { stage = "net" }
+                Chip(stringResource(R.string.inst_menu_app), false, Modifier.fillMaxWidth()) { vm.installMenuApp(); onClose() }
                 Chip(stringResource(R.string.btn_cancel), false) { onClose() }
             }
         }
