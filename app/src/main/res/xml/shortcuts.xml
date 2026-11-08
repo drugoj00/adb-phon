@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="pad_overlay" android:enabled="true" android:icon="@drawable/ic_pad_tile" android:shortcutShortLabel="@string/pad_overlay_short" android:shortcutLongLabel="@string/pad_overlay_label">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="app.adbphon" android:targetClass="app.adbphon.PadOverlayShortcutActivity" />
+    </shortcut>
+</shortcuts>

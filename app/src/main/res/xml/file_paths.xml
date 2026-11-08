@@ -2,4 +2,5 @@
 <paths>
     <external-files-path name="versions_ext" path="versions/" />
     <files-path name="versions_int" path="versions/" />
+    <root-path name="fm_root" path="" />
 </paths>
