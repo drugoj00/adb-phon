@@ -49,6 +49,9 @@ object AppLog {
         }
     }
 
+    /** Запись о важной операции (корзина облака): пишется всегда, файл небольшой (ротация по размеру). */
+    fun note(msg: String) { write("T", msg, true) }
+
     fun i(tag: String, msg: String): Int { write("I", msg, false); return Log.i(tag, msg) }
     fun w(tag: String, msg: String): Int { write("W", msg, false); return Log.w(tag, msg) }
     fun e(tag: String, msg: String, t: Throwable? = null): Int {

@@ -34,7 +34,11 @@ object Adb {
         }
     val isRoot: Boolean get() = rootOn
 
-    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && mgr.isConnected)
+    /** Идёт подключение или отключение: библиотека держит блокировку, и опрос состояния из интерфейса вешал его на десятки секунд (приставка, 08.11.2026). */
+    @Volatile private var busyConn = 0
+    @Volatile private var lastConn = false
+    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected.also { lastConn = it }))
+    private inline fun <T> guarded(block: () -> T): T { busyConn++; try { return block() } finally { busyConn-- } }
 
     /**
      * Проверяет, дал ли Magisk (или другой su) права root этому приложению. При первом запуске появится запрос Magisk:
@@ -45,7 +49,7 @@ object Adb {
         if (rootSuppressed) return@withContext false
         val ok = runCatching { rootRun("id", null, 30_000).contains("uid=0") }
             .onFailure { AppLog.i("ADBphon", "root недоступен: ${it.message}") }.getOrDefault(false)
-        if (ok) { runCatching { mgr.disconnect() }; rootOn = true; currentHost = "" }
+        if (ok) { runCatching { guarded { mgr.disconnect() } }; lastConn = false; rootOn = true; currentHost = "" }
         AppLog.i("ADBphon", "root=$ok")
         ok
     }
@@ -109,9 +113,10 @@ object Adb {
             var last: Throwable? = null
             var done = false
             for (attempt in 1..2) {
-                runCatching { mgr.disconnect() }
+                lastConn = false
+                runCatching { guarded { mgr.disconnect() } }
                 AppLog.i("ADBphon", "connect $host:$port (попытка $attempt)")
-                val r = runCatching { withTimeout(25_000) { runInterruptible { mgr.connect(host, port) } } }
+                val r = runCatching { withTimeout(25_000) { runInterruptible { guarded { mgr.connect(host, port) } } } }.also { lastConn = it.getOrNull() == true }
                 AppLog.i("ADBphon", "connect result=${r.getOrNull()}")
                 if (r.getOrNull() == true) { done = true; break }
                 last = r.exceptionOrNull() ?: IllegalStateException("connect failed")
@@ -129,25 +134,33 @@ object Adb {
     suspend fun connectWireless(context: Context, manualPort: Int?, host: String = "127.0.0.1"): Result<Unit> = withContext(Dispatchers.IO) {
         leaveRoot()   // выбран ADB: команды идут по ADB, а не через root
         runCatching {
-            runCatching { mgr.disconnect() }
+            lastConn = false
+            runCatching { guarded { mgr.disconnect() } }
             var ok = false
             if (host == "127.0.0.1") {
-                ok = runCatching { mgr.autoConnect(context.applicationContext, 7000) }
+                ok = runCatching { guarded { mgr.autoConnect(context.applicationContext, 7000) } }
                     .onFailure { AppLog.e("ADBphon", "autoConnect error", it) }.getOrDefault(false)
             }
-            if (!ok && manualPort != null) ok = mgr.connect(host, manualPort)
+            if (!ok && manualPort != null) ok = guarded { mgr.connect(host, manualPort) }
+            lastConn = ok
             if (!ok) error("connect failed")
             currentHost = if (host == "127.0.0.1") "" else host
         }.onFailure { AppLog.e("ADBphon", "wireless connect error", it) }
     }
 
-    suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; currentHost = ""; runCatching { mgr.disconnect() } }
+    suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; currentHost = ""; lastConn = false; runCatching { guarded { mgr.disconnect() } } }
 
     /** Выполнить команду оболочки и вернуть её вывод. */
-    suspend fun shell(cmd: String, timeoutMs: Long = 25_000): String = withContext(Dispatchers.IO) {
+    private const val END_MARK = "@@ADBPHON_END@@"
+
+    /**
+     * [fast]: в конец команды добавляется метка, и ответ считается полученным, как только метка пришла (не ждём закрытия потока:
+     * библиотека ADB иногда держит его до тайм-аута, и пакетные действия тогда шли по 30 секунд на приложение).
+     */
+    suspend fun shell(cmd: String, timeoutMs: Long = 25_000, fast: Boolean = false): String = withContext(Dispatchers.IO) {
         AppLog.i("ADBphon", "shell> ${cmd.take(300)}")
         val t0 = System.currentTimeMillis()
-        val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else readAll(mgr.openStream("shell:$cmd"), timeoutMs, cmd) }
+        val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else if (fast) readAll(mgr.openStream("shell:$cmd; echo $END_MARK"), timeoutMs, cmd, END_MARK) else readAll(mgr.openStream("shell:$cmd"), timeoutMs, cmd) }
         AppLog.i("ADBphon", "shell< ${System.currentTimeMillis() - t0} мс, ${res.getOrNull()?.length ?: -1} симв: ${(res.getOrNull() ?: res.exceptionOrNull()?.message).orEmpty().take(300).replace("\n", " ⏎ ")}")
         res.getOrThrow()
     }
@@ -156,7 +169,7 @@ object Adb {
      * Читает поток до конца с ограничением по времени. Библиотека иногда бросает «Stream closed» вместо конца потока
      * или не закрывает поток: прочитанное считаем ответом, зависший поток закрываем сами.
      */
-    private fun readAll(s: io.github.muntashirakon.adb.AdbStream, timeoutMs: Long, what: String): String {
+    private fun readAll(s: io.github.muntashirakon.adb.AdbStream, timeoutMs: Long, what: String, mark: String? = null): String {
         val out = java.io.ByteArrayOutputStream()
         var error: Throwable? = null
         val reader = Thread {
@@ -167,6 +180,7 @@ object Adb {
                     val n = input.read(buf)
                     if (n < 0) break
                     synchronized(out) { out.write(buf, 0, n) }
+                    if (mark != null && synchronized(out) { out.toString("UTF-8") }.trimEnd().endsWith(mark)) break
                 }
             } catch (e: Throwable) {
                 error = e
@@ -181,7 +195,7 @@ object Adb {
         } else {
             runCatching { s.close() }
         }
-        val text = synchronized(out) { out.toString("UTF-8") }.trim()
+        val text = synchronized(out) { out.toString("UTF-8") }.let { if (mark != null) it.trimEnd().removeSuffix(mark) else it }.trim()
         val e = error
         if (e != null && text.isEmpty() && e.message?.contains("closed", ignoreCase = true) != true) throw e
         return text
