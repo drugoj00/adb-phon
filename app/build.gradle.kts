@@ -14,8 +14,10 @@ android {
         applicationId = "app.adbphon"
         minSdk = 26
         targetSdk = 34
-        versionCode = 33
-        versionName = "3.0"
+        versionCode = 36
+        versionName = "5.0"
+        // оставляем только языки программы (ru, uk, en): строки библиотек на других языках не нужны
+        resourceConfigurations += listOf("ru", "uk", "en")
     }
 
     // ключ подписи лежит в keystore/ (не публикуется); без него release собирается неподписанным
@@ -31,7 +33,10 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: сжатие кода и ресурсов (правила в proguard-rules.pro); mapping.txt и usage.txt лежат в app/build/outputs/mapping/release
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (ksFile.exists()) signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -42,7 +47,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    packaging { resources.excludes += setOf("META-INF/*") }
+    packaging {
+        resources.excludes += setOf("META-INF/*", "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**", "**/*.kotlin_builtins", "kotlin/**", "DebugProbesKt.bin")
+        jniLibs { useLegacyPackaging = true }
+    }
 }
 
 dependencies {
@@ -58,6 +66,10 @@ dependencies {
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.github.mwiede:jsch:0.2.20")   // SSH: терминал и файлы на компьютерах
+    testImplementation("junit:junit:4.13.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")   // WebDAV
+    implementation("androidx.media3:media3-exoplayer:1.4.1")   // встроенный плеер видео и аудио (только системные кодеки)
+    implementation("androidx.media3:media3-ui:1.4.1")
     implementation("org.tukaani:xz:1.10")
     implementation("com.github.junrar:junrar:7.5.5")
     implementation("eu.agno3.jcifs:jcifs-ng:2.1.10") { exclude(group = "org.bouncycastle") }
