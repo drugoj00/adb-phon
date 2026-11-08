@@ -4,20 +4,32 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- модуль облаков «ADB-phon Облака»: нужен, чтобы видеть его пакет на Android 11 и новее -->
+    <queries><package android:name="app.adbphon.clouds" /></queries>
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
@@ -27,6 +39,8 @@
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -37,7 +51,8 @@
             android:name=".MainActivity"
             android:banner="@drawable/banner"
             android:exported="true"
-            android:screenOrientation="portrait"
+            android:launchMode="singleTop"
+            android:screenOrientation="fullUser"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -45,11 +60,43 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- возврат со страницы «Готово» после входа в облако (ссылка в Chrome: intent://open#Intent;scheme=adbphon;package=app.adbphon;end) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="adbphon" android:host="open" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <service android:name=".AutoPairService" android:exported="true" android:label="@string/app_name" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/autopair_service" />
         </service>
+        <activity
+            android:name=".GamepadActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize"
+            android:launchMode="singleTop" />
+        <activity android:name=".BackupTestActivity" android:exported="true" />
+        <activity android:name=".ArcTestActivity" android:exported="true" />
+        <activity android:name=".NetTestActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity android:name=".TextEditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
+        <activity android:name=".PdfViewerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
+        <activity android:name=".OfficeViewerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
+        <activity android:name=".PhotoViewerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" android:launchMode="singleTop" />
+        <activity android:name=".VideoPlayerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize|smallestScreenSize" android:launchMode="singleTop" />
+        <service android:name=".AudioService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <activity
+            android:name=".GamepadTestActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="app.adbphon.GAMEPAD_TEST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
@@ -57,10 +104,19 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <service android:name=".FmOpService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".CloudLoginService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".PadOverlayTile" android:exported="true" android:label="@string/pad_overlay_label" android:icon="@drawable/ic_pad_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
+        <activity android:name=".PadOverlayShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:taskAffinity="" />
+        <service android:name=".OverlayPadService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".PadKeeperService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <receiver android:name=".PairReceiver" android:exported="false" />
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
     </application>
