@@ -10,8 +10,9 @@ import android.util.Log
 /** После загрузки заново включает закреплённые службы спецвозможностей (Android 14 часто выключает их при перезапуске). */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        apply(context)
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        PadKeeper.start(context)    // фоновое подключение геймпада к последнему хосту
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) apply(context)
     }
 
     companion object {

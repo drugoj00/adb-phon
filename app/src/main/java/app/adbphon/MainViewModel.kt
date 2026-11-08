@@ -585,6 +585,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * «Установить и открыть проверку геймпада» на выбранном устройстве (приставка, магнитола, другой телефон).
+     * Берётся собственный APK программы (с частями, если он разделён), ставится через ADB-соединение с этим устройством
+     * (на Samsung в основного пользователя, без дублей), затем открывается экран проверки. Если на устройстве уже стоит
+     * такая же сборка, установка пропускается.
+     */
+    fun installGamepadTest(f: Found) {
+        viewModelScope.launch {
+            if (f.self) { runCatching { ctx.startActivity(android.content.Intent(ctx, GamepadTestActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }; return@launch }
+            busy = true
+            try {
+                if (!isCurrent(f)) {
+                    message = t(R.string.gpi_connecting, f.host)
+                    connectFound(f)
+                    var w = 0
+                    while (!isCurrent(f) && w < 60) { kotlinx.coroutines.delay(500); w++ }
+                    if (!isCurrent(f)) { message = t(R.string.gpi_no_conn, f.host); return@launch }
+                }
+                message = t(R.string.gpi_checking)
+                val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+                val own = java.io.File(ctx.applicationInfo.sourceDir)
+                val parts = listOf(own) + (ctx.applicationInfo.splitSourceDirs?.map { java.io.File(it) }.orEmpty())
+                val remotePath = Adb.shell("pm path app.adbphon").lines().firstOrNull { it.startsWith("package:") }?.removePrefix("package:")?.trim()
+                val remoteSize = if (remotePath != null && parts.size == 1) Adb.shell("stat -c %s " + remotePath).trim().toLongOrNull() else null
+                val remoteCode = Regex("versionCode=([0-9]+)").find(Adb.shell("dumpsys package app.adbphon | grep -m1 versionCode"))?.groupValues?.get(1)?.toLongOrNull()
+                val same = remoteSize != null && remoteSize == own.length() && remoteCode == info.longVersionCode
+                if (same) message = t(R.string.gpi_same)
+                else {
+                    message = t(R.string.gpi_installing, parts.sumOf { it.length() } / 1024 / 1024)
+                    var r = Adb.installFiles(parts, "-r")
+                    if (r.contains("DOWNGRADE", true)) r = Adb.installFiles(parts, "-r -d")
+                    if (!r.contains("Success", true)) { message = t(R.string.gpi_failed, r.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(120)); return@launch }
+                }
+                val out = Adb.shell("am start -n app.adbphon/.GamepadTestActivity")
+                message = if (out.contains("Error", true)) t(R.string.gpi_failed, out.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(120)) else t(R.string.gpi_opened, f.host)
+            } catch (e: Throwable) {
+                AppLog.e("ADBphon", "install gamepad test", e)
+                message = t(R.string.gpi_failed, e.message ?: "error")
+            } finally { busy = false }
+        }
+    }
+
     fun openMenuApp() {
         launcherGuard = null
         if (!Launchers.openMenu(ctx)) message = t(R.string.lg_open_failed)
@@ -939,7 +981,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         backupItems = null
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { SettingsBackup.restore(ctx, item) } }
-                .onSuccess { reloadSettings(); message = t(R.string.bk_restored, item.name) }
+                .onSuccess { FmDel.init(ctx); reloadSettings(); message = t(R.string.bk_restored, item.name) }
                 .onFailure { AppLog.e("ADBphon", "restore", it); message = t(R.string.bk_failed, it.message ?: "error") }
         }
     }

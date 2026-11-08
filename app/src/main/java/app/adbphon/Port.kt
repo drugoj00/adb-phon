@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +98,14 @@ object Cfg {
     private fun sp(ctx: android.content.Context) = ctx.getSharedPreferences("adbphon", android.content.Context.MODE_PRIVATE)
     fun backupOnDelete(ctx: android.content.Context): Boolean = sp(ctx).getBoolean("backup_on_delete", true)
     fun setBackupOnDelete(ctx: android.content.Context, v: Boolean) { sp(ctx).edit().putBoolean("backup_on_delete", v).apply() }
+    // ориентация управления в ландшафте: true = правша (управление справа), false = левша (слева)
+    private val handState = androidx.compose.runtime.mutableStateOf(true)
+    private var handLoaded = false
+    fun rightHanded(ctx: android.content.Context): Boolean {
+        if (!handLoaded) { handState.value = sp(ctx).getBoolean("hand_right", true); handLoaded = true }
+        return handState.value
+    }
+    fun setRightHanded(ctx: android.content.Context, v: Boolean) { handState.value = v; handLoaded = true; sp(ctx).edit().putBoolean("hand_right", v).apply() }
     /** Пробовать права root (Magisk) для этого телефона вместо ADB. */
     fun useRoot(ctx: android.content.Context): Boolean = sp(ctx).getBoolean("use_root", true)
     fun setUseRoot(ctx: android.content.Context, v: Boolean) { sp(ctx).edit().putBoolean("use_root", v).apply() }

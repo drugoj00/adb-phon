@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package app.adbphon
 
 import android.content.ClipData
@@ -15,6 +17,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -36,6 +41,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.border
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
@@ -67,16 +74,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -88,6 +96,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -116,13 +125,29 @@ const val ALL_PROGRAMS_URL = "https://drugoj00.github.io/"
 const val TELEGRAM_URL = "https://t.me/PhoneInWindowSound"
 
 class MainActivity : ComponentActivity() {
+    /** Закрытие приложения: Bluetooth выключается, если его включили мы (раздел «Мышь ПК»). */
+    override fun onDestroy() {
+        if (isFinishing && !PadKeeper.enabled(applicationContext)) { BtHid.disconnectNow("закрытие приложения"); BtPower.leaveNow(applicationContext) }
+        super.onDestroy()
+    }
+
+    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this) }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        PermFlow.onPermissionResult(this, requestCode, grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PadKeeper.start(this)
+        AppBackup.autoIfDue(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
         setContent { AdbPhonApp() }
     }
+
 }
 
 private val Dark = darkColorScheme(
@@ -163,10 +188,17 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     Feedback.host = (baseCtx as? ComponentActivity)?.window?.decorView
     CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang) {
     MaterialTheme(colorScheme = if (dark) Dark else Light) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            var tab by remember { mutableStateOf(0) }
+        Surface(Modifier.fillMaxSize().pointerInput(Unit) {
+            // пока палец на экране (в том числе прокрутка списков), бегущие строки стоят: нагрузки нет
+            awaitPointerEventScope { while (true) { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial); Marq.touching = e.changes.any { it.pressed } } }
+        }, color = MaterialTheme.colorScheme.background) {
+            var tab by remember { mutableStateOf(Startup.initialTab(baseCtx)) }
+            LaunchedEffect(tab) { Startup.saveLastTab(baseCtx, tab) }
+            // если процесс был убит посреди игры, а настройки ориентации остались изменёнными: тихо вернуть прежние значения, как только появится подключение
+            LaunchedEffect(vm.connected) { if (vm.connected) OrientAssist.restoreIfPending(baseCtx) }
             var showSettings by remember { mutableStateOf(false) }
             val snack = remember { SnackbarHostState() }
+            val snackScope = androidx.compose.runtime.rememberCoroutineScope()
             // при запуске остаёмся на «Связь» (в т.ч. если автоподключение уже сработало); на «Софт»/«Пульт» переходим только после ручного подключения
             LaunchedEffect(vm.connected, vm.manualConnect) {
                 if (vm.connected && vm.manualConnect) {
@@ -184,10 +216,50 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
             }
+            // история вкладок: «Назад» возвращает на прежнюю вкладку (а не всегда на «Связь»); запоминание вкладки и папок «Назад» не трогает
+            val tabHist = remember { androidx.compose.runtime.mutableStateListOf<Int>() }
+            var lastTab by remember { mutableStateOf(tab) }
+            // Правило без кругов: в истории нет текущей вкладки и нет повторов, «Назад» берёт последнюю запись и убирает её, поэтому история только убывает.
+            // Раньше «текущая» вкладка оставалась глубже в истории (1→2→1: в истории [..,1,2] при открытой 1), и «Назад» ходил 2, 1, 2, 1 по кругу.
+            LaunchedEffect(tab) {
+                if (tab != lastTab) {
+                    tabHist.removeAll { it == lastTab || it == tab }
+                    tabHist.add(lastTab); while (tabHist.size > 8) tabHist.removeAt(0)
+                    lastTab = tab
+                }
+            }
+            // «Выход»: полный выход из программы; остановка помощника геймпада, оверлея и ADB. Идёт операция с файлами: сначала вопрос.
+            var exitAsk by remember { mutableStateOf(false) }
+            val exitNow: () -> Unit = {
+                snackScope.launch {
+                    runCatching { VirtualPad.stop(true); OverlayPadService.stop(baseCtx) }
+                    runCatching { NetKeep.releaseAll() }
+                    // идущие операции отменяются и убирают за собой временные файлы (иначе остаётся недокопированный .fmpart), затем останавливается служба операций
+                    Fm.jobs.forEach { it.cancelled = true }
+                    kotlinx.coroutines.withTimeoutOrNull(3000) { while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(100) }
+                    runCatching { baseCtx.stopService(android.content.Intent(baseCtx, FmOpService::class.java)) }
+                    runCatching { BtHid.cleanDisconnect("выход", 800) }
+                    PadKeeper.stopForExit(baseCtx)
+                    kotlinx.coroutines.delay(1200)
+                    vm.shutdown()
+                    act?.finishAndRemoveTask()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }
+            }
+            val exitClick: () -> Unit = { if (Fm.jobs.isNotEmpty()) exitAsk = true else exitNow() }
+            if (exitAsk) LAlertDialog(
+                onDismissRequest = { exitAsk = false },
+                title = { Text(stringResource(R.string.exit_busy)) },
+                confirmButton = { TextButton({ exitAsk = false; exitNow() }) { Text(stringResource(R.string.exit_label), color = androidx.compose.ui.graphics.Color(0xFFD32F2F)) } },
+                dismissButton = { TextButton({ exitAsk = false }) { Text(stringResource(R.string.btn_cancel)) } },
+            )
             BackHandler {
                 when {
                     showSettings -> showSettings = false
-                    tab != 0 -> tab = 0
+                    tab == 2 && Fm.onBack() -> {}
+                    tabHist.removeAll { it == tab }.let { tabHist.isNotEmpty() } -> { val back = tabHist.removeAt(tabHist.lastIndex); lastTab = back; tab = back }
+                    // «Связь» по исчерпанию истории: прежняя вкладка в историю НЕ кладётся (иначе следующий «Назад» вернул бы её, и «Назад» ходил бы по кругу)
+                    tab != 0 -> { lastTab = 0; tab = 0 }
                     !vm.connected && vm.exitOnBack -> {
                         vm.shutdown()
                         act?.finishAndRemoveTask()
@@ -205,12 +277,16 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     dismissButton = { TextButton({ vm.updateRelease = null }) { Text(stringResource(R.string.upd_later)) } },
                 )
             }
+            // В альбоме при открытой клавиатуре нижняя панель вкладок прячется: иначе поле ввода остаётся без места и не видно
+            val imeOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+            val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+            val hideBarForIme = imeOpen && cfg.screenWidthDp > cfg.screenHeightDp
             Scaffold(
                 modifier = Modifier.imePadding(),
                 containerColor = MaterialTheme.colorScheme.background,
                 snackbarHost = { SnackbarHost(snack) },
                 bottomBar = {
-                    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+                  if (!hideBarForIme) androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
                         val items = listOf(
                             R.string.tab_connect to Icons.Filled.Link,
                             R.string.tab_apps to Icons.Filled.Apps,
@@ -219,20 +295,100 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                             R.string.tab_more to Icons.Filled.MoreHoriz,
                             R.string.tab_settings to Icons.Filled.Settings,
                         )
-                        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(54.dp)) {
+                        // телефон (портрет и ландшафт): низкая панель только из значков, название по долгому нажатию; приставка: прежняя панель с подписями
+                        val phoneBar = !Marq.tv
+                        val landscapeBar = phoneBar && cfg.screenWidthDp > cfg.screenHeightDp
+                        val tctx = androidx.compose.ui.platform.LocalContext.current
+                        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(if (landscapeBar) 46.dp else if (phoneBar) 56.dp else 52.dp)) {
                             items.forEachIndexed { i, (label, icon) ->
                                 val selected = if (i == items.lastIndex) showSettings else (!showSettings && tab == i)
                                 val col = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)
-                                Column(
-                                    Modifier.weight(1f).fillMaxHeight()
-                                        .clickable { if (i == items.lastIndex) showSettings = true else { tab = i; showSettings = false } },
-                                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                                val go = { if (i == items.lastIndex) showSettings = true else { tab = i; showSettings = false } }
+                                if (phoneBar) {
+                                    val name = stringResource(label)
+                                    Box(
+                                        Modifier.weight(1f).fillMaxHeight()
+                                            .combinedClickable(onClick = go, onLongClick = { android.widget.Toast.makeText(tctx, name, android.widget.Toast.LENGTH_SHORT).show() }),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (landscapeBar) {
+                                            // ландшафт телефона: значок слева, подпись справа в одну строку; выбранная вкладка залита акцентом
+                                            Row(
+                                                Modifier.fillMaxHeight().padding(vertical = 3.dp, horizontal = 2.dp).clip(RoundedCornerShape(10.dp))
+                                                    .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else androidx.compose.ui.graphics.Color.Transparent)
+                                                    .padding(horizontal = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Icon(icon, if (i == items.lastIndex) name else null, tint = col, modifier = Modifier.size(if (i == items.lastIndex) 30.dp else 24.dp))
+                                                if (i != items.lastIndex) Text(name, Modifier.padding(start = 6.dp), fontSize = 13.sp, maxLines = 1, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                            }
+                                        } else {
+                                            // портрет телефона: значок и подпись у всех вкладок (и у «Опций») на одной линии; выбранная вкладка — акцентная таблетка вокруг значка и подписи, без полоски у края панели
+                                            if (i == items.lastIndex) {
+                                                // шестерёнка без подписи: значок на 25 % крупнее, строго по центру кнопки той же высоты, что у остальных вкладок
+                                                // ось шестерёнки совпадает с осью правой колонки кнопок «Файлов» (если колонка справа): сдвиг считается от ширины ячейки и общих размеров колонки
+                                                val alignToStrip = false   // ось правой колонки теперь у «Выхода» (он в самом правом углу)
+                                                Box(
+                                                    Modifier.fillMaxSize().layout { m, c ->
+                                                        val pl = m.measure(c)
+                                                        layout(pl.width, pl.height) { pl.place(if (alignToStrip) pl.width / 2 - FmMetrics.stripCenterFromRight.roundToPx() else 0, 0) }
+                                                    },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Box(
+                                                        Modifier.size(width = 52.dp, height = 40.dp).clip(RoundedCornerShape(14.dp))
+                                                            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else androidx.compose.ui.graphics.Color.Transparent),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) { Icon(icon, name, tint = col, modifier = Modifier.size(28.dp)) }
+                                                }
+                                            } else Column(
+                                                Modifier.clip(RoundedCornerShape(14.dp))
+                                                    .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else androidx.compose.ui.graphics.Color.Transparent)
+                                                    .padding(horizontal = 5.dp, vertical = 3.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                            ) {
+                                                Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
+                                                Text(name, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1, color = col, fontFamily = CondFont, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                            }
+                                        }
+                                    }
+                                } else run {
+                                // приставка: значок слева, подпись справа в одну строку; выбранная вкладка залита, у фокуса пульта рамка
+                                var fcs by remember { mutableStateOf(false) }
+                                Row(
+                                    Modifier.weight(1f).fillMaxHeight().padding(2.dp).clip(RoundedCornerShape(10.dp))
+                                        .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else androidx.compose.ui.graphics.Color.Transparent)
+                                        .then(if (fcs) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)) else Modifier)
+                                        .onFocusChanged { fcs = it.isFocused }
+                                        .clickable { go() },
+                                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    if (i == items.lastIndex) {
-                                        Icon(icon, stringResource(label), tint = col, modifier = Modifier.size(28.dp))
-                                    } else {
-                                        Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
-                                        Text(stringResource(label), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col)
+                                    Icon(icon, if (i == items.lastIndex) stringResource(label) else null, tint = col, modifier = Modifier.size(if (i == items.lastIndex) 35.dp else 28.dp))
+                                    if (i != items.lastIndex) Text(stringResource(label), Modifier.padding(start = 8.dp), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                }
+                                }
+                                if (i == items.lastIndex) {
+                                    // «Выход»: красный значок аварийного выхода в самом правом углу, правее шестерёнки; фокус и ОК пультом, название по долгому нажатию
+                                    val exitName = stringResource(R.string.exit_label)
+                                    var exFocus by remember { mutableStateOf(false) }
+                                    Box(
+                                        Modifier.weight(1f).fillMaxHeight().defaultMinSize(minWidth = 48.dp)
+                                            .onFocusChanged { exFocus = it.isFocused }
+                                            // как у соседних вкладок: при наведении, выборе пультом и нажатии ячейка слегка темнеет (стандартная подсветка), на приставке ещё и рамка фокуса; сам значок не меняется
+                                            .then(if (Marq.tv && exFocus) Modifier.padding(2.dp).border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)) else Modifier)
+                                            .combinedClickable(onClick = exitClick, onLongClick = { android.widget.Toast.makeText(tctx, exitName, android.widget.Toast.LENGTH_SHORT).show() })
+                                            .semantics { this.contentDescription = exitName },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        // ось значка совпадает с осью правой колонки кнопок «Файлов» (если колонка справа), как раньше у шестерёнки
+                                        val alignExit = false   // кнопки панели вкладок разнесены равномерно: все ячейки одной ширины, значки по центру ячеек
+                                        Box(
+                                            Modifier.fillMaxSize().layout { m, c ->
+                                                val pl = m.measure(c)
+                                                layout(pl.width, pl.height) { pl.place(if (alignExit) pl.width / 2 - FmMetrics.stripCenterFromRight.roundToPx() else 0, 0) }
+                                            },
+                                            contentAlignment = Alignment.Center,
+                                        ) { ExitSignIcon(if (Marq.tv) 34.dp else 30.dp) }
                                     }
                                 }
                             }
@@ -240,22 +396,38 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     }
                 },
             ) { pad ->
-                Column(Modifier.padding(pad).statusBarsPadding().fillMaxSize()) {
+                Column(Modifier.padding(pad).fillMaxSize()) {
                     Spacer(Modifier.height(4.dp))
                     if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     if (showSettings) SettingsScreen(vm) else when (tab) {
                         0 -> ConnectScreen(vm)
                         1 -> NeedConnection(vm) { if (vm.remoteHost != null) LocalOnly() else AppsScreen(vm) }
-                        2 -> NeedConnection(vm) { FilesScreen(vm) }
+                        2 -> FileManagerScreen(vm) { tab = 0 }
                         3 -> NeedConnection(vm) { RemoteScreen(vm) }
                         else -> MoreScreen(vm)
                     }
+                }
+            }
+            // окно игры открывается отдельной Activity (только альбом)
+            LaunchedEffect(Pad.playing) {
+                if (Pad.playing) {
+                    // без подключения к ПК окно не открывается: понятное сообщение на текущем экране, а не мигающее окно
+                    if (BtHid.hostName == null && !BtHid.dryRun && !BtHid.switching) {
+                        Pad.playing = false
+                        // второе действие: пробный режим без компьютера (отдельная корутина: смена Pad.playing отменила бы эту)
+                        val msg = baseCtx.getString(R.string.pad_no_host); val act2 = baseCtx.getString(R.string.pad_try_nopc)
+                        snackScope.launch { if (snack.showSnackbar(msg, actionLabel = act2, duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) startPadTrial() }
+                    }
+                    else baseCtx.startActivity(android.content.Intent(baseCtx, GamepadActivity::class.java))
                 }
             }
         }
     }
     }
 }
+
+/** Ландшафт: ширина больше высоты (и не совсем узкий экран). Экран делится на две равные половины. */
+fun isLandscapeBox(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp): Boolean = w > h && w >= 480.dp
 
 @Composable
 fun LocalOnly() {
@@ -283,7 +455,7 @@ fun ConnectScreen(vm: MainViewModel) {
     var favFor by remember { mutableStateOf<Found?>(null) }
     var favName by remember { mutableStateOf("") }
     val askName: (Found) -> Unit = { favName = vm.names[it.host].orEmpty(); favFor = it }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.verticalScroll(rememberSavedScroll("tab.connect")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             if (vm.connected && !Adb.isRoot && vm.remoteHost != null)
                 stringResource(R.string.msg_connected_to, vm.names[vm.remoteHost!!] ?: stringResource(R.string.net_name_unknown), vm.remoteHost!!)
@@ -454,11 +626,13 @@ private fun Modifier.connectedRowStyle(dark: Boolean): Modifier = this
 /** Меню долгого нажатия на устройство: «Отключить», если оно подключено, иначе «Подключить». */
 @Composable
 fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, onDismiss: () -> Unit) {
-    androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    LDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (vm.isCurrent(f)) androidx.compose.material3.DropdownMenuItem(
             text = { Text(stringResource(R.string.menu_disconnect)) }, onClick = { onDismiss(); vm.disconnect() })
         else androidx.compose.material3.DropdownMenuItem(
             text = { Text(stringResource(R.string.menu_connect)) }, onClick = { onDismiss(); vm.connectFound(f) })
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.gpi_menu)) }, onClick = { onDismiss(); vm.installGamepadTest(f) })
     }
 }
 
@@ -510,6 +684,18 @@ private fun androidx.compose.foundation.layout.RowScope.EqTextButton(label: Stri
     }
 }
 
+/** Кнопка для рядов с переносом (ландшафт): ширина как у кнопки в портрете (треть ряда), высота та же. */
+@Composable
+private fun EqFlowButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick, Modifier.width(112.dp).defaultMinSize(minHeight = 40.dp),
+        shape = androidx.compose.ui.graphics.RectangleShape,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(label, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
 private fun actLabel(a: Act): Int = when (a) {
     Act.DISABLE -> R.string.act_disable
     Act.ENABLE -> R.string.act_enable
@@ -520,7 +706,7 @@ private fun actLabel(a: Act): Int = when (a) {
     Act.SAVE -> R.string.act_save
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AppsScreen(vm: MainViewModel) {
     val visible = vm.visibleApps()
@@ -536,7 +722,10 @@ fun AppsScreen(vm: MainViewModel) {
     LaunchedEffect(vm.selected.isEmpty()) { if (vm.selected.isEmpty()) showActions = false }
     // компактный вид (просьба владелицы 26.10.2026): без лишней высоты у флажков и чипов, поиск вдвое ниже, строка приложения в две строки
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
-    Column(Modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val land = isLandscapeBox(maxWidth, maxHeight)
+    // поиск, фильтры, счётчик и кнопки: в портрете сверху, в ландшафте в правой половине
+    val controlsUi: @Composable () -> Unit = {
         androidx.compose.foundation.text.BasicTextField(
             value = vm.query, onValueChange = { vm.query = it }, singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
@@ -554,11 +743,20 @@ fun AppsScreen(vm: MainViewModel) {
                 }
             },
         )
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(
-                Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.ALL to R.string.f_all, Filter.DISABLED to R.string.f_disabled,
-                Filter.REMOVED to R.string.f_removed, Filter.BLOAT to R.string.f_bloat,
-            ).forEach { (f, s) ->
+        val filters = listOf(
+            Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.ALL to R.string.f_all, Filter.DISABLED to R.string.f_disabled,
+            Filter.REMOVED to R.string.f_removed, Filter.BLOAT to R.string.f_bloat,
+        )
+        if (land) {
+            // ландшафт: фильтры переносятся на следующую строку, без горизонтальной прокрутки
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                filters.forEach { (f, s) -> FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) }) }
+            }
+        } else Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            filters.forEach { (f, s) ->
                 FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) })
             }
         }
@@ -568,24 +766,42 @@ fun AppsScreen(vm: MainViewModel) {
         Text(stringResource(R.string.apps_count, visible.size, vm.selected.size), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         val ramCtx = LocalContext.current
         val ramScope = rememberCoroutineScope()
+        val canAct = vm.selected.isNotEmpty()
+        val prim = MaterialTheme.colorScheme.primary
+        val checkBtn: @Composable () -> Unit = {
+            Box(
+                Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (canAct) prim else prim.copy(alpha = .3f))
+                    .border(2.dp, if (canAct) prim else prim.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)
+                    .clickable(enabled = canAct) { showActions = !showActions },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Check, stringResource(R.string.act_open_panel),
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+        if (land) {
+            // ландшафт: все кнопки одним потоком с переносом строк (размер кнопки как в портрете), без прокрутки
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                EqFlowButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
+                checkBtn()
+                EqFlowButton(stringResource(R.string.select_none)) { vm.clearSelection() }
+                if (vm.filter == Filter.BLOAT) EqFlowButton(stringResource(R.string.bloat_pick_safe)) { vm.selectSafeBloat() }
+                EqFlowButton(stringResource(R.string.act_install)) { installHub = true }
+                EqFlowButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
+                if (vm.remoteHost == null) EqFlowButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
+            }
+        } else
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 EqTextButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
-                val canAct = vm.selected.isNotEmpty()
-                val prim = MaterialTheme.colorScheme.primary
-                Box(
-                    Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(if (canAct) prim else prim.copy(alpha = .3f))
-                        .border(2.dp, if (canAct) prim else prim.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)
-                        .clickable(enabled = canAct) { showActions = !showActions },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.Check, stringResource(R.string.act_open_panel),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
+                checkBtn()
                 EqTextButton(stringResource(R.string.select_none)) { vm.clearSelection() }
                 if (vm.filter == Filter.BLOAT) EqTextButton(stringResource(R.string.bloat_pick_safe)) { vm.selectSafeBloat() }
             }
@@ -595,7 +811,10 @@ fun AppsScreen(vm: MainViewModel) {
                 if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
             }
         }
-        LazyColumn(Modifier.weight(1f), state = rememberLazyListState()) {
+    }
+    // список приложений: в портрете под кнопками, в ландшафте в левой половине
+    val listUi: @Composable (Modifier) -> Unit = { listMod ->
+        LazyColumn(listMod, state = rememberSavedLazyList("tab.soft.list")) {
             items(visible, key = { it.pkg }) { a ->
                 Row(
                     Modifier.fillMaxWidth()
@@ -610,7 +829,7 @@ fun AppsScreen(vm: MainViewModel) {
                     AppIcon(a.pkg, 32.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(a.label, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        Text(a.label, fontFamily = UiPrefs.listFont, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                         val tags = buildList {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
@@ -629,12 +848,13 @@ fun AppsScreen(vm: MainViewModel) {
                                 withStyle(androidx.compose.ui.text.SpanStyle(color = dim)) { append(a.pkg) }
                                 if (tags.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = acc)) { append(" · " + tags.joinToString(" · ")) }
                             },
-                            fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
             }
         }
+    }
         PermsDialog(vm)
         SpecialDialog(vm)
         if (installHub) InstallHub { installHub = false; vm.loadApps() }
@@ -654,6 +874,7 @@ fun AppsScreen(vm: MainViewModel) {
         }
         if (showBackups) FullBackupsDialog { showBackups = false; vm.loadApps() }
         infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }
+    val actionsUi: @Composable () -> Unit = {
         if (showActions && vm.selected.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val lPerms = stringResource(R.string.act_perms)
@@ -675,6 +896,24 @@ fun AppsScreen(vm: MainViewModel) {
                 EqChipRow(listOf(lFull to { vm.fullBackup() }))
             }
         }
+    }
+    if (land) {
+        // ландшафт: список приложений слева (половина), справа сверху те же кнопки, что в портрете (размер и порядок прежние), панель действий под ними
+        SplitHalves(Modifier.fillMaxSize(), spacing = 0.dp,
+            rest = { Box(Modifier.weight(1f).fillMaxHeight()) { listUi(Modifier.fillMaxSize()) } },
+            controls = {
+                FitHeight(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    controlsUi()
+                    actionsUi()
+                }
+            })
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            controlsUi()
+            listUi(Modifier.weight(1f))
+            actionsUi()
+        }
+    }
     }
     }
     confirm?.let { act ->
@@ -746,7 +985,9 @@ fun ConsoleScreen(vm: MainViewModel) {
     LaunchedEffect(vm.consoleLines.size) {
         if (vm.consoleLines.isNotEmpty()) listState.animateScrollToItem(vm.consoleLines.size - 1)
     }
-    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val cfgOuter = androidx.compose.ui.platform.LocalConfiguration.current
+    val landC = cfgOuter.screenWidthDp > cfgOuter.screenHeightDp
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = if (landC) 2.dp else 12.dp), verticalArrangement = Arrangement.spacedBy(if (landC) 4.dp else 8.dp)) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             items(vm.consoleLines.size) { i ->
                 val line = vm.consoleLines[i]
@@ -756,13 +997,26 @@ fun ConsoleScreen(vm: MainViewModel) {
                 )
             }
         }
-        OutlinedTextField(
-            cmd, { cmd = it }, Modifier.fillMaxWidth(), singleLine = true,
-            placeholder = { Text(stringResource(R.string.console_hint)) },
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
-            OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
+        val cfgC = androidx.compose.ui.platform.LocalConfiguration.current
+        if (cfgC.screenWidthDp > cfgC.screenHeightDp) {
+            // альбом: поле и кнопки в одной строке, чтобы всё помещалось над клавиатурой
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    cmd, { cmd = it }, Modifier.weight(2f), singleLine = true,
+                    placeholder = { Text(stringResource(R.string.console_hint)) },
+                )
+                Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
+                OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
+            }
+        } else {
+            OutlinedTextField(
+                cmd, { cmd = it }, Modifier.fillMaxWidth(), singleLine = true,
+                placeholder = { Text(stringResource(R.string.console_hint)) },
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
+                OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
+            }
         }
     }
 }
@@ -774,7 +1028,7 @@ fun DeviceScreen(vm: MainViewModel) {
     var dpi by remember { mutableStateOf("") }
     var reboot by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { if (vm.deviceInfo.isEmpty()) vm.refreshInfo() }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.verticalScroll(rememberSavedScroll("tab.device")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.dev_info), fontWeight = FontWeight.Bold)
@@ -839,7 +1093,7 @@ fun DeviceScreen(vm: MainViewModel) {
 fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
     val ctx = LocalContext.current
     val copied = stringResource(R.string.copied)
-    Column(if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(if (embedded) Modifier else Modifier.verticalScroll(rememberSavedScroll("tab.about")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(64.dp))
             Column {
@@ -860,5 +1114,8 @@ fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL))) }) { Text(stringResource(R.string.about_github)) }
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ALL_PROGRAMS_URL))) }) { Text(stringResource(R.string.about_all)) }
         TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TELEGRAM_URL))) }) { Text(stringResource(R.string.about_tg)) }
+        var licOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { licOpen = !licOpen }) { Text(stringResource(R.string.about_licenses)) }
+        if (licOpen) { Text(stringResource(R.string.licenses_text), fontSize = 11.sp, fontFamily = FontFamily.Monospace); Text(stringResource(R.string.licenses_brands), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
     }
 }

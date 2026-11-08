@@ -68,7 +68,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -77,7 +76,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -177,7 +175,7 @@ fun VersionsDialog(vm: MainViewModel) {
 
 // ---------------------------------------------------------------- файлы
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun FilesScreen(vm: MainViewModel) {
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -186,15 +184,27 @@ fun FilesScreen(vm: MainViewModel) {
     var newFolder by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { if (vm.files.isEmpty()) vm.listDir() }
-    Column(Modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val land = isLandscapeBox(maxWidth, maxHeight)
+    // верхние кнопки: путь, «вверх», новая папка, обновить, быстрые папки, буфер; в ландшафте они справа, список файлов слева
+    val topUi: @Composable () -> Unit = {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton({ vm.upDir() }) { Icon(Icons.Filled.ArrowUpward, stringResource(R.string.files_up)) }
             Text(vm.path, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             IconButton({ text = ""; newFolder = true }) { Icon(Icons.Filled.CreateNewFolder, stringResource(R.string.files_new)) }
             IconButton({ vm.listDir() }) { Icon(Icons.Filled.Refresh, null) }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("/sdcard", "/sdcard/Download", "/sdcard/DCIM", "/sdcard/Android/data", "/data/local/tmp").forEach { p ->
+        val quick = listOf("/sdcard", "/sdcard/Download", "/sdcard/DCIM", "/sdcard/Android/data", "/data/local/tmp")
+        if (land) {
+            // ландшафт: быстрые папки переносятся на следующую строку, без горизонтальной прокрутки
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                quick.forEach { p -> AssistChip({ vm.listDir(p) }, { Text(p.substringAfterLast('/').ifEmpty { "/" }, fontSize = 12.sp) }) }
+            }
+        } else Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            quick.forEach { p ->
                 AssistChip({ vm.listDir(p) }, { Text(p.substringAfterLast('/').ifEmpty { "/" }, fontSize = 12.sp) })
             }
         }
@@ -204,6 +214,9 @@ fun FilesScreen(vm: MainViewModel) {
                 TextButton({ vm.paste() }) { Text(stringResource(R.string.files_paste), fontSize = 12.sp) }
             }
         }
+    }
+    val listUi: @Composable (Modifier) -> Unit = { listMod ->
+      Column(listMod) {
         if (vm.files.isEmpty()) Text(stringResource(R.string.files_empty), Modifier.padding(16.dp))
         LazyColumn(Modifier.weight(1f)) {
             items(vm.files, key = { it.name }) { f ->
@@ -220,7 +233,7 @@ fun FilesScreen(vm: MainViewModel) {
                             Text(if (f.isDir) f.date else humanSize(f.size) + " · " + f.date, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                         }
                     }
-                    DropdownMenu(menuFor == f.name, { menuFor = null }) {
+                    LDropdownMenu(menuFor == f.name, { menuFor = null }) {
                         DropdownMenuItem({ Text(stringResource(R.string.file_copy)) }, { vm.setClip(f.name, false); menuFor = null })
                         DropdownMenuItem({ Text(stringResource(R.string.file_move)) }, { vm.setClip(f.name, true); menuFor = null })
                         DropdownMenuItem({ Text(stringResource(R.string.file_rename)) }, { text = f.name; renameFor = f.name; menuFor = null })
@@ -229,6 +242,15 @@ fun FilesScreen(vm: MainViewModel) {
                 }
             }
         }
+      }
+    }
+    if (land) {
+        SplitHalves(Modifier.fillMaxSize(), spacing = 0.dp,
+            rest = { Box(Modifier.weight(1f).fillMaxHeight()) { listUi(Modifier.fillMaxSize()) } },
+            controls = { FitHeight(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(0.dp)) { topUi() } })
+    } else {
+        Column(Modifier.fillMaxSize()) { topUi(); listUi(Modifier.weight(1f)) }
+    }
     }
     if (newFolder || renameFor != null) {
         LAlertDialog(
@@ -282,7 +304,10 @@ fun RemoteScreen(vm: MainViewModel) {
     val cursor = remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     var sens by rememberSaveable { mutableStateOf(1.0f) }
     val labels = listOf(R.string.pad_keys, R.string.pad_touch, R.string.pad_mouse, R.string.pad_air)
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val land = isLandscapeBox(maxWidth, maxHeight)
+    // верхние кнопки: адрес управляемого устройства и переключатель режимов «Кнопки / Касание / Мышь / Воздух»
+    val headerUi: @Composable () -> Unit = {
         vm.remoteHost?.let { Text(stringResource(R.string.target_remote, it), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             labels.forEachIndexed { i, l ->
@@ -293,6 +318,12 @@ fun RemoteScreen(vm: MainViewModel) {
                 ) { Text(stringResource(l), fontSize = 10.sp, maxLines = 1, softWrap = false) }
             }
         }
+    }
+    if (land) {
+        RemoteLandscape(vm, mode, text, { text = it }, cursor, sens, { sens = it }, arrows, headerUi)
+    } else
+    Column(Modifier.verticalScroll(rememberSavedScroll("tab.remote")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        headerUi()
         when (mode) {
             0 -> {
                 RemoteKeys(vm)
@@ -346,6 +377,90 @@ fun RemoteScreen(vm: MainViewModel) {
                 HelperSwitch(vm)
                 Text(stringResource(R.string.air_hint), fontSize = 12.sp)
             }
+        }
+    }
+    }
+}
+
+/**
+ * Ландшафт вкладки «Пульт»: экран делится пополам, во всех режимах одинаково: СПРАВА главный управляющий блок, СЛЕВА всё остальное.
+ * «Кнопки»: справа блок стрелок и под ним блок кнопок (питание и микрофон, громкость, плеер); слева переключатель режимов, поле текста, отправка.
+ * «Свайп», «Мышь»: справа окно для пальца; слева переключатель режимов, прокрутка, быстрые клавиши (и переключатель помощника в «Мыши»).
+ * «Воздух»: справа кнопка «Воздух» со стрелками; слева переключатель режимов, блок кнопок (питание, микрофон, громкость, плеер), чувствительность, помощник.
+ * Размер и расположение кнопок те же, что в портрете.
+ */
+@Composable
+private fun RemoteLandscape(
+    vm: MainViewModel, mode: Int, text: String, onText: (String) -> Unit,
+    cursor: androidx.compose.runtime.MutableState<Offset>, sens: Float, onSens: (Float) -> Unit, arrows: Boolean,
+    headerUi: @Composable () -> Unit,
+) {
+    SplitHalves(Modifier.fillMaxSize().padding(12.dp), spacing = 12.dp,
+        rest = {
+        // «остальное»: переключатель режимов, поле текста, прокрутка, быстрые клавиши, переключатели
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberSavedScroll("tab.remote.land")), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            headerUi()
+            when (mode) {
+                0 -> {
+                    RemoteTopKeys(vm)   // питание и микрофон: слева над полем текста
+                    OutlinedTextField(text, onText, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.remote_text)) })
+                    Button({ vm.typeText(text); onText("") }, Modifier.fillMaxWidth(), enabled = text.isNotBlank()) { Text(stringResource(R.string.btn_send)) }
+                    TextButton({ vm.restartLauncher() }, enabled = !vm.busy) { Text(stringResource(R.string.launcher_restart), fontSize = 12.sp) }
+                }
+                1, 2 -> {
+                    ScrollButtonsRow(vm, touch = mode == 1)
+                    QuickKeys(vm)
+                    if (mode == 2) HelperSwitch(vm)
+                }
+                else -> {
+                    RemoteTopKeys(vm)
+                    RemoteMediaOnly(vm)
+                    Text(stringResource(R.string.air_sens), fontSize = 12.sp)
+                    Slider(sens, onSens, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
+                    HelperSwitch(vm)
+                    Text(stringResource(R.string.air_hint), fontSize = 12.sp)
+                }
+            }
+        }
+        },
+        controls = {
+        // главный управляющий блок
+        if (mode == 1 || mode == 2) {
+            // окно для пальца вписывается в доступную область половины: сторона = min(ширина, высота), не меньше 150 dp, по центру
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                val side = minOf(maxWidth, maxHeight).coerceAtLeast(150.dp)
+                Box(Modifier.size(side)) { TouchPad(vm, mode == 2, cursor, arrows) }
+            }
+        } else
+        FitHeight(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            when (mode) {
+                0 -> {
+                    RemoteArrowsOnly(vm)
+                    RemoteMediaOnly(vm)
+                }
+                else -> {
+                    AirControls(vm, cursor, sens)
+                    RemoteArrowsOnly(vm)
+                }
+            }
+        }
+        })
+}
+
+/** Кнопки прокрутки страницами под окном для пальца (в ландшафте справа): те же, что в портрете. */
+@Composable
+private fun ScrollButtonsRow(vm: MainViewModel, touch: Boolean) {
+    Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val cxm = vm.screenW / 2; val sy = vm.screenH
+        OutlinedButton({ if (touch) vm.key(93) else if (vm.helperOn) vm.hScroll(-3) else vm.swipe(cxm, sy * 7 / 10, cxm, sy * 3 / 10, 300) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+            Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+            Text(stringResource(R.string.pad_scroll_down).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+            Icon(Icons.Filled.ArrowDownward, null, Modifier.size(22.dp))
+        }
+        OutlinedButton({ if (touch) vm.key(92) else if (vm.helperOn) vm.hScroll(3) else vm.swipe(cxm, sy * 3 / 10, cxm, sy * 7 / 10, 300) }, Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+            Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
+            Text(stringResource(R.string.pad_scroll_up).replace(" ", "\n"), Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, textAlign = TextAlign.Center)
+            Icon(Icons.Filled.ArrowUpward, null, Modifier.size(22.dp))
         }
     }
 }
@@ -436,9 +551,47 @@ private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)?
     androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = gap) {
         // над джойстиком: питание (1 столбец) и микрофон (2 столбца)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
-            TextKey(vm, R.string.k_power, 26); TextKey(vm, R.string.k_mic, 91, weight = 2f)
-        }
+        RemoteTopKeysRow(vm)
+        RemoteArrowsRows(vm)
+        RemoteMediaRows(vm)
+        afterVolume?.invoke()
+    }
+    }
+}
+
+/** Питание и микрофон над блоком стрелок. */
+@Composable
+private fun RemoteTopKeys(vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) { RemoteTopKeysRow(vm) }
+}
+
+@Composable
+private fun RemoteTopKeysRow(vm: MainViewModel) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextKey(vm, R.string.k_power, 26); TextKey(vm, R.string.k_mic, 91, weight = 2f)
+    }
+}
+
+/** Только блок стрелок (в ландшафте левая половина). */
+@Composable
+private fun RemoteArrowsOnly(vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) { RemoteArrowsRows(vm) }
+    }
+}
+
+/** Громкость и кнопки плеера (в ландшафте правая половина). */
+@Composable
+private fun RemoteMediaOnly(vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedbackOn provides true) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) { RemoteMediaRows(vm) }
+    }
+}
+
+@Composable
+private fun RemoteArrowsRows(vm: MainViewModel) {
+    val gap = Arrangement.spacedBy(8.dp)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = gap) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             TextKey(vm, R.string.k_recents, 187, h = KEY_H); ArrowKey(vm, Icons.Filled.KeyboardArrowUp, 19); TextKey(vm, R.string.k_home, 3, h = KEY_H)
         }
@@ -448,15 +601,20 @@ private fun RemoteKeys(vm: MainViewModel, afterVolume: (@Composable () -> Unit)?
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             TextKey(vm, R.string.k_menu, 82, h = KEY_H); ArrowKey(vm, Icons.Filled.KeyboardArrowDown, 20); TextKey(vm, R.string.k_back, 4, h = KEY_H)
         }
+    }
+}
+
+@Composable
+private fun RemoteMediaRows(vm: MainViewModel) {
+    val gap = Arrangement.spacedBy(8.dp)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = gap) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
-            TextKey(vm, R.string.k_vol_down, 25); TextKey(vm, R.string.k_vol_up, 24); TextKey(vm, R.string.k_mute, 164, 11)
+            TextKey(vm, R.string.k_vol_down, 25); TextKey(vm, R.string.k_vol_up, 24); TextKey(vm, R.string.k_mute, 164, 10)
         }
         // кнопки плеера идут сразу под громкостью, а «Чувствительность» с ползунком (во вкладке «Воздух») — после них
         Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
             IconKey(vm, Icons.Filled.SkipPrevious, 88); IconKey(vm, Icons.Filled.PlayArrow, 85); IconKey(vm, Icons.Filled.SkipNext, 87)
         }
-        afterVolume?.invoke()
-    }
     }
 }
 
@@ -705,11 +863,17 @@ private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose
 @Composable
 fun MoreScreen(vm: MainViewModel) {
     var sub by remember { mutableStateOf(0) }
+    // окно игры (стики и кнопки) открывает кнопка «Играть»; вкладка «Геймпад» поворачивается свободно, как остальные
+    LaunchedEffect(BtHid.hostName, sub) { if ((BtHid.hostName == null && !BtHid.dryRun) || sub != 4) Pad.playing = false }
+    DisposableEffect(Unit) { onDispose { Pad.playing = false } }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val land = isLandscapeBox(maxWidth, maxHeight)
     Column(Modifier.fillMaxSize()) {
         // верхние кнопки в два ряда, каждый ряд на всю ширину экрана
-        val subs = listOf(R.string.sub_console, R.string.sub_device, R.string.sub_bt, R.string.sub_ssh)
+        val subs = listOf(R.string.sub_console, R.string.sub_device, R.string.sub_ssh, R.string.sub_bt, R.string.sub_pad)
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            subs.withIndex().toList().chunked(2).forEach { row ->
+            // в ландшафте четыре кнопки в один ряд: освобождается высота под содержимое вкладки
+            subs.withIndex().toList().chunked(if (land) 5 else 3).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { (i, s) ->
                         val on = sub == i
@@ -730,9 +894,11 @@ fun MoreScreen(vm: MainViewModel) {
         when (sub) {
             0 -> NeedConnection(vm) { ConsoleScreen(vm) }
             1 -> NeedConnection(vm) { DeviceScreen(vm) }
-            2 -> BtScreen()
-            else -> SshScreen()
+            2 -> SshScreen()
+            3 -> BtScreen(vm)
+            else -> BtScreen(vm, pad = true)
         }
+    }
     }
 }
 
@@ -809,20 +975,20 @@ fun EqButtons(items: List<EqBtn>, perRow: Int = items.size) {
 
 /** Варианты выбора (тема, язык) такими же рядами; выбранный залит цветом. */
 @Composable
-fun EqChoices(items: List<EqChoice>, perRow: Int = items.size) {
+fun EqChoices(items: List<EqChoice>, perRow: Int = items.size, minH: androidx.compose.ui.unit.Dp = 40.dp, fontSp: Int = 13) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items.chunked(perRow).forEach { row ->
             Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { c ->
                     val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                     Box(
-                        Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = 40.dp).clip(shape)
+                        Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = minH).clip(shape)
                             .background(if (c.selected) MaterialTheme.colorScheme.primary else Color.Transparent)
                             .border(1.dp, if (c.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, shape)
-                            .clickable { c.onClick() }.padding(horizontal = 6.dp, vertical = 6.dp),
+                            .clickable { c.onClick() }.padding(horizontal = if (minH < 40.dp) 3.dp else 6.dp, vertical = if (minH < 40.dp) 3.dp else 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(c.label, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 2, textAlign = TextAlign.Center,
+                        Text(c.label, fontSize = fontSp.sp, lineHeight = (fontSp + 3).sp, maxLines = if (minH < 40.dp) 1 else 2, textAlign = TextAlign.Center,
                             color = if (c.selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground)
                     }
                 }
@@ -833,7 +999,12 @@ fun EqChoices(items: List<EqChoice>, perRow: Int = items.size) {
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    var colKey by remember { mutableStateOf(0) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalCollapseKey provides colKey) {
+    Column(Modifier.verticalScroll(rememberSavedScroll("tab.settings")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton({ colKey++ }) { Text(stringResource(R.string.set_collapse_all), fontSize = 13.sp) }
+        }
         Text(stringResource(R.string.set_theme), fontWeight = FontWeight.Medium)
         EqChoices(listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).map { (code, label) ->
             EqChoice(stringResource(label), vm.theme == code) { vm.changeTheme(code) }
@@ -844,47 +1015,29 @@ fun SettingsScreen(vm: MainViewModel) {
                 listOf("ru" to "Русский", "uk" to "Українська", "en" to "English").map { (code, name) -> EqChoice(name, vm.lang == code) { vm.changeLang(code) } },
             perRow = 2,
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.set_keep_on), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.set_keep_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(vm.exitOnBack, { vm.changeExitOnBack(it) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.set_exit_back), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.set_exit_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(vm.logOn, { vm.changeLog(it) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.log_switch), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.log_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
+        val mctx = LocalContext.current
+        Text(stringResource(R.string.set_marq), fontWeight = FontWeight.Medium)
+        EqChoices(listOf(
+            EqChoice(stringResource(R.string.marq_on), Marq.mode == 0) { Marq.setMode(mctx, 0) },
+            EqChoice(stringResource(R.string.marq_focus), Marq.mode == 1) { Marq.setMode(mctx, 1) },
+            EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(mctx, 2) },
+        ))
+        SettingSwitch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) }, stringResource(R.string.set_keep_on), stringResource(R.string.set_keep_hint))
+        SettingSwitch(vm.exitOnBack, { vm.changeExitOnBack(it) }, stringResource(R.string.set_exit_back), stringResource(R.string.set_exit_hint))
+        SettingSwitch(vm.logOn, { vm.changeLog(it) }, stringResource(R.string.log_switch), stringResource(R.string.log_hint))
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(Feedback.vibro, { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.fb_vibro), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.fb_vibro_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(Feedback.beep, { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.fb_beep), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.fb_beep_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
-        BackupSection(vm)
+        SettingSwitch(Feedback.vibro, { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_vibro), stringResource(R.string.fb_vibro_hint))
+        SettingSwitch(Feedback.beep, { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_beep), stringResource(R.string.fb_beep_hint))
+        StartupSection(ctx)
+        FilesLookSection()
+        FilesDeleteSection()
+        HandednessSection()
+        BackupSectionV2(vm)
         CopiesSection()
-        Text(stringResource(R.string.set_version, vm.appVersion), fontWeight = FontWeight.Medium)
-        Text(stringResource(R.string.ver_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        Collapsible(stringResource(R.string.set_version, vm.appVersion)) {
+            Text(stringResource(R.string.ver_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        }
         var clearVer by remember { mutableStateOf<Pair<Int, Long>?>(null) }
         val noneMsg = stringResource(R.string.ver_none)
         val clearedFmt = stringResource(R.string.ver_cleared)
@@ -902,7 +1055,7 @@ fun SettingsScreen(vm: MainViewModel) {
             Text(stringResource(R.string.upd_auto), fontSize = 14.sp)
         }
         clearVer?.let { (n, bytes) ->
-            AlertDialog(
+            LAlertDialog(
                 onDismissRequest = { clearVer = null },
                 title = { Text(stringResource(R.string.ver_clear_btn)) },
                 text = { Text(stringResource(R.string.ver_clear_confirm, n, bytes / 1048576)) },
@@ -922,7 +1075,13 @@ fun SettingsScreen(vm: MainViewModel) {
             EqBtn(stringResource(R.string.log_clear)) { AppLog.clear(); vm.hideLog() },
         ), perRow = 2)
         androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp))
-        AboutScreen(vm, embedded = true)
+        Collapsible("", titleContent = {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.logo), null, Modifier.size(32.dp))
+                Text("ADB-phon " + vm.appVersion, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }) { AboutScreen(vm, embedded = true) }
+    }
     }
     VersionsDialog(vm)
     RestoreDialog(vm)
@@ -949,11 +1108,12 @@ fun SettingsScreen(vm: MainViewModel) {
 fun BackupSection(vm: MainViewModel) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) vm.chooseBackupFolder(uri) }
     val folder = vm.backupFolder
-    Text(stringResource(R.string.bk_title), fontWeight = FontWeight.Medium)
-    Text(
-        if (folder == null) stringResource(R.string.bk_no_folder) else stringResource(R.string.bk_folder, SettingsBackup.folderLabel(folder)),
-        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f),
-    )
+    Collapsible(stringResource(R.string.bk_title)) {
+        Text(
+            if (folder == null) stringResource(R.string.bk_no_folder) else stringResource(R.string.bk_folder, SettingsBackup.folderLabel(folder)),
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f),
+        )
+    }
     EqButtons(listOf(EqBtn(stringResource(R.string.bk_pick)) { picker.launch(folder) }))
     EqButtons(listOf(
         EqBtn(stringResource(R.string.bk_make), folder != null) { vm.makeBackup() },
@@ -987,13 +1147,7 @@ fun CopiesSection() {
     var on by remember { mutableStateOf(Cfg.backupOnDelete(ctx)) }
     var open by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Switch(on, { on = it; Cfg.setBackupOnDelete(ctx, it) })
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.set_backups), fontWeight = FontWeight.Medium)
-                Text(stringResource(R.string.backups_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            }
-        }
+        SettingSwitch(on, { on = it; Cfg.setBackupOnDelete(ctx, it) }, stringResource(R.string.set_backups), stringResource(R.string.backups_hint))
         EqButtons(listOf(EqBtn(stringResource(R.string.backups_open)) { open = true }))
     }
     if (open) BackupsDialog { open = false }

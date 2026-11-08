@@ -30,8 +30,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +64,9 @@ object SshModel {
     var port by mutableStateOf("22")
     var user by mutableStateOf("")
     var password by mutableStateOf("")
+    /** Файл закрытого ключа SSH: имя и содержимое (в памяти, на диск не пишется). */
+    var keyName by mutableStateOf("")
+    var keyBytes: ByteArray? = null
     var mode by mutableStateOf(0)           // 0 терминал, 1 файлы
     val lines = mutableStateListOf<String>()
     var cwd by mutableStateOf("")
@@ -90,7 +91,7 @@ object SshModel {
         scope.launch {
             busy = true
             error = null
-            Ssh.connect(ctx, h, prt, user.trim(), password).onSuccess {
+            Ssh.connect(ctx, h, prt, user.trim(), password, keyBytes).onSuccess {
                 ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("host", h).putString("port", prt.toString()).putString("user", user.trim()).apply()
                 connected = true
                 title = "${user.trim()}@$h" + if (prt != 22) ":$prt" else ""
@@ -109,6 +110,7 @@ object SshModel {
             Ssh.disconnect()
             connected = false
             password = ""
+            keyBytes = null; keyName = ""
             files.clear()
             lines.clear()
         }
@@ -225,7 +227,7 @@ fun SshScreen() {
 
 @Composable
 private fun SshLogin(ctx: Context) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberSavedScroll("tab.ssh")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.ssh_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         OutlinedTextField(SshModel.host, { SshModel.host = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.ssh_host)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
@@ -236,6 +238,19 @@ private fun SshLogin(ctx: Context) {
         }
         OutlinedTextField(SshModel.password, { SshModel.password = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.ssh_pass)) },
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        // вход по ключу: файл закрытого ключа (OpenSSH/PEM), парольная фраза вводится в поле пароля; содержимое хранится только в памяти
+        val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) runCatching {
+                val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                require(b.size in 32..100_000)
+                SshModel.keyBytes = b
+                SshModel.keyName = ctx.contentResolver.query(uri, null, null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null } ?: "key"
+            }.onFailure { SshModel.error = it.message ?: "?" }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({ keyPicker.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.ssh_key_pick), fontSize = 13.sp) }
+            if (SshModel.keyBytes != null) { Text(stringResource(R.string.ssh_key_chosen, SshModel.keyName), Modifier.weight(1f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis); TextButton({ SshModel.keyBytes = null; SshModel.keyName = "" }) { Text(stringResource(R.string.ssh_key_clear), fontSize = 12.sp) } }
+        }
         Button({ SshModel.connect(ctx) }, enabled = !SshModel.busy && SshModel.host.isNotBlank() && SshModel.user.isNotBlank()) {
             Text(stringResource(if (SshModel.busy) R.string.ssh_connecting else R.string.ssh_connect))
         }
@@ -252,7 +267,7 @@ private fun SshLogin(ctx: Context) {
 @Composable
 private fun SshTerminal() {
     var cmd by remember { mutableStateOf("") }
-    val state = rememberLazyListState()
+    val state = rememberSavedLazyList("tab.ssh.list")
     LaunchedEffect(SshModel.lines.size) { if (SshModel.lines.isNotEmpty()) state.animateScrollToItem(SshModel.lines.size - 1) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (SshModel.cwd.isNotEmpty()) Text(SshModel.cwd, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -299,7 +314,7 @@ private fun SshFiles(ctx: Context) {
                             if (!f.isDir) Text(sizeText(f.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                         }
                     }
-                    DropdownMenu(menuFor == f.name, { menuFor = null }) {
+                    LDropdownMenu(menuFor == f.name, { menuFor = null }) {
                         if (!f.isDir) DropdownMenuItem({ Text(stringResource(R.string.ssh_download)) }, { menuFor = null; pending = f; saver.launch(f.name) })
                         DropdownMenuItem({ Text(stringResource(R.string.ssh_delete)) }, { menuFor = null; deleteFor = f })
                     }
@@ -308,7 +323,7 @@ private fun SshFiles(ctx: Context) {
         }
     }
     deleteFor?.let { f ->
-        AlertDialog(
+        LAlertDialog(
             onDismissRequest = { deleteFor = null },
             title = { Text(stringResource(R.string.ssh_delete)) },
             text = { Text(stringResource(R.string.ssh_confirm_delete, f.name)) },

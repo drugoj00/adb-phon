@@ -59,13 +59,16 @@ object Ssh {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("hk_" + hostId(host, port)).remove("hk_$host").apply()
     }
 
-    suspend fun connect(ctx: Context, host: String, port: Int, user: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
+    /** Вход по паролю или по ключу: [key] — содержимое файла закрытого ключа (хранится только в памяти на время сеанса), [password] тогда служит парольной фразой ключа. */
+    suspend fun connect(ctx: Context, host: String, port: Int, user: String, password: String, key: ByteArray? = null): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             disconnectNow()
-            val s = JSch().getSession(user, host, port)
-            s.setPassword(password)
+            val jsch = JSch()
+            if (key != null) jsch.addIdentity("adbphon-key", key, null, if (password.isEmpty()) null else password.toByteArray())
+            val s = jsch.getSession(user, host, port)
+            if (key == null) s.setPassword(password) else if (password.isNotEmpty()) s.setPassword(password)
             s.setConfig("StrictHostKeyChecking", "yes")
-            s.setConfig("PreferredAuthentications", "password,keyboard-interactive")
+            s.setConfig("PreferredAuthentications", if (key != null) "publickey,password,keyboard-interactive" else "password,keyboard-interactive")
             s.setHostKeyRepository(Tofu(ctx.applicationContext))
             s.setServerAliveInterval(20_000)
             s.connect(15_000)

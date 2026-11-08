@@ -70,6 +70,12 @@ object Archives {
                         }
                     }
                 }
+                head[0] == 'R'.code.toByte() && head[1] == 'a'.code.toByte() && head[2] == 'r'.code.toByte() && head[6] == 1.toByte() -> {
+                    // RAR5: junrar его не умеет, читает родная часть (UnRAR)
+                    Arc.open(src).use { a ->
+                        for (e in a.entries) if (!e.isDir) add(e.path) { o -> a.open(e).use { it.copyTo(o) } }
+                    }
+                }
                 head[0] == 'R'.code.toByte() && head[1] == 'a'.code.toByte() && head[2] == 'r'.code.toByte() -> {
                     com.github.junrar.Archive(src).use { a ->
                         var h = a.nextFileHeader()

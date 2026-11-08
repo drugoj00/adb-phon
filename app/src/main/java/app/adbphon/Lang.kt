@@ -1,6 +1,9 @@
 package app.adbphon
 
+import androidx.compose.foundation.layout.imePadding
+
 import android.content.Context
+import androidx.compose.foundation.layout.fillMaxWidth
 import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.content.res.Resources
@@ -57,12 +60,36 @@ fun LAlertDialog(
     dismissButton: (@androidx.compose.runtime.Composable () -> Unit)? = null,
     title: (@androidx.compose.runtime.Composable () -> Unit)? = null,
     text: (@androidx.compose.runtime.Composable () -> Unit)? = null,
+    wide: Boolean = false,
+    ime: Boolean = false,
 ) {
     androidx.compose.material3.AlertDialog(
+        modifier = (if (wide) androidx.compose.ui.Modifier.fillMaxWidth(.94f) else androidx.compose.ui.Modifier).let { if (ime) it.imePadding() else it },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !wide, decorFitsSystemWindows = !ime),
         onDismissRequest = onDismissRequest,
         confirmButton = { LangScope(confirmButton) },
         dismissButton = dismissButton?.let { d -> { LangScope(d) } },
         title = title?.let { t -> { LangScope(t) } },
         text = text?.let { t -> { LangScope(t) } },
     )
+}
+
+/** Dialog с языком из настроек программы (Compose в окнах подставляет контекст системы). */
+@androidx.compose.runtime.Composable
+fun LDialog(onDismissRequest: () -> Unit, properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(), content: @androidx.compose.runtime.Composable () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { LangScope(content) }
+}
+
+/** DropdownMenu с языком из настроек программы. */
+@androidx.compose.runtime.Composable
+fun LDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    content: @androidx.compose.runtime.Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    androidx.compose.material3.DropdownMenu(expanded, onDismissRequest, modifier) {
+        val scope = this
+        LangScope { scope.content() }
+    }
 }

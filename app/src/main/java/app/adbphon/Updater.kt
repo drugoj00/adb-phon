@@ -26,10 +26,14 @@ object Updater {
             val out = ArrayList<Release>()
             for (i in 0 until arr.length()) {
                 val r = arr.getJSONObject(i)
+                // самообновление смотрит только выпуски самой программы (тег вида «v5.0» или «5.0»); выпуск модуля облаков («clouds-1.0») и любые другие теги пропускаются
+                if (!Regex("^v?\\d+(\\.\\d+)*\$").matches(r.optString("tag_name"))) continue
+                if (r.optBoolean("prerelease") || r.optBoolean("draft")) continue
                 val assets = r.optJSONArray("assets") ?: continue
                 for (j in 0 until assets.length()) {
                     val a = assets.getJSONObject(j)
-                    if (a.optString("name").endsWith(".apk", ignoreCase = true)) {
+                    // файл программы, а не модуля облаков
+                    if (a.optString("name").endsWith(".apk", ignoreCase = true) && !a.optString("name").contains("clouds", ignoreCase = true)) {
                         out += Release(
                             tag = r.optString("tag_name"),
                             title = r.optString("name").ifBlank { r.optString("tag_name") },

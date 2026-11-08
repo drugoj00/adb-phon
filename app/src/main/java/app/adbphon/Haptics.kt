@@ -174,7 +174,8 @@ object Feedback {
         if (now - last < 35) return
         last = now
         prepare(ctx)
-        if (vibro) runCatching {
+        // вибро от игры имеет приоритет: короткий тик не обрывает его (звук щелчка остаётся)
+        if (vibro && !PadRumble.active()) runCatching {
             val v = vib
             if (v != null && v.hasVibrator()) {
                 // моторам телефона нужно 30-40 мс, чтобы раскачаться: короче толчок не чувствуется; 45 мс на полной силе мотора ощущаются как короткий упругий толчок
