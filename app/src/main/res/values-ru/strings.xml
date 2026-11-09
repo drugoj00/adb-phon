@@ -1513,4 +1513,6 @@
     <string name="wf_mode_direct">только Wi-Fi Direct</string>
     <string name="kpr_ask_title">%1$s хочет подключиться к геймпаду</string>
     <string name="kpr_ask_connect">Подключить</string>
+    <string name="gph_setting">Освобождать память игрового устройства при подключении (по ADB) и предупреждать о лишних контроллерах</string>
+    <string name="gph_extra">На игровом устройстве найдены лишние контроллеры: %1$s. Игра может принять один из них за первый и не слушать этот телефон.</string>
 </resources>
