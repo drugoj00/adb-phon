@@ -1513,4 +1513,6 @@
     <string name="wf_mode_direct">лише Wi-Fi Direct</string>
     <string name="kpr_ask_title">%1$s хоче підключитися до геймпада</string>
     <string name="kpr_ask_connect">Підключити</string>
+    <string name="gph_setting">Звільняти пам’ять ігрового пристрою під час підключення (через ADB) і попереджати про зайві контролери</string>
+    <string name="gph_extra">На ігровому пристрої знайдено зайві контролери: %1$s. Гра може вважати один із них першим і не слухати цей телефон.</string>
 </resources>
