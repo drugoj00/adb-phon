@@ -1525,4 +1525,6 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="wf_mode_direct">Wi-Fi Direct only</string>
     <string name="kpr_ask_title">%1$s wants to connect to the gamepad</string>
     <string name="kpr_ask_connect">Connect</string>
+    <string name="gph_setting">Free memory of the game device on connect (over ADB) and warn about extra controllers</string>
+    <string name="gph_extra">Extra controllers found on the game device: %1$s. A game may take one of them as the first controller and ignore this phone.</string>
 </resources>
