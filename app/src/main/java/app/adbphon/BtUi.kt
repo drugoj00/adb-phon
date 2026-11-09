@@ -172,6 +172,10 @@ private fun BtTopBar(ctx: Context, land: Boolean = false) {
             Row(Modifier.fillMaxWidth().clickable { autoLast = !autoLast; BtAuto.setAutoLast(ctx, autoLast) }, verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.Checkbox(autoLast, { autoLast = it; BtAuto.setAutoLast(ctx, it) }); Text(stringResource(R.string.bta_auto_last), fontSize = 13.sp)
             }
+            var gamePrep by remember { mutableStateOf(GameHostPrep.enabled(ctx)) }
+            Row(Modifier.fillMaxWidth().clickable { gamePrep = !gamePrep; GameHostPrep.setEnabled(ctx, gamePrep) }, verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(gamePrep, { gamePrep = it; GameHostPrep.setEnabled(ctx, it) }); Text(stringResource(R.string.gph_setting), fontSize = 13.sp)
+            }
         }
     }
 }

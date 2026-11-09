@@ -172,6 +172,7 @@ object BtHid {
                 lastHost = device
                 hostAddr = device.address
                 hostName = runCatching { device.name }.getOrNull() ?: device.address
+                appCtx?.let { GameHostPrep.run(it, device.address) }    // память и лишние контроллеры игрового устройства (если есть ADB)
             } else if (state == BluetoothProfile.STATE_DISCONNECTED && device != null && device == host) {
                 host = null
                 hostName = null
