@@ -16,7 +16,7 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 **Version 5.0.** [ADB-phon-5.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `d79582cf06b9f55dc45ec863d87390e7f7bd100034788fee5b1cb40c87cf3410`
+SHA-256: `12578e5b20a2ea5a143e750773a22cfd0c3377df7bba988503e21ba373acc567`
 
 ## What's new in 5.0
 
@@ -30,10 +30,10 @@ SHA-256: `d79582cf06b9f55dc45ec863d87390e7f7bd100034788fee5b1cb40c87cf3410`
 - Cloud drives need the “ADB-phon Clouds” module to be installed (free, a separate app). The app offers to download and install it by itself when you create your first cloud drive (internet and Android’s permission to install apps are needed); the downloaded file deletes itself after installation. The module exists for ARM 64/32-bit, x86 and x86_64, and the app picks the right one. Without the module the main app stays light and works with everything else.
 - Adding a cloud is easy: after choosing a service you only sign in in the browser. For Google Drive the app has a shared key (a trial one, for the first 100 users); after that the “Own key” wizard walks you through creating your own: it puts the needed texts on the clipboard, finds the copied client ID and secret and signs in by itself. Sign in with a login and password right in the app (Yandex Disk with an app password, Mail.ru and others).
 - Gamepad: the on-screen gamepad “Play on this phone” turns the phone or the TV box into a controller: sticks, A/B/X/Y, triggers and bumpers, Back, Guide and Start over any game. Xbox or PlayStation layout, dead zone, size and transparency; works on Android 8 and newer. Tilting the phone can replace a stick (for example steering in racing games): the angle, dead zone and smoothing are adjustable. Requirements: ADB to the phone itself (wireless debugging on Android 11 and newer; on Android 8–10 run adb tcpip 5555 from a computer once) or root, the “Display over other apps” permission; the game must support a gamepad; for heavy games 6 GB of memory or more is recommended.
-- Gamepad: the phone as a Bluetooth gamepad for a PC with vibration from the PC, “Cursor” mode and the “Device” button. Requirements: Bluetooth on the phone with the HID device role (Android 9 and newer on most phones) and pairing with a Windows computer; for vibration from the PC and the Xbox controller mode install “ADB-phon Bridge” on the computer (driver, tray icon, starts with Windows).
+- Gamepad: the phone as a Bluetooth gamepad for a PC with vibration from the PC and a Bluetooth button for choosing the device. Requirements: Bluetooth on the phone with the HID device role (Android 9 and newer on most phones) and pairing with a Windows computer; for vibration from the PC and the Xbox controller mode install “ADB-phon Bridge” on the computer (driver, tray icon, starts with Windows).
 - More: landscape layout of the “Apps”, “Files”, “Remote” and “PC mouse” tabs (handy for car head units and wide screens), choice of the side for the button panel.
 - More: “Apps”: clearing cache and data, batch actions on the selected apps (disable, enable, stop, clear cache, save APK, uninstall), saved APK copies with install and delete.
-- More: “PC mouse”: Bluetooth turns on by itself when you open the section and off when you leave, the last connection comes first; Bluetooth auto-connect to the last device and to an Android box over ADB.
+- More: “PC mouse”: Bluetooth turns on by itself when you open the section and off when you leave, the last connection comes first; automatic connection to an Android box over ADB; auto-connect to the last Bluetooth device is off by default, another device that tries to connect gets a request.
 - More: rotating the phone screen from the app; a “Disconnect” button on the connection notification in the shade.
 
 ## Features
@@ -54,7 +54,7 @@ SHA-256: `d79582cf06b9f55dc45ec863d87390e7f7bd100034788fee5b1cb40c87cf3410`
 - **Files.** Two-panel file manager: phone memory, memory card, USB drives, archives (ZIP, 7z, RAR, TAR), Android/data over ADB, network folders and cloud drives in one tree. Create, rename, copy, move, delete, ZIP, text files, built-in editor, selection by mask, drag and drop between panels, a recycle bin for the phone, card, clouds and network folders, and a “File already exists” window (Rename, Replace, Cancel, Apply to all). After a restart folders and places come back.
 - **Cloud drives.** Google Drive, MEGA, Dropbox, OneDrive, Yandex Disk, Box, pCloud and dozens of other services. Clouds work through a separate free module, “ADB-phon Clouds”, offered for download once when you add a cloud; the downloaded file deletes itself after installation. You sign in in the browser; if the shared key of the app is busy, the “Own key” wizard walks you through creating your own key, step by step.
 - **Network folders.** SMB, SFTP, FTP, FTPS and WebDAV: browse, copy and move in both directions, also directly between two network sources or from a cloud to the network. A file is written safely: the original survives a failure or cancel.
-- **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC, “Cursor” mode) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed.
+- **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
 - **Console.** Any shell command.
 - **Settings.** Theme (auto, light, dark), language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
@@ -77,6 +77,11 @@ SHA-256: `d79582cf06b9f55dc45ec863d87390e7f7bd100034788fee5b1cb40c87cf3410`
 ![The “Own key” wizard: one short step at a time, the texts are put on the clipboard for you.](screenshots/en/07-own-key.png)
 
 ![The cloud module is offered once, when you add a cloud.](screenshots/en/08-cloud-module.png)
+
+## Videos
+
+- [Gamepad: Android to Android (Asphalt 9)](https://youtu.be/V30zZv2MmFM)
+- [Gamepad: Android to PC (GTA 5)](https://youtu.be/OmIT5jgrWFw)
 
 ## Quick start
 
