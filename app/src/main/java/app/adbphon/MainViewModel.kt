@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 
 enum class Filter { USER, SYSTEM, BLOAT, DISABLED, REMOVED, ALL }
 
-enum class Act { DISABLE, ENABLE, UNINSTALL, RESTORE, STOP, CLEAR, SAVE }
+enum class Act { DISABLE, ENABLE, UNINSTALL, RESTORE, STOP, CLEAR, CACHE, SAVE }
 
 data class Fav(val name: String, val host: String, val port: Int, val kind: String)
 
@@ -90,7 +90,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun connectRoot() = launchBusy {
         Adb.autoOff = false
         manualPending = true
-        if (Adb.tryRoot(manual = true)) onConnected("") else message = t(R.string.root_fail)
+        if (Adb.tryRoot(manual = true)) { forgetRemote(); onConnected("") } else message = t(R.string.root_fail)
     }
 
     fun pair(host: String, port: Int, code: String) = launchBusy {
@@ -113,8 +113,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         remoteHost = null
     }
 
+    /** Последнее чужое устройство больше не подключаем само при запуске (иначе программа каждый раз уходила бы к нему, а не к этому устройству). */
+    private fun forgetRemote() { if (lastDevice?.self == false) { lastDevice = null; prefs.edit().remove("last").apply() } }
+
     private suspend fun onConnected(host: String) {
         remoteHost = host.trim().ifEmpty { null }
+        if (remoteHost == null) forgetRemote()
         connected = true
         if (manualPending) { manualPending = false; manualConnect = true }
         val model = runCatching {
@@ -124,6 +128,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val shown = names[remoteHost ?: ""]?.takeIf { it.isNotBlank() } ?: model.ifBlank { t(R.string.net_name_unknown) }
         val addr = remoteHost ?: t(R.string.net_self)
         message = t(R.string.msg_connected_to, shown, addr)
+        // связь с этим телефоном есть: выдаём себе право на защищённые настройки, чтобы отладку по Wi-Fi включать и выключать напрямую, без окон Android
+        if (remoteHost == null && !WifiDebug.canWrite(ctx)) runCatching { Adb.shell("pm grant app.adbphon android.permission.WRITE_SECURE_SETTINGS") }
         if (model.isNotBlank()) {
             val keys = if (remoteHost == null) Discovery.myAddresses(ctx) else setOf(remoteHost!!)
             keys.forEach { setName(it, model) }
@@ -150,6 +156,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         // вкладки управления должны показываться только при настоящем подключении: при запуске пробуем последнее чужое устройство
         lastDevice?.takeIf { !it.self && !Adb.autoOff && !Adb.isConnected }?.let { connectFound(it, manual = false) }
+        // нет чужого устройства для возврата: этот телефон подключаем через root сразу при запуске, а не только когда открыта вкладка «Связь»
+        if (lastDevice?.self != false && !Adb.autoOff && !Adb.isConnected && Cfg.useRoot(ctx) && Adb.suPresent && !Adb.rootSuppressed) viewModelScope.launch { if (Adb.tryRoot()) onConnected("") }
+        // связь с этим телефоном без root поднимается сама, с любой вкладки (раньше только когда открыта вкладка «Связь»): порт 5555, затем беспроводная отладка;
+        // если отладка по Wi-Fi выключена, а право на защищённые настройки есть, она включается сама (кроме случая, когда её выключил сам человек)
+        viewModelScope.launch {
+            val old = android.os.Build.VERSION.SDK_INT < 30
+            var n = 0
+            while (true) {
+                if (!Adb.autoOff && !Adb.isConnected && !busy && lastDevice?.self != false) {
+                    if (n % 2 == 0) {
+                        Adb.connectLocal(5555)
+                        if (!Adb.isConnected && !old && n % 8 == 0) Adb.connectWireless(ctx, null)
+                    }
+                    if (!old && !Adb.isConnected && n % 8 == 2 && WifiDebug.canWrite(ctx) && !WifiDebug.userOff(ctx) && !WifiDebug.isOn(ctx)) WifiDebug.set(ctx, true)
+                }
+                Hooks.refresh()
+                n++
+                kotlinx.coroutines.delay(1800)
+            }
+        }
     }
 
     private fun remember(f: Found) {
@@ -173,6 +199,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val b = launch { Discovery.scanTcp(ctx, add) }
                     a.join(); b.join()
                 }
+            }
+            // собственный телефон показываем один раз: устаревшие записи mDNS (порт уже закрыт) и повторы по разным адресам убираем
+            val selfs = found.filter { it.self }
+            if (selfs.isNotEmpty()) {
+                val alive = withContext(Dispatchers.IO) {
+                    selfs.filter { f -> runCatching { java.net.Socket().use { it.connect(java.net.InetSocketAddress(f.host, f.port), 400) }; true }.getOrDefault(false) }
+                }
+                val keep = alive.firstOrNull { it.kind == "tcp" } ?: alive.firstOrNull()
+                found.removeAll { it.self && it != keep }
+                if (keep != null && lastDevice?.self == true) lastDevice = null
             }
             scanning = false
             scanned = true
@@ -682,7 +718,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Действие над выбранными приложениями; возвращает пропущенные защищённые. */
     fun run(act: Act) {
         val targets = apps.filter { it.pkg in selected }
-        val skipped = targets.filter { it.pkg in PROTECTED && act != Act.SAVE && act != Act.STOP }.map { it.pkg }
+        val skipped = targets.filter { it.pkg in PROTECTED && act != Act.SAVE && act != Act.STOP && act != Act.CACHE }.map { it.pkg }
         val work = targets.filter { it.pkg !in skipped }
         launchBusy {
             // нельзя отключить или удалить ВСЕ главные экраны: сначала запасной (Меню приложений из assets)
@@ -702,6 +738,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (saved > 0) AppLog.i("ADBphon", "copies saved: $saved")
             }
             for (a in work) {
+                if (act == Act.CACHE) { if (runCatching { AppActions.clearCache(a.pkg) }.getOrNull()?.first == true) ok++ else bad++; continue }
                 val out = runCatching { Adb.shell(command(act, a)) }
                 val text = out.getOrDefault("")
                 val good = out.isSuccess && !text.contains("Failure", true) && !text.contains("Exception", true) && !text.contains("Error", true)
@@ -723,6 +760,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Act.RESTORE -> "cmd package install-existing --user 0 ${a.pkg}"
         Act.STOP -> "am force-stop ${a.pkg}"
         Act.CLEAR -> "pm clear ${a.pkg}"
+        Act.CACHE -> "true"
         Act.SAVE -> buildString {
             append("mkdir -p /sdcard/Download/ADB-phon")
             a.paths.forEachIndexed { i, p ->
@@ -913,7 +951,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { Updater.fetch() } }
                 .onSuccess { list ->
-                    githubVersions = list.map { Ver("${it.tag} · ${it.date} · ${it.size / 1024 / 1024} МБ", null, it) }
+                    githubVersions = list.map { Ver("${it.tag} · ${fmDate(it.date)} · ${it.size / 1024 / 1024} МБ", null, it) }
                     githubState = "ok"
                 }
                 .onFailure { AppLog.e("ADBphon", "github releases", it); githubState = "error" }

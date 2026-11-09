@@ -285,7 +285,7 @@ fun DropDialog(d: FmDlg.Drop, close: () -> Unit) {
             Surface(Modifier.width(w).heightIn(max = maxHeight * 0.94f), shape = RoundedCornerShape(18.dp), tonalElevation = 6.dp) {
                 Column(Modifier.fillMaxWidth()) {
                 if (land) DropLandRow(d, n, move, { move = it }, editing, { editing = !editing }, newName, { newName = it }, size, { ok() }, close, cancelFocus, teal, dim) else {
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 12.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.weight(1f, fill = false).barScroll().padding(start = 16.dp, end = 12.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(if (move) Icons.Filled.DriveFileMove else Icons.Filled.ContentCopy, null, tint = if (move) Color(0xFF6A5ACD) else teal, modifier = Modifier.size(24.dp))
                         Text(stringResource(if (move) R.string.drop_title_move else R.string.drop_title_copy), Modifier.padding(start = 10.dp), fontSize = 19.sp, fontFamily = CondFont)

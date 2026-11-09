@@ -60,7 +60,7 @@ fun NetDialog(onClose: () -> Unit) {
                 status = ctx.getString(R.string.net_downloading, u.substringAfterLast('/'), 0)
                 val f = NetSearch.download(ctx, u) { mb -> status = ctx.getString(R.string.net_downloading, u.substringAfterLast('/'), mb) }
                 if (f == null) continue
-                if (!Adb.isConnected) { status = ctx.getString(R.string.conn_need); busy = false; return@launch }
+                if (!AutoAdb.ensure()) { status = AutoAdb.hint(); busy = false; return@launch }
                 status = ctx.getString(R.string.net_installing)
                 val (ok, _) = Batch.installViaAdb(ctx, listOf(f))
                 if (ok > 0) { status = ctx.getString(R.string.net_done); done = true; Hooks.reloadApps(); break }

@@ -205,7 +205,7 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
         onDismissRequest = close,
         title = { Text(stringResource(R.string.ok_title, CloudErr.providerName(ctx, type))) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (sharedClosed) Text(stringResource(R.string.okw_shared_closed), fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.okw_progress, step + 1, total), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                 LinearProgressIndicator(progress = { (step + 1) / total.toFloat() }, modifier = Modifier.fillMaxWidth())

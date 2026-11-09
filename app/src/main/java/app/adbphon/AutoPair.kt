@@ -21,12 +21,16 @@ import kotlinx.coroutines.launch
 class AutoPairService : AccessibilityService() {
     private var lastPair = 0L
     private var lastClick = 0L
+    private var lastScroll = 0L
+    private var scrollDown = true
+    private var wasWanted = false
+    private var connectTryAt = 0L
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
             // страницы настроек статичны: без новых событий проверяем окно раз в секунду, пока идёт автоподключение
-            if (Pairing.autoWanted) evaluate()
+            if (Pairing.autoWanted) evaluate() else { wasWanted = false; connectTryAt = 0L }
             handler.postDelayed(this, 1000)
         }
     }
@@ -56,7 +60,66 @@ class AutoPairService : AccessibilityService() {
 
     override fun onAccessibilityEvent(e: AccessibilityEvent) { if (Pairing.autoWanted) evaluate() }
 
+    private fun evaluateOff() {
+        val root = rootInActiveWindow ?: return
+        if (root.packageName?.toString()?.contains("settings", true) != true) return
+        val now = System.currentTimeMillis()
+        if (now - lastClick < 900) return
+        val nodes = ArrayList<AccessibilityNodeInfo>(); collect(root, nodes)
+        val labels = nodes.map { it to label(it) }
+        val row = labels.firstOrNull { (n, t) -> isWifiDebugTitle(t) && n.isVisibleToUser }
+        if (row != null) {
+            var sw: AccessibilityNodeInfo? = null
+            var c: AccessibilityNodeInfo? = row.first
+            var hops = 0
+            while (c != null && hops < 5 && sw == null) {
+                val sub = ArrayList<AccessibilityNodeInfo>(); collect(c, sub)
+                sw = sub.firstOrNull { it.className?.contains("Switch") == true && it.isVisibleToUser }
+                c = c.parent; hops++
+            }
+            lastClick = now
+            if (sw != null && sw.isChecked) { Log.i("TVApps", "AutoPair: выключить беспроводную отладку"); clickUp(sw) }
+            else { Pairing.wantSwitchOn = null; Pairing.autoWanted = false; wasWanted = false; runCatching { startActivity(android.content.Intent(applicationContext, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } }
+            return
+        }
+        val onDev = labels.any { (_, t) -> t.contains("разработчик", true) || t.contains("розробник", true) || t.contains("developer", true) }
+        if (onDev && now - lastScroll > 1000) {
+            val sc = nodes.firstOrNull { it.isScrollable && it.isVisibleToUser }
+            if (sc != null) { lastScroll = now; sc.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) }
+        }
+    }
+
+    /** Режим «открыть страницу отладки по Wi-Fi»: находим строку в параметрах разработчика и нажимаем её (переключатель не трогаем), листая вниз. */
+    private fun evaluateOpen() {
+        val root = rootInActiveWindow ?: return
+        if (root.packageName?.toString()?.contains("settings", true) != true) return
+        val now = System.currentTimeMillis()
+        val nodes = ArrayList<AccessibilityNodeInfo>(); collect(root, nodes)
+        val labels = nodes.map { it to label(it) }
+        if (labels.any { (_, t) -> PAIR.any { t.contains(it, true) } }) { Pairing.openOnly = false; Pairing.autoWanted = false; wasWanted = false; return }   // страница открыта
+        if (now - lastClick < 900) return
+        val row = labels.firstOrNull { (n, t) -> isWifiDebugTitle(t) && n.isVisibleToUser }
+        if (row != null) { lastClick = now; clickUp(row.first); return }
+        val onDev = labels.any { (_, t) -> t.contains("разработчик", true) || t.contains("розробник", true) || t.contains("developer", true) }
+        if (onDev && now - lastScroll > 450) {
+            val sc = nodes.firstOrNull { it.isScrollable && it.isVisibleToUser }
+            if (sc != null) { lastScroll = now; sc.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) }
+        }
+    }
+
     private fun evaluate() {
+        if (Pairing.openOnly) { evaluateOpen(); return }
+        // режим «выключить отладку по Wi-Fi»: находим переключатель и выключаем
+        if (Pairing.wantSwitchOn == false) { evaluateOff(); return }
+        // связь уже появилась (в том числе после включения переключателя, когда пара давно сделана): закончить и вернуть программу
+        if (Adb.isConnected) {
+            Pairing.autoWanted = false
+            runCatching { startActivity(android.content.Intent(applicationContext, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
+            Fm.onAdbReady()
+            return
+        }
+        // новый запуск автоподключения: страница открыта заново с начала (CLEAR_TASK), листаем вниз до пункта «Беспроводная отладка»
+        if (!wasWanted) { wasWanted = true; scrollDown = true }
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString() ?: return
         if (!pkg.contains("settings", true)) return
@@ -89,9 +152,21 @@ class AutoPairService : AccessibilityService() {
         if (allow != null && askText) { act("разрешить", allow.first); return }
         // 3. страница «Беспроводная отладка»: пункт «Подключение устройства с кодом сопряжения»
         val pairItem = labels.firstOrNull { (_, t) -> PAIR.any { t.contains(it, true) } }
-        if (pairItem != null) { act("пункт кода", pairItem.first); return }
+        if (pairItem != null) {
+            // пара с этим ключом могла быть сделана раньше: сначала пробуем просто подключиться, чтобы не плодить новые записи «ADB-phon» в списке подключённых устройств
+            if (connectTryAt == 0L) {
+                connectTryAt = now
+                Log.i("TVApps", "AutoPair: сначала пробую подключиться без нового сопряжения")
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    repeat(3) { if (!Adb.isConnected) { Adb.connectWireless(applicationContext, null); if (!Adb.isConnected) kotlinx.coroutines.delay(1200) } }
+                }
+                return
+            }
+            if (now - connectTryAt < 9000) return
+            act("пункт кода", pairItem.first); return
+        }
         // 4. строка «Беспроводная отладка» в разделе для разработчиков: переключатель этой строки и сама строка
-        val row = labels.firstOrNull { (n, t) -> WIRELESS.any { w -> t.equals(w, true) || t.startsWith(w, true) } && n.isVisibleToUser }
+        val row = labels.firstOrNull { (n, t) -> isWifiDebugTitle(t) && n.isVisibleToUser }
         if (row != null) {
             // переключатель в этой же строке (до четырёх уровней вверх)
             var sw: AccessibilityNodeInfo? = null
@@ -106,6 +181,18 @@ class AutoPairService : AccessibilityService() {
             act("открыть страницу беспроводной отладки", row.first)
             return
         }
+        // 5. строки «Беспроводная отладка» на экране нет: у Samsung она далеко внизу параметров разработчика, листаем список
+        //    сначала вниз, дойдя до конца вверх (страницу пересматриваем каждую секунду). Листаем только в параметрах разработчика.
+        val onDev = labels.any { (_, t) -> t.contains("разработчик", true) || t.contains("розробник", true) || t.contains("developer", true) }
+        if (onDev && now - lastScroll > 1000) {
+            val sc = nodes.firstOrNull { it.isScrollable && it.isVisibleToUser }
+            if (sc != null) {
+                lastScroll = now
+                val ok = sc.performAction(if (scrollDown) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                Log.i("TVApps", "AutoPair: листаю ${if (scrollDown) "вниз" else "вверх"}: $ok")
+                if (!ok) scrollDown = !scrollDown
+            }
+        }
     }
 
     companion object {
@@ -116,6 +203,16 @@ class AutoPairService : AccessibilityService() {
             "коду підключення", "кодом підключення", "кодом сполучення", "коду сполучення", "с помощью кода",
         )
         private val WIRELESS = listOf("Wireless debugging", "Беспроводная отладка", "Отладка по Wi", "Бездротове налагодження", "Налагодження по Wi")
+
+        /** Название пункта «Беспроводная отладка» у разных производителей и на разных языках: известные названия, а для остальных общее правило «Wi-Fi/беспроводн… + отладка/debug», короткий заголовок без слов про режим и USB. */
+        fun isWifiDebugTitle(t: String): Boolean {
+            if (WIRELESS.any { w -> t.equals(w, true) || t.startsWith(w, true) }) return true
+            val l = t.lowercase()
+            if (l.length > 34 || "usb" in l || "режим" in l || "режим" in l || "mode" in l || "підключ" in l || "подключ" in l) return false
+            val wifi = listOf("wi-fi", "wi‑fi", "wifi", "wlan", "wireless", "беспровод", "бездрот", "вай", "по сети", "по мережі", "network").any { it in l }
+            val dbg = listOf("debug", "отладк", "налагод", "налад").any { it in l }
+            return wifi && dbg
+        }
 
         fun isEnabled(ctx: Context): Boolean {
             val s = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()

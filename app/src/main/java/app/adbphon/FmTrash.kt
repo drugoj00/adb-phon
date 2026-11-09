@@ -276,7 +276,7 @@ fun FTrashDlg(close: () -> Unit, initConfirm: String? = null) {
     var confirm by remember { mutableStateOf<String?>(null) } // "": вся корзина; иначе id элемента
     var busy by remember { mutableStateOf(false) }
     val items = remember { mutableStateListOf<FmTrash.FItem>() }
-    val dateFmt = remember { SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault()) }
+    val dateFmt = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     suspend fun load() {
         loading = true
         val l = FmTrash.list()

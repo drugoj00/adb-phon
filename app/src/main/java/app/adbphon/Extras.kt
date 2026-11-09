@@ -133,7 +133,7 @@ fun SpecialDialog(vm: MainViewModel) {
         onDismissRequest = { vm.closeSpecial() },
         title = { Text(stringResource(R.string.special_title, app.label), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items.forEach { (label, kind) ->
                     OutlinedButton({ vm.special(app.pkg, kind) }, Modifier.fillMaxWidth()) { Text(stringResource(label), fontSize = 13.sp, maxLines = 2) }
                 }
@@ -150,7 +150,7 @@ fun VersionsDialog(vm: MainViewModel) {
         onDismissRequest = { vm.closeVersions() },
         title = { Text(stringResource(R.string.ver_title), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.ver_current, vm.appVersion), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ver_github), fontWeight = FontWeight.Bold)
                 when (vm.githubState) {
@@ -230,7 +230,7 @@ fun FilesScreen(vm: MainViewModel) {
                         Icon(if (f.isDir) Icons.Filled.Folder else Icons.Filled.InsertDriveFile, null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(if (f.isDir) f.date else humanSize(f.size) + " · " + f.date, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                            Text(if (f.isDir) fmDate(f.date) else humanSize(f.size) + " · " + fmDate(f.date), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                         }
                     }
                     LDropdownMenu(menuFor == f.name, { menuFor = null }) {
@@ -322,7 +322,7 @@ fun RemoteScreen(vm: MainViewModel) {
     if (land) {
         RemoteLandscape(vm, mode, text, { text = it }, cursor, sens, { sens = it }, arrows, headerUi)
     } else
-    Column(Modifier.verticalScroll(rememberSavedScroll("tab.remote")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    TabColumn("tab.remote", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(10.dp)) {
         headerUi()
         when (mode) {
             0 -> {
@@ -398,7 +398,7 @@ private fun RemoteLandscape(
     SplitHalves(Modifier.fillMaxSize().padding(12.dp), spacing = 12.dp,
         rest = {
         // «остальное»: переключатель режимов, поле текста, прокрутка, быстрые клавиши, переключатели
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberSavedScroll("tab.remote.land")), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TabColumn("tab.remote.land", Modifier.weight(1f).fillMaxHeight(), 0.dp, Arrangement.spacedBy(10.dp)) {
             headerUi()
             when (mode) {
                 0 -> {
@@ -1001,7 +1001,7 @@ fun EqChoices(items: List<EqChoice>, perRow: Int = items.size, minH: androidx.co
 fun SettingsScreen(vm: MainViewModel) {
     var colKey by remember { mutableStateOf(0) }
     androidx.compose.runtime.CompositionLocalProvider(LocalCollapseKey provides colKey) {
-    Column(Modifier.verticalScroll(rememberSavedScroll("tab.settings")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    TabColumn("tab.settings", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton({ colKey++ }) { Text(stringResource(R.string.set_collapse_all), fontSize = 13.sp) }
         }
@@ -1029,6 +1029,8 @@ fun SettingsScreen(vm: MainViewModel) {
         val copied = stringResource(R.string.copied)
         SettingSwitch(Feedback.vibro, { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_vibro), stringResource(R.string.fb_vibro_hint))
         SettingSwitch(Feedback.beep, { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_beep), stringResource(R.string.fb_beep_hint))
+        androidx.compose.material3.OutlinedButton({ Setup.only = null; Setup.open = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.su_open)) }
+        Text(stringResource(R.string.su_open_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         StartupSection(ctx)
         FilesLookSection()
         FilesDeleteSection()
@@ -1091,7 +1093,7 @@ fun SettingsScreen(vm: MainViewModel) {
             onDismissRequest = { vm.hideLog() },
             title = { Text(stringResource(R.string.log_show)) },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
+                Column(Modifier.barScroll()) {
                     if (crash.isNotBlank()) {
                         Text(stringResource(R.string.log_crash), fontWeight = FontWeight.Bold)
                         Text(crash.take(1500), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
@@ -1128,7 +1130,7 @@ fun RestoreDialog(vm: MainViewModel) {
         onDismissRequest = { vm.closeRestore() },
         title = { Text(stringResource(R.string.bk_restore_title)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (items.isEmpty()) Text(stringResource(R.string.bk_none), fontSize = 13.sp)
                 items.forEach { it0 ->
                     OutlinedButton({ vm.restoreBackup(it0) }, Modifier.fillMaxWidth()) { Text(it0.name, fontSize = 12.sp, maxLines = 1) }

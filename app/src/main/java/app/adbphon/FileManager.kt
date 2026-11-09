@@ -74,6 +74,7 @@ import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.FlipToBack
@@ -98,6 +99,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -244,6 +246,8 @@ sealed class FmDlg {
     class History : FmDlg()
     class Tree : FmDlg()
     class Storage : FmDlg()
+    class WifiServer(val dir: String) : FmDlg()
+    class WifiDev(val conn: NetConn?, val host: String, val name: String) : FmDlg()
     class Source : FmDlg()
     class CloudAdd : FmDlg()
     /** Нужен модуль «ADB-phon Облака»: скачать и установить; после установки выполняется [then]. */
@@ -371,7 +375,7 @@ object Fm {
                     p.status = str(R.string.fm_connecting)
                     val fix = FmIo.ensurePriv()
                     p.status = null
-                    if (fix != null) { p.fix = fix; err = str(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text); break }
+                    if (fix != null) { p.fix = fix; err = str(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text); if (fix == "pair" || fix == "wifi") autoPairOnce(); break }
                     p.src = "adb"; p.auto = true
                     continue
                 }
@@ -445,7 +449,36 @@ object Fm {
     var privOn by mutableStateOf(true)
 
     /** «Включить отладку по Wi-Fi»: пробуем сами, иначе открываем настройки для разработчиков. */
+    /** Единый шаг исправления для подсказок «нужна связь ADB»: «wifi» включает отладку, «pair» запускает автоматическое сопряжение (Android 11+, служба включена) или открывает «Связь». */
+    private var lastAutoPair = 0L
+    /** Нет связи ADB и нужно сопряжение: запускаем автоматический путь сами (раз в минуту, пока служба спецвозможностей включена, Android 11+). */
+    fun autoPairOnce() {
+        val now = System.currentTimeMillis()
+        if (android.os.Build.VERSION.SDK_INT >= 30 && !AutoPairService.isEnabled(sctx)) { if (!WifiDebug.userOff(sctx)) Setup.need(sctx, "acc"); return }
+        if (android.os.Build.VERSION.SDK_INT < 30 || !AutoPairService.isEnabled(sctx) || Pairing.autoWanted || now - lastAutoPair < 60_000 || WifiDebug.userOff(sctx)) return
+        lastAutoPair = now
+        // первый раз коротко объясняем и спрашиваем, дальше подключаемся сами
+        if (!Setup.sp0(sctx).getBoolean("adb_auto_ok", false)) { Setup.adbAsk = true; return }
+        Pairing.startAutoFlow(sctx)
+    }
+
+    /** Связь ADB появилась (автосопряжение закончилось): обновить подсказки «нужна связь ADB» в дереве и в панелях. */
+    fun onAdbReady() {
+        scope.launch {
+            FmRootCfg.kidErr.entries.filter { it.value.startsWith("FIX:") }.map { it.key }.forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.kids.remove(it) }
+            CloudTrash.ver++
+            panes.filter { it.fix != null }.forEach { it.fix = null; it.error = null; load(it, remember = false) }
+        }
+    }
+
+    fun fixAction(p: FmPane, fix: String) {
+        if (fix == "wifi") { enableWifiDebug(p); return }
+        WifiDebug.setUserOff(sctx, false)
+        if (android.os.Build.VERSION.SDK_INT >= 30 && AutoPairService.isEnabled(sctx)) { Setup.sp0(sctx).edit().putBoolean("adb_auto_ok", true).apply(); Pairing.startAutoFlow(sctx) } else goConnect?.invoke()
+    }
+
     fun enableWifiDebug(p: FmPane) {
+        WifiDebug.setUserOff(sctx, false)
         runCatching { android.provider.Settings.Global.putInt(sctx.contentResolver, "adb_wifi_enabled", 1) }
         if (runCatching { android.provider.Settings.Global.getInt(sctx.contentResolver, "adb_wifi_enabled", 0) == 1 }.getOrDefault(false)) load(p, remember = false)
         else runCatching { sctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -461,7 +494,7 @@ object Fm {
                 p.status = str(R.string.fm_connecting)
                 val fix = FmIo.ensurePriv()
                 p.status = null
-                if (fix != null) { p.error = str(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text); p.fix = fix } else setSource(p, "adb")
+                if (fix != null) { p.error = str(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text); p.fix = fix; if (fix == "pair" || fix == "wifi") autoPairOnce() } else setSource(p, "adb")
             }
             return
         }
@@ -912,6 +945,8 @@ object Fm {
     private suspend fun runJob(title: String, names: List<String>, bytes: Boolean = true, units: suspend () -> Long = { -1L }, files: suspend () -> Int = { -1 }, op: suspend (FmJob, String) -> String?): Boolean {
         val j = FmJob(title, names.size, bytes)
         jobs.add(j)
+        // копирование идёт в фоне: нужны уведомления и работа без ограничений батареи (если пропущено при первом запуске, спрашиваем сейчас)
+        if (Setup.need(sctx, "notif")) Setup.need(sctx, "battery")
         FmOpService.start(sctx)
         var err: String? = null
         try {
@@ -1280,7 +1315,8 @@ object Fm {
     fun ensureInstallPermission(next: () -> Unit): Boolean {
         if (sctx.packageManager.canRequestPackageInstalls()) return true
         pendingInstall = next
-        runCatching { sctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + sctx.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        Setup.askKey = "install"
+        if (false) runCatching { sctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + sctx.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
         return false
     }
 
@@ -1552,12 +1588,25 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
             val tv = Marq.tv
             Row(Modifier.fillMaxSize().padding(if (tv) 4.dp else 2.dp), horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp)) {
                 // телефон: все кнопки одним столбцом шириной 76 dp с прокруткой, остальное место панелям; приставка: прежняя сетка кнопок
-                if (!right) { if (tv) FmNarrow(actions, Modifier.width(164.dp).fillMaxHeight()) else FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight()) }
-                Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp)) {
+                if (tv) {
+                    // приставка: колонка кнопок всегда посередине между окнами, настройка «Справа/Слева» не действует
+                    FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
+                    // кнопки квадратные; размер подбирается по высоте экрана так, чтобы колонка заполняла её без пустоты снизу
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxHeight()) {
+                        val rows = (actions.count { it.label in fmMainLabels } + 1 + 1) / 2
+                        val cap = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.07f).dp
+                        val sz = ((maxHeight - 30.dp - 4.dp * (rows - 1)) / rows).coerceIn(44.dp, 78.dp).let { if (it > cap) cap else it }
+                        FmNarrow(actions, Modifier.width(sz * 2 + 4.dp).fillMaxHeight(), sz)
+                    }
+                    FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
+                } else {
+                if (!right) FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
+                Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                     FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                 }
-                if (right) { if (tv) FmNarrow(actions, Modifier.width(164.dp).fillMaxHeight()) else FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight()) }
+                if (right) FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
+                }
             }
         } else {
             // портрет: на экране одна панель; вкладки сверху и узкая полоса слева переключают панели мгновенно, свайп по списку тоже
@@ -1579,7 +1628,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
     FmDialogs()
 }
 
-class FmAction(val icon: ImageVector, val label: Int, val enabled: Boolean = true, val run: () -> Unit)
+class FmAction(val icon: ImageVector, val label: Int, val enabled: Boolean = true, val tint: Color? = null, val run: () -> Unit)
 
 @Composable
 private fun rememberFmActions(): List<FmAction> {
@@ -1615,6 +1664,13 @@ private fun rememberFmActions(): List<FmAction> {
         FmAction(Icons.Filled.SdStorage, R.string.fm_storage) { Fm.dlg = FmDlg.Storage() },
         FmAction(Icons.Filled.DeleteOutline, R.string.ft_menu) { Fm.active = p.id; Fm.dlg = FmDlg.FTrash() },
         FmAction(Icons.Filled.Dns, R.string.fm_source) { Fm.dlg = FmDlg.Source() },
+        FmAction(Icons.Filled.MusicNote, R.string.fm_play) {
+            // музыка выбранного файла (или первая в папке) во встроенном плеере, дальше по списку папки
+            val list = Fm.shown(p).filter { !it.isDir && openCat(it.ext) == "audio" }
+            val item = p.selected.firstOrNull()?.let { n -> list.firstOrNull { it.name == n } } ?: list.firstOrNull()
+            if (item == null) Fm.say(Fm.str(R.string.fm_play_none)) else openBuiltin(sctx, p, item, "audio", FmIo.join(p.path, item.name))
+        },
+        FmAction(Icons.Filled.Wifi, R.string.fm_wifi_server, true, if (WifiShare.running) Color(0xFF2E9E4F) else Color(0xFFF57C00)) { WifiExplorer.toggleServer(sctx) },
     ).also { sctx.hashCode() }
 }
 
@@ -1634,7 +1690,7 @@ private fun FmActionButton(a: FmAction, modifier: Modifier = Modifier, big: Bool
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(a.icon, null, Modifier.size(if (big) 40.dp else 22.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+        Icon(a.icon, null, Modifier.size(if (big) 40.dp else 22.dp), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha))
         Text(stringResource(a.label), fontSize = if (big) 17.sp else 10.sp, lineHeight = if (big) 20.sp else 12.sp, maxLines = if (big) 3 else 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
     }
@@ -1669,15 +1725,18 @@ private fun FmTabs() {
 @Composable
 fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
            lineHeight: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified, fontWeight: FontWeight? = null,
-           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null) {
+           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (active || LocalRowActive.current), LocalMarqOnlyActive provides true) {
-        Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // wrap: на телефоне длинное название переносится на несколько строк (строка становится выше), а не бежит
+        Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 /** Главные кнопки узкой колонки (остальные в «Ещё»). */
 private val fmMainLabels get() = setOf(R.string.fm_up, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
-    R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage)
+    R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage) +
+    // на приставке экран высокий и колонка внизу пустовала: добавляем ещё две частые кнопки (семь рядов помещаются без прокрутки)
+    (if (Marq.tv) setOf(R.string.fm_refresh, R.string.fm_new_zip, R.string.fm_play, R.string.fm_wifi_server, R.string.fm_select_none, R.string.fm_select_invert) else emptySet())
 
 /** Телефон (не ТВ) в ландшафте: места мало, поэтому всё уплотняется. */
 @Composable
@@ -1716,7 +1775,7 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
             .hoverable(hover).clickable(enabled = a.enabled) { a.run() }.padding(2.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
-        Icon(a.icon, null, Modifier.size(icon), tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+        Icon(a.icon, null, Modifier.size(icon), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha))
         Text(stringResource(a.label), fontSize = label, lineHeight = label * 1.12f, maxLines = 2, overflow = TextOverflow.Ellipsis, fontFamily = CondFont,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
     }
@@ -1732,12 +1791,12 @@ private fun FmActionIcon(a: FmAction, modifier: Modifier = Modifier) {
             .combinedClickable(enabled = true, onClick = { if (a.enabled) a.run() }, onLongClick = { Fm.say(name) })
             .semantics { contentDescription = name },
         contentAlignment = Alignment.Center,
-    ) { Icon(a.icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha)) }
+    ) { Icon(a.icon, null, Modifier.size(22.dp), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha)) }
 }
 
 /** Узкая колонка действий в ландшафте: тянется на всю высоту, крупные кнопки в три столбца поровну по высоте, остальное в «Ещё». */
 @Composable
-private fun FmNarrow(actions: List<FmAction>, modifier: Modifier) {
+private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androidx.compose.ui.unit.Dp? = null) {
     val p = Fm.cur
     val main = actions.filter { it.label in fmMainLabels }
     val rest = actions.filter { it.label !in fmMainLabels }
@@ -1747,7 +1806,7 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier) {
             fontSize = 11.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberSavedScroll("files.narrow")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items.chunked(2).forEach { r ->
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { FmSquareButton(it, 78.dp, 28.dp, 12.sp) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { if (tvSize != null) FmSquareButton(it, tvSize, tvSize * 0.36f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp) else if (Marq.tv) FmSquareButton(it, 72.dp, 26.dp, 11.5.sp) else FmSquareButton(it, 78.dp, 28.dp, 12.sp) } }
             }
         }
     }
@@ -1875,7 +1934,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
             Text(st, Modifier.padding(start = 8.dp), fontSize = 12.sp) } }
         p.parked?.let { pk -> FmParkedBody(p, pk, Modifier.weight(1f).fillMaxWidth()) }
         p.fix?.let { fx -> Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button({ if (fx == "wifi") Fm.enableWifiDebug(p) else Fm.goConnect?.invoke() }) { Text(stringResource(if (fx == "wifi") R.string.fm_fix_wifi_btn else R.string.fm_fix_pair_btn), fontSize = 13.sp) } } }
+            Button({ Fm.fixAction(p, fx) }) { Text(stringResource(if (fx == "wifi") R.string.fm_fix_wifi_btn else R.string.fm_fix_pair_btn), fontSize = 13.sp) } } }
         if (p.src == "local" && !Fm.granted && p.parked == null) FmAccessBanner(Modifier.weight(1f))
         if (p.loading && p.items.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
         p.error?.let { e ->
@@ -1906,7 +1965,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
         p.tagNote?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1) }
         val emptyKey = "\u0000empty"
         if (p.menuFor == emptyKey) LDropdownMenu(true, { p.menuFor = null }) { CreateMenu(p, p.path) { p.menuFor = null } }
-        if (p.parked == null && !(p.src == "local" && !Fm.granted)) LazyColumn(Modifier.weight(1f).fillMaxWidth().then(swipeMod).combinedClickable(onClick = {}, onLongClick = { Fm.active = p.id; p.menuFor = emptyKey }).onGloballyPositioned { FmDnd.lists[p.id] = DndList(state, it.boundsInRoot()) }.verticalScrollbar(state), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(end = SbMath.RESERVE_DP.dp), verticalArrangement = Arrangement.spacedBy(if (Marq.tv) 3.dp else 0.dp)) {
+        if (p.parked == null && !(p.src == "local" && !Fm.granted)) Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().then(swipeMod).combinedClickable(onClick = {}, onLongClick = { Fm.active = p.id; p.menuFor = emptyKey }).onGloballyPositioned { FmDnd.lists[p.id] = DndList(state, it.boundsInRoot()) }.verticalScrollbar(state), state = state, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (Marq.tv) 3.dp else 0.dp)) {
             items(rows, key = { it.key }) { r ->
                 when (r) {
                     is HeadRow -> FmGroupHeader(r.g, r.count, r.closed) { val c = r.g.ch.toString(); if (c in p.collapsed) p.collapsed.remove(c) else p.collapsed.add(c) }
@@ -1917,6 +1976,8 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
                     is TItemRow -> FmTrashItemRow(p, r.ti)
                 }
             }
+        }
+        ScrollbarHandle(state, Modifier.align(if (scrollbarLeft()) Alignment.CenterStart else Alignment.CenterEnd))
         }
         if (view == "trash" && FmRootCfg.sel.isNotEmpty()) RootSelBar(p)
         if (p.selected.isNotEmpty()) {
@@ -1932,6 +1993,7 @@ private fun FmAccessBanner(modifier: Modifier) {
     val ctx = LocalContext.current
     Column(modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.fm_perm_text), fontSize = 13.sp)
+        androidx.compose.runtime.LaunchedEffect(Unit) { Setup.need(ctx, "files") }
         Button({ Fm.askAccess(ctx) }) { Text(stringResource(R.string.fm_perm_grant)) }
     }
 }
@@ -2090,7 +2152,7 @@ private fun FmTrashItemRow(p: FmPane, ti: CloudTrash.TItem) {
     val tv = Marq.tv
     val rid = NetTrash.rid(c)
     val key = "Ti|" + rid + "|" + ti.id
-    val dateTxt = if (ti.deletedAt > 0) java.text.SimpleDateFormat("dd.MM.yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ti.deletedAt)) else ""
+    val dateTxt = if (ti.deletedAt > 0) java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ti.deletedAt)) else ""
     val dirTxt = "/" + ti.origPath.trim('/').substringBeforeLast('/', "")
     val sel = FmRootCfg.sel.containsKey(key)
     val toggle = { Fm.active = p.id; FmRootCfg.toggleSel(FmRootCfg.SelE(key, c, "T|" + rid, "", ti.name, ti.origPath, ti.isDir, ti)) }
@@ -2248,8 +2310,8 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                     Modifier)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
-                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
-                val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }).joinToString("  ·  ")
+                MqText(f.name, active = hovered || pressed || focused || sel, wrap = true, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
+                val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }?.let { fmDate(it) }).joinToString("  ·  ")
                 if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
             Checkbox(sel, { Fm.active = p.id; Fm.toggleSel(p, selKey) }, Modifier.size(if (dense) 32.dp else 36.dp))
@@ -2417,6 +2479,8 @@ private fun FmDialogs() {
             extra = { TextButton({ Fm.toggleBookmark(Fm.cur.path); Fm.dlg = FmDlg.Bookmarks() }) { Text(stringResource(R.string.fm_bm_add)) } }) { Fm.load(Fm.cur, it) }
         is FmDlg.History -> PathListDlg(R.string.fm_history, Fm.history(), R.string.fm_hist_empty, close) { Fm.load(Fm.cur, it) }
         is FmDlg.Storage -> StorageDlg(close)
+        is FmDlg.WifiServer -> WifiServerDialog(d.dir, close)
+        is FmDlg.WifiDev -> WifiDeviceDialog(d.conn, d.host, d.name, close)
         is FmDlg.SearchResult -> PathListDlg(R.string.fm_search, d.list, R.string.fm_nothing, close, subtitle = stringResource(R.string.fm_found, d.list.size)) {
             Fm.goTo(Fm.cur, it, false)
         }
@@ -2448,7 +2512,7 @@ private fun FmDialogs() {
                 BarLazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(d.items) { a ->
                         Row(Modifier.fillMaxWidth().clickable(enabled = a.enabled) { close(); a.run() }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(a.icon, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = if (a.enabled) 1f else .38f))
+                            Icon(a.icon, null, Modifier.size(24.dp), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = if (a.enabled) 1f else .38f))
                             Text(stringResource(a.label), Modifier.padding(start = 14.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (a.enabled) 1f else .38f))
                         }
                     }
@@ -2463,10 +2527,10 @@ private fun FmDialogs() {
                 }
             } } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } })
-        is FmDlg.Props -> LAlertDialog(onDismissRequest = close, title = { Text(d.title) }, text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(d.body, fontSize = 13.sp, fontFamily = FontFamily.Monospace) } },
+        is FmDlg.Props -> LAlertDialog(onDismissRequest = close, title = { Text(d.title) }, text = { Column(Modifier.barScroll()) { Text(d.body, fontSize = 13.sp, fontFamily = FontFamily.Monospace) } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
         is FmDlg.TextView -> LAlertDialog(onDismissRequest = close, title = { Text(d.title, maxLines = 1) },
-            text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(d.body, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } },
+            text = { Column(Modifier.heightIn(max = 420.dp).barScroll()) { Text(d.body, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
         is FmDlg.Archive -> LAlertDialog(onDismissRequest = close, title = { Text(d.name, maxLines = 1) },
             text = { LazyColumn(Modifier.heightIn(max = 380.dp)) { items(d.lines) { Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } },

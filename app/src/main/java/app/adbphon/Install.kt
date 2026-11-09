@@ -79,7 +79,7 @@ fun InstallHub(onClose: () -> Unit) {
         else -> HDialog(onDismissRequest = onClose) {
             Column(
                 Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth()
-                    .heightIn(max = 640.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                    .heightIn(max = 640.dp).barScroll(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.inst_hub_title), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -117,7 +117,7 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
         ) {
             Text(stringResource(R.string.install_title, files.size), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             if (files.isEmpty()) Text(stringResource(R.string.install_none), color = t.sub, fontSize = 14.sp)
-            Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = 340.dp).barScroll()) {
                 files.forEach { f ->
                     val on = f.name in chosen
                     Row(
@@ -139,9 +139,9 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
                 Chip(stringResource(R.string.install_go, chosen.size), true) {
                     val picked = files.filter { it.name in chosen }
                     if (picked.isEmpty() || busy) return@Chip
-                    if (!Adb.isConnected) { Toast.makeText(ctx, ctx.getString(R.string.conn_need), Toast.LENGTH_LONG).show(); return@Chip }
                     busy = true
                     scope.launch {
+                        if (!AutoAdb.ensure()) { busy = false; Toast.makeText(ctx, AutoAdb.hint(), Toast.LENGTH_LONG).show(); return@launch }
                         val (ok, bad) = Batch.installViaAdb(ctx, picked)
                         busy = false
                         Toast.makeText(ctx, ctx.getString(R.string.install_result_n, ok, bad), Toast.LENGTH_LONG).show()

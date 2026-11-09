@@ -74,6 +74,7 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.foundation.layout.heightIn
 import android.os.Build
 import kotlin.math.asin
@@ -127,6 +128,8 @@ object Pad {
     var hat = 8
     var buttons = 0
     @Volatile var dirty = true
+    /** Растёт при ввода из сценария: заставляет перерисовать экран геймпада (подсветка кнопок и стиков). */
+    var uiTick by androidx.compose.runtime.mutableIntStateOf(0)
 
     const val A = 0; const val B = 1; const val X = 3; const val Y = 4
     const val L1 = 6; const val R1 = 7; const val L2 = 8; const val R2 = 9
@@ -141,7 +144,7 @@ object Pad {
         tiltTarget = p.getInt("t_target", 1); tiltAxes = p.getInt("t_axes", 0); tiltAngle = p.getFloat("t_angle", 30f); tiltDead = p.getFloat("t_dead2", 0.12f)
         tiltSmooth = p.getFloat("t_smooth", 0.4f); tiltInvX = p.getBoolean("t_invx", false); tiltInvY = p.getBoolean("t_invy", false); tiltHide = p.getBoolean("t_hide", false)
         rumble = p.getBoolean("rumble", true); rumbleGain = p.getFloat("r_gain", 1f); rumbleMode = p.getInt("r_mode", 0)
-        cursor = p.getBoolean("cursor", false); cspeed = p.getFloat("cspeed", 1f)
+        cursor = false; cspeed = p.getFloat("cspeed", 1f)
     }
 
     fun save(ctx: Context) {
@@ -340,6 +343,33 @@ object Pad {
     }
 
     /** Цикл отправки: каждые 8 мс, только при изменении; остановка снимает все нажатия. */
+    // Сценарий нажатий для автоматической проверки (adb push в Android/data/app.adbphon/files/padscript.txt): строки «мс кнопки(маска) lx ly rx ry lt rt крестовина(0..7,8=нет)».
+    // Состояние держится до следующей строки; обычный ввод пальцем при этом не затрагивается, пока сценарий не загружен.
+    private var scr: List<DoubleArray>? = null
+    private var scrT0 = 0L
+    private var scrCheck = 0L
+    private fun scriptTick() {
+        val now = System.currentTimeMillis()
+        if (scr == null) {
+            if (now - scrCheck < 500) return
+            scrCheck = now
+            val f = java.io.File("/sdcard/Android/data/app.adbphon/files/padscript.txt")
+            if (!f.exists()) return
+            scr = runCatching { f.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.map { l -> l.split(' ').filter { it.isNotEmpty() }.map { it.toDouble() }.toDoubleArray() } }.getOrNull()
+            f.delete()
+            scrT0 = now
+        }
+        val sc = scr ?: return
+        val t = now - scrT0
+        if (sc.isEmpty() || t > sc.last()[0] + 30) { scr = null; axes.fill(0f); lt = false; rt = false; hat = 8; buttons = 0; dirty = true; uiTick++; return }
+        var cur: DoubleArray? = null
+        for (r in sc) if (r[0] <= t) cur = r
+        cur?.let {
+            buttons = it[1].toInt(); axes[0] = it[2].toFloat(); axes[1] = it[3].toFloat(); axes[2] = it[4].toFloat(); axes[3] = it[5].toFloat()
+            lt = it[6] > 0.5; rt = it[7] > 0.5; hat = it[8].toInt(); dirty = true; uiTick++
+        }
+    }
+
     suspend fun loop() {
         var last: ByteArray? = null
         val cur = CursorEngine()
@@ -351,6 +381,7 @@ object Pad {
                     if (BtHid.hostName != null || BtHid.dryRun || VirtualPad.on) { if (wasCursor) BtHid.releaseAll() else emit(neutral()) }
                     cur.reset(); last = null; wasCursor = cursor
                 }
+                scriptTick()
                 if (fg && (BtHid.hostName != null || BtHid.dryRun || VirtualPad.on)) {
                     if (cursor) cur.tick()
                     else {
@@ -605,10 +636,10 @@ fun PadOverlay(onExit: () -> Unit, onLetterboxed: () -> Unit = {}) {
                       Text(stringResource(R.string.pad_settings), Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                       TextButton({ settings = false }) { Text(stringResource(R.string.fm_close)) }
                   }
-                  if (portrait) Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadSettings(); PadProfilesAndHost(true) { settings = false } }
+                  if (portrait) Column(Modifier.weight(1f).fillMaxWidth().barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadSettings(); PadProfilesAndHost(true) { settings = false } }
                   else Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                      Column(Modifier.weight(1.2f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadSettings() }
-                      Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadProfilesAndHost(true) { settings = false } }
+                      Column(Modifier.weight(1.2f).fillMaxHeight().barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadSettings() }
+                      Column(Modifier.weight(1f).fillMaxHeight().barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) { PadProfilesAndHost(true) { settings = false } }
                   }
               }
           }
@@ -634,7 +665,7 @@ private fun PadSurface(mirror: Boolean, rot: Int, onExit: () -> Unit, onSettings
     val icVib = androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Filled.Vibration)
     val icGame = androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Filled.SportsEsports)
     val modeGame = stringResource(R.string.pad_mode_game); val modeCursor = stringResource(R.string.pad_mode_cursor)
-    val devLabel = stringResource(R.string.pad_device)
+    val icDev = androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Filled.Bluetooth)   // кнопка выбора устройства без слова (09.11.2026, слово владелицы)
     val hostNow = BtHid.hostName
     val caption = if (BtHid.switching) (BtAuto.status ?: stringResource(R.string.pad_switching)) else if (hostNow != null) stringResource(R.string.bt_connected, hostNow) else stringResource(R.string.pad_no_host)
     val flipText = stringResource(R.string.pad_flip)
@@ -682,7 +713,7 @@ private fun PadSurface(mirror: Boolean, rot: Int, onExit: () -> Unit, onSettings
                                 val t = taps.remove(id)
                                 if (t != null) {
                                     val still = t.third && when (t.first) { 1 -> zc; 2 -> zs; 3 -> zf; 5 -> zm; 6 -> zd; else -> zl }.contains(p)
-                                    if (still) when (t.first) { 1 -> onExit(); 2 -> onSettings(); 3 -> Pad.toggleFlip(ctx); 5 -> { Pad.cursor = !Pad.cursor; Pad.save(ctx) }; 6 -> onDevices(); else -> { Pad.sony = !Pad.sony; Pad.save(ctx) } }
+                                    if (still) when (t.first) { 1 -> onExit(); 2 -> onSettings(); 3 -> Pad.toggleFlip(ctx); 5 -> { }; 6 -> onDevices(); else -> { Pad.sony = !Pad.sony; Pad.save(ctx) } }
                                 } else if (owners.containsKey(id)) owners.remove(id)?.release(ctx)
                             }
                             ch.consume()
@@ -711,11 +742,7 @@ private fun PadSurface(mirror: Boolean, rot: Int, onExit: () -> Unit, onSettings
             translate(zf.left + 10f * density, zf.center.y - ic / 2) { with(icRot) { draw(Size(ic, ic), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(fg)) } }
             paint.color = fg.toArgb(); paint.textSize = 12f * density; paint.textAlign = android.graphics.Paint.Align.LEFT
             drawContext.canvas.nativeCanvas.drawText(flipText, zf.left + 10f * density + ic + 6f * density, zf.center.y + 4.2f * density, paint)
-            // переключатель режима «Игра» / «Курсор» (над «Перевернуть»)
-            drawRoundRect(if (Pad.cursor) TEAL_D.copy(alpha = .85f) else bg, zm.topLeft, zm.size, androidx.compose.ui.geometry.CornerRadius(zm.height / 2))
-            translate(zm.left + 10f * density, zm.center.y - ic / 2) { with(if (Pad.cursor) icMouse else icGame) { draw(Size(ic, ic), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(fg)) } }
-            paint.color = fg.toArgb(); paint.textSize = 12f * density; paint.textAlign = android.graphics.Paint.Align.LEFT
-            drawContext.canvas.nativeCanvas.drawText(if (Pad.cursor) modeCursor else modeGame, zm.left + 10f * density + ic + 6f * density, zm.center.y + 4.2f * density, paint)
+            // 09.11.2026 (слово владелицы): кнопка режима «Игра» / «Курсор» убрана с экрана геймпада; режим всегда «Игра»
             // переключатель раскладки Xbox / PlayStation (справа внизу)
             drawRoundRect(bg, zl.topLeft, zl.size, androidx.compose.ui.geometry.CornerRadius(zl.height / 2))
             paint.color = fg.toArgb(); paint.textSize = 13f * density; paint.textAlign = android.graphics.Paint.Align.CENTER
@@ -739,9 +766,18 @@ private fun PadSurface(mirror: Boolean, rot: Int, onExit: () -> Unit, onSettings
                 }
             }
             // кнопка «Устройство» и подпись с именем текущего хоста
-            drawRoundRect(bg, zd.topLeft, zd.size, androidx.compose.ui.geometry.CornerRadius(zd.height / 2))
-            paint.color = fg.toArgb(); paint.textSize = 12f * density; paint.textAlign = android.graphics.Paint.Align.CENTER
-            drawContext.canvas.nativeCanvas.drawText(devLabel, zd.center.x, zd.center.y + 4.2f * density, paint)
+            // 09.11.2026 (слово владелицы): без фона-овала, просто голубой значок по центру
+            val blue = Color(0xFF38BDF8).copy(alpha = 0.55f)   // приглушённый голубой (слово владелицы: слишком яркий)
+            val icd = minOf(26f * density, zd.width * 0.55f)
+            // 09.11.2026 (слово владелицы): если по центру появляется текст (идёт подключение), кнопка (значок и окантовка) исчезает, остаётся текст
+            val centerText: String? = if (BtHid.switching) caption else null
+            if (centerText != null) {
+                paint.color = blue.toArgb(); paint.textSize = 10.5f * density; paint.textAlign = android.graphics.Paint.Align.CENTER
+                drawContext.canvas.nativeCanvas.drawText(centerText.take(14), zd.center.x, zd.center.y + 3.4f * density, paint)
+            } else {
+                drawCircle(blue, minOf(zd.width, zd.height) / 2 - 1.5f * density, zd.center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f * density))   // круглая голубая окантовка
+                translate(zd.center.x - icd / 2, zd.center.y - icd / 2) { with(icDev) { draw(Size(icd, icd), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(blue)) } }
+            }
             paint.color = Color.White.copy(alpha = 0.6f).toArgb(); paint.textSize = 11f * density
             drawContext.canvas.nativeCanvas.drawText(caption.take(30), cw / 2, chh * g.S.caption.y - 2f * density, paint)
             paint.textAlign = android.graphics.Paint.Align.CENTER
@@ -761,6 +797,7 @@ private val TEAL = Color(0xFF5EEAD4)
 private val TEAL_D = Color(0xFF0F766E)
 
 internal fun DrawScope.drawPad(g: Geo, @Suppress("UNUSED_PARAMETER") prim: Color) {
+    @Suppress("UNUSED_VARIABLE") val tick = Pad.uiTick
     val a = Pad.alpha
     val acc = TEAL
     val ring = Color.White.copy(alpha = 0.30f * a + 0.10f)
@@ -856,7 +893,8 @@ internal fun DrawScope.drawPad(g: Geo, @Suppress("UNUSED_PARAMETER") prim: Color
 
     // ---------------- плечевые и курки ----------------
     fun shoulder(r: androidx.compose.ui.geometry.Rect, text: String, bit: Int) {
-        val on = isOn(bit)
+        // 10.11.2026 (слово владелицы): подсветка курков по оси (газ/тормоз в машине), а не только по кнопке
+        val on = isOn(bit) || (bit == Pad.L2 && Pad.lt) || (bit == Pad.R2 && Pad.rt)
         val cr = androidx.compose.ui.geometry.CornerRadius(22f)
         drawRoundRect(Color.Black.copy(alpha = 0.3f), Offset(r.left, r.top + 4f), r.size, cr)
         drawRoundRect(androidx.compose.ui.graphics.Brush.verticalGradient(if (on) listOf(acc, TEAL_D) else listOf(bodyTop, bodyBot), startY = r.top, endY = r.bottom), r.topLeft, r.size, cr)
@@ -977,7 +1015,7 @@ fun PadProfilesAndHost(inGame: Boolean, close: () -> Unit = {}) {
 fun PadConnected(host: String, land: Boolean) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { Pad.load(ctx) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberSavedScroll("tab.pad")), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    TabColumn("tab.pad", Modifier.fillMaxSize(), 0.dp, Arrangement.spacedBy(6.dp)) {
         BridgeTip()
         Text(stringResource(R.string.bt_connected, host), Modifier.fillMaxWidth(), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 2)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1010,7 +1048,7 @@ private fun PadDevices(onClose: () -> Unit) {
                     Text(stringResource(R.string.pad_devices_title), Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     androidx.compose.material3.TextButton(onClose) { Text(stringResource(R.string.fm_close)) }
                 }
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                Column(Modifier.weight(1f, fill = false).barScroll()) {
                     rows.forEach { r ->
                         val isCur = BtHid.hostName != null && cur != null && r.address.uppercase() == cur
                         Row(Modifier.fillMaxWidth().clickable { if (!isCur) BtAuto.switchHost(ctx, r); onClose() }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

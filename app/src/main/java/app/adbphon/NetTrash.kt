@@ -27,7 +27,8 @@ object NetTrash {
     /** Есть ли у этого сетевого подключения корзина. */
     fun supported(c: NetConn): Boolean = when (c.kind) {
         "smb" -> share(c) != null
-        "sftp", "dav", "ftp", "ftps" -> true
+        "dav" -> c.smb != WifiExplorer.TAG     // устройства «Wi-Fi проводника» без корзины
+        "sftp", "ftp", "ftps" -> true
         else -> false
     }
 

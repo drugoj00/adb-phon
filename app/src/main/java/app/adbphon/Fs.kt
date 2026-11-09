@@ -79,7 +79,8 @@ object AdbFs : Fs {
     override suspend fun list(path: String): List<FsEntry> {
         // завершающая «/» нужна, чтобы символические ссылки (/sdcard и т.п.) показывали содержимое, а не саму ссылку
         val out = Adb.shell("ls -lA ${q(path.trimEnd('/') + "/")} 2>&1")
-        if (out.contains("Permission denied") || out.contains("No such file")) error(out.lines().first())
+        // «ls: //init: Permission denied» на отдельных файлах корня (Samsung, Android 10) не мешает показать остальное: ошибка только если записей нет совсем
+        if ((out.contains("Permission denied") || out.contains("No such file")) && out.lines().none { line.find(it.trim()) != null }) error(out.lines().first())
         return out.lines().mapNotNull { l ->
             val m = line.find(l.trim()) ?: return@mapNotNull null
             val name = m.groupValues[3].substringBefore(" -> ")

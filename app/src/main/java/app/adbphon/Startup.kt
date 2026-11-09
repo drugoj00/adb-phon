@@ -123,7 +123,7 @@ fun FolderPickDialog(start: String, onPick: (String) -> Unit, onClose: () -> Uni
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(cur, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, maxLines = 2)
-                Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).barScroll()) {
                     if (cur != "/" && cur != root) Row(Modifier.fillMaxWidth().clickable { cur = File(cur).parent ?: root }.padding(vertical = 10.dp)) { Text("..  " + stringResource(R.string.start_up), fontSize = 14.sp) }
                     dirs.forEach { d -> Row(Modifier.fillMaxWidth().clickable { cur = d.path }.padding(vertical = 10.dp)) { Text(d.name, fontSize = 14.sp, maxLines = 1) } }
                     if (dirs.isEmpty()) Text(stringResource(R.string.start_no_subdirs), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(vertical = 8.dp))

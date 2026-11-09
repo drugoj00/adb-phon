@@ -165,7 +165,7 @@ fun BackupSectionV2(vm: MainViewModel) {
         is BkState.List -> LAlertDialog(
             onDismissRequest = { st = BkState.Idle }, title = { Text(stringResource(R.string.bk2_restore_title)) },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedButton({ st = BkState.Idle; pickFile.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.bk2_pick_file)) }
                     if (s.items.isEmpty()) Text(stringResource(R.string.bk2_none), fontSize = 13.sp)
                     s.items.forEach { f ->

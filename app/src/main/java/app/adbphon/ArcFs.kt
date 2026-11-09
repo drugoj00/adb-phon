@@ -124,7 +124,7 @@ class ArchiveFs(val file: File, val display: String, val prev: PrevState, privat
             if (e.csize >= 0) { sb.append(Fm.str(R.string.arc_size_packed, fmSize(e.csize))).append('\n'); if (e.size > 0) sb.append(Fm.str(R.string.arc_ratio, 100 - (e.csize * 100 / e.size).toInt())).append('\n') }
             if (e.crc != 0L) sb.append("CRC32: %08X\n".format(e.crc))
             sb.append(Fm.str(R.string.arc_method, e.method)).append(if (e.encrypted) " · " + Fm.str(R.string.arc_encrypted) else "").append('\n')
-            if (e.mtime > 0) sb.append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(e.mtime))).append('\n')
+            if (e.mtime > 0) sb.append(SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date(e.mtime))).append('\n')
         }
         if (k.isEmpty()) sb.append(Fm.str(R.string.arc_names_charset, r.charset)).append('\n')
         return sb.toString().trim()

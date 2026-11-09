@@ -46,6 +46,23 @@ object PadKeeper {
         runCatching { (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(PadKeeperService.ID) }
     }
 
+    /**
+     * 09.11.2026 (слово владелицы): запрос вместо тихого подключения. Другое устройство (например, компьютер) пыталось подключиться, пока выбрано
+     * иное: подключение отклонено, в шторке уведомление с кнопкой «Подключить» (тогда выбор переключается на это устройство).
+     */
+    fun askConnect(ctx: Context, address: String, name: String) {
+        val app = ctx.applicationContext
+        runCatching {
+            val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel("pad_request", app.getString(R.string.kpr_title), NotificationManager.IMPORTANCE_DEFAULT))
+            val go = PendingIntent.getForegroundService(app, address.hashCode(), Intent(app, PadKeeperService::class.java).setAction(PadKeeperService.ACTION_CONNECT).putExtra("addr", address).putExtra("name", name), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = NotificationCompat.Builder(app, "pad_request").setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                .setContentTitle(app.getString(R.string.kpr_ask_title, name)).setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .addAction(android.R.drawable.stat_sys_data_bluetooth, app.getString(R.string.kpr_ask_connect), go).build()
+            nm.notify(4418, n)
+        }.onFailure { AppLog.e("ADBphon", "askConnect", it) }
+    }
+
     /** Запуск службы (при открытии приложения, после загрузки и обновления). Нет права на Bluetooth или выключатель снят: ничего не делает. */
     fun start(ctx: Context) {
         val app = ctx.applicationContext
@@ -66,9 +83,18 @@ class PadKeeperService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CH, getString(R.string.kpr_title), NotificationManager.IMPORTANCE_MIN))
-        val n = notification(getString(R.string.kpr_wait_bt))
+        val n = notification(getString(R.string.kpr_wait_bt), false)
         if (Build.VERSION.SDK_INT >= 29) ServiceCompat.startForeground(this, ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) else startForeground(ID, n)
         if (intent?.action == ACTION_DISCONNECT) { disconnectAll(); return START_NOT_STICKY }    // сначала startForeground (иначе система считает запуск ошибкой), потом отключение
+        if (intent?.action == ACTION_CONNECT) {    // кнопка «Подключить» в запросе: человек разрешил это устройство
+            val addr = intent.getStringExtra("addr"); val nm2 = intent.getStringExtra("name") ?: addr
+            runCatching {
+                val ad = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
+                val dev = if (addr != null) ad?.getRemoteDevice(addr) else null
+                if (dev != null) BtAuto.manualConnect(applicationContext, BtRow(dev, addr!!, nm2 ?: addr))
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(4418)
+            }
+        }
         Pad.load(applicationContext)    // настройки вибро и режима «Курсор» нужны и когда процесс жив только ради службы (окон нет)
         if (job == null) job = scope.launch { loop() }
         return START_STICKY
@@ -99,10 +125,11 @@ class PadKeeperService : Service() {
         }
     }
 
-    private fun notification(text: String): Notification {
+    /** [connected]: значок Bluetooth в строке состояния только пока геймпад подключён; в ожидании значок прозрачный (служба и запись в шторке остаются). */
+    private fun notification(text: String, connected: Boolean): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val off = PendingIntent.getService(this, 3, Intent(this, PadKeeperService::class.java).setAction(ACTION_DISCONNECT), PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this, CH).setSmallIcon(android.R.drawable.stat_sys_data_bluetooth).setContentTitle(getString(R.string.kpr_title))
+        return NotificationCompat.Builder(this, CH).setSmallIcon(if (connected) android.R.drawable.stat_sys_data_bluetooth else R.drawable.ic_stat_blank).setContentTitle(getString(R.string.kpr_title))
             .setContentText(text).setOngoing(true).setPriority(NotificationCompat.PRIORITY_MIN).setSilent(true).setContentIntent(open)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.kpr_disconnect), off).build()
     }
@@ -111,7 +138,7 @@ class PadKeeperService : Service() {
         val text = if (runCatching { Adb.isConnected }.getOrDefault(false)) text0 + " · " + getString(R.string.kpr_adb) else text0
         if (text == shown) return
         shown = text
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(ID, notification(text))
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(ID, notification(text, BtHid.hostName != null))
     }
 
     private suspend fun waitFor(ms: Long, cond: () -> Boolean): Boolean {
@@ -135,6 +162,7 @@ class PadKeeperService : Service() {
                     }
                     BtHid.hostName != null -> show(getString(R.string.kpr_connected, BtHid.hostName))
                     BtAuto.busy || BtAuto.manualActive || BtAuto.userStopped || BtHid.switching -> show(getString(R.string.kpr_paused))
+                    !BtAuto.autoLast(app) -> show(getString(R.string.kpr_no_host))   // автоподключение выключено: ждём, пока человек выберет устройство
                     else -> {
                         val ad = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
                         // только то, к чему HID уже подключался, самое свежее первым
@@ -152,5 +180,5 @@ class PadKeeperService : Service() {
         }
     }
 
-    companion object { private const val CH = "pad_keeper"; const val ID = 4417; const val ACTION_DISCONNECT = "app.adbphon.KEEPER_DISCONNECT" }
+    companion object { private const val CH = "pad_keeper"; const val ID = 4417; const val ACTION_DISCONNECT = "app.adbphon.KEEPER_DISCONNECT"; const val ACTION_CONNECT = "app.adbphon.KEEPER_CONNECT" }
 }

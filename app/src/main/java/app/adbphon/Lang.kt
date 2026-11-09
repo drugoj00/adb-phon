@@ -64,7 +64,7 @@ fun LAlertDialog(
     ime: Boolean = false,
 ) {
     androidx.compose.material3.AlertDialog(
-        modifier = (if (wide) androidx.compose.ui.Modifier.fillMaxWidth(.94f) else androidx.compose.ui.Modifier).let { if (ime) it.imePadding() else it },
+        modifier = (if (wide) androidx.compose.ui.Modifier.fillMaxWidth(.94f) else androidx.compose.ui.Modifier).let { if (ime) it.imePadding() else it }.imeGateKeys(),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !wide, decorFitsSystemWindows = !ime),
         onDismissRequest = onDismissRequest,
         confirmButton = { LangScope(confirmButton) },
@@ -77,7 +77,7 @@ fun LAlertDialog(
 /** Dialog с языком из настроек программы (Compose в окнах подставляет контекст системы). */
 @androidx.compose.runtime.Composable
 fun LDialog(onDismissRequest: () -> Unit, properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(), content: @androidx.compose.runtime.Composable () -> Unit) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { LangScope(content) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.imeGateKeys()) { LangScope(content) } }
 }
 
 /** DropdownMenu с языком из настроек программы. */

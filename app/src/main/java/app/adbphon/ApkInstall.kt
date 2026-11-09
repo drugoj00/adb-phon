@@ -289,7 +289,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
         onDismissRequest = close, title = { Text(stringResource(if (d.item.ext == "apk" || d.item.ext == "apks" || d.item.ext == "xapk" || d.item.ext == "apkm") R.string.inst_title else R.string.open_with_title), maxLines = 1) },
         text = {
             Column(Modifier.fillMaxWidth()) {
-                Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.heightIn(max = 460.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val firstEnabled = d.opts.indexOfFirst { it.enabled && it.id != "archive" }
                     val fr = remember { androidx.compose.ui.focus.FocusRequester() }
                     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }

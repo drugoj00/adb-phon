@@ -158,6 +158,14 @@ object BtHid {
         override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
             lastState = state
             AppLog.i("ADBphon", "hid state ${device?.address} -> $state")
+            // 09.11.2026 (слово владелицы): если человек выбрал устройство, другие устройства (например, компьютер) не подключаются сами
+            val wanted = wantedAddr
+            if (state == BluetoothProfile.STATE_CONNECTED && device != null && wanted != null && !device.address.equals(wanted, ignoreCase = true)) {
+                AppLog.i("ADBphon", "hid: подключение от ${device.address} отклонено, выбрано $wanted")
+                runCatching { hid?.disconnect(device) }
+                appCtx?.let { PadKeeper.askConnect(it, device.address, runCatching { device.name }.getOrNull() ?: device.address) }   // запрос: «хочет подключиться»
+                return
+            }
             if (state == BluetoothProfile.STATE_CONNECTED && device != null) {
                 touchLast(device.address); markHidOk(device.address)
                 host = device
@@ -406,6 +414,8 @@ object BtHid {
     }
 
     /** Идёт переключение на другой хост из окна игры: окно не закрывается, пока хост на время отсутствует. */
+    /** Адрес устройства, которое выбрал человек: подключения от других отклоняются (null: принимать любое). */
+    @Volatile var wantedAddr: String? = null
     var switching by mutableStateOf(false)
 
     /** Пробный прогон без хоста (только для проверки по журналу): отчёты не уходят, а пишутся в logcat с тегом ADBphonHID. */

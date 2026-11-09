@@ -51,6 +51,8 @@ import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -112,7 +114,7 @@ object FmRootCfg {
         val virt = favs.filter { CloudTrash.supported(CloudTrash.typeFor(Fm.sctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
         for (x in (p.rootOpen.toList() + id).distinct()) if (x.startsWith(id) && x !in virt && kids[x] != null) Fm.scope.launch { loadKids(x, favs) }
     }
-    val optional = listOf("root", "recent", "lan", "cloud", "apps", "tree", "adb")
+    val optional = listOf("root", "recent", "lan", "cloud", "wifi", "apps", "tree", "adb")
     /** Первый запуск (выбор в «Показать/Скрыть» ещё не сохранён): видны все пункты, чтобы сразу было видно возможности. Сохранённый выбор не трогается. */
     var shown by mutableStateOf(optional.toSet())
     /** Число папок и файлов в корне тома, считается в фоне. */
@@ -177,15 +179,15 @@ object FmRootCfg {
                 all.take(150).map { TK(it.name, "Aitem|$key|" + it.path.substringAfterLast('/'), it.path) }
             } else if (id.startsWith("D|")) {
                 // «ADB (оболочка)»: папки по ADB (нужна связь)
-                if (!Adb.isConnected) error(Fm.str(R.string.ap_need_adb))
+                FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                 val path = id.removePrefix("D|").ifEmpty { "/" }
                 AdbFs.list(path).filter { it.isDir }.take(300).map { TK(it.name, "D|" + it.path, it.path) }
             } else if (id.startsWith("L|")) {
                 val path = id.removePrefix("L|")
                 val plain = withContext(Dispatchers.IO) { File(path).listFiles() }
-                if ((plain == null || plain.isEmpty()) && FmIo.privEnabled && FmIo.restricted(path)) {
+                if ((plain == null || plain.isEmpty()) && FmIo.privEnabled && (plain == null || FmIo.restricted(path) || path.trimEnd('/').isEmpty())) {
                     // /data и другие закрытые места: список читает root (или ADB), как и в обычном списке «Файлов»
-                    if (FmIo.ensurePriv() != null) error(Fm.str(R.string.ap_need_root))
+                    FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                     val all = AdbFs.list(path).filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
                     all.take(LIMIT).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path) else TK(it.name, "F|" + it.path, it.path, false, it.size) }
@@ -240,6 +242,9 @@ object FmRootCfg {
         // новая группа «Приложения» видна по умолчанию и у тех, кто уже настраивал корень: один раз добавляется, дальше решает «Показать/Скрыть»
         if (saved != null && !sp(ctx).getBoolean("root_apps_added", false)) { shown = shown + "apps"; sp(ctx).edit().putStringSet("root_show", shown.toSet()).putBoolean("root_apps_added", true).apply() }
         else if (saved == null) sp(ctx).edit().putBoolean("root_apps_added", true).apply()
+        // новая группа «Wi-Fi проводник»: один раз добавляется и у тех, кто уже настраивал корень
+        if (saved != null && !sp(ctx).getBoolean("root_wifi_added", false)) { shown = shown + "wifi"; sp(ctx).edit().putStringSet("root_show", shown.toSet()).putBoolean("root_wifi_added", true).apply() }
+        else if (saved == null) sp(ctx).edit().putBoolean("root_wifi_added", true).apply()
         // «Дерево на домике» включено по умолчанию и у тех, кто уже настраивал корень (один раз)
         if (saved != null && !sp(ctx).getBoolean("root_tree_added", false)) { shown = shown + "tree"; sp(ctx).edit().putStringSet("root_show", shown.toSet()).putBoolean("root_tree_added", true).apply() }
         else if (saved == null) sp(ctx).edit().putBoolean("root_tree_added", true).apply()
@@ -286,7 +291,7 @@ private class RR(
     val vol: FmVol? = null, val net: NetConn? = null, val level: Int = 0, val expandKey: String? = null, val header: Int = 0, val act: () -> Unit = {},
     val treeId: String? = null, val busy: Boolean = false, val appName: String? = null, val err: Boolean = false, val file: FmItem? = null, val side: String? = null,
     val tnet: NetConn? = null, val titem: CloudTrash.TItem? = null, val subText: String? = null, val drive: Boolean = false, val selE: FmRootCfg.SelE? = null,
-    val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null,
+    val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null, val wifi: Boolean = false, val tog: Boolean? = null, val lpath: String? = null,
 ) {
     /** Ветви дерева: для уровней 1..level true, если ниже есть ещё элемент того же уровня; lx: позиция вертикали уровня (dp). */
     var more: BooleanArray = BooleanArray(0)
@@ -302,7 +307,7 @@ private fun statOf(path: String): Pair<Long, Long> = runCatching {
 fun FmRootList(p: FmPane, modifier: Modifier) {
     val ctx = LocalContext.current
     val shown = FmRootCfg.shown
-    val favs = remember(Fm.dlg, p.root, FmRootCfg.ver) { NetStore.list(ctx) }
+    val favs = remember(Fm.dlg, p.root, FmRootCfg.ver, WifiExplorer.ver) { NetStore.list(ctx) + WifiExplorer.found.toList() }
     val tv = Marq.tv
     val prim = MaterialTheme.colorScheme.primary
     val (devTotal, devFree) = remember(p.root) { statOf("/sdcard") }
@@ -330,16 +335,20 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     fun addKids(id: String, level: Int, c: NetConn?) {
         if (!treeOn || id !in p.rootOpen) return
         val ks = FmRootCfg.kids[id]
-        if (id.startsWith("D|") && !Adb.isConnected) {
-            rows += RR("t:" + id + ":noadb", Fm.str(R.string.ap_need_adb), Icons.Filled.Android, Color(0xFF9E9E9E), level = level)
-            return
-        }
         if (ks == null) {
             val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
             // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
             if (er0 == CloudModule.MARK) {
                 rows += RR("t:" + id + ":cm", Fm.str(R.string.cm_need), Icons.Filled.Cloud, Color(0xFF9E9E9E), level = level, subText = Fm.str(R.string.cm_tap_install),
                     act = { Fm.dlg = FmDlg.CloudModule { FmRootCfg.kidErr.remove(id); FmRootCfg.kids.remove(id); CloudTrash.ver++ } })
+                return
+            }
+            // нет root и нет связи ADB: один понятный шаг (включить отладку по Wi-Fi или ввести код сопряжения) вместо слов «нужен root»
+            if (er0 != null && er0.startsWith("FIX:")) {
+                val wifi = er0 == "FIX:wifi"
+                rows += RR("t:" + id + ":fix", Fm.str(if (wifi) R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text), Icons.Filled.Folder, Color(0xFF9E9E9E), level = level,
+                    subText = Fm.str(if (wifi) R.string.fm_fix_wifi_btn else R.string.fm_fix_pair_btn),
+                    act = { FmRootCfg.kidErr.remove(id); FmRootCfg.kids.remove(id); CloudTrash.ver++; Fm.fixAction(p, if (wifi) "wifi" else "pair") })
                 return
             }
             val noRoot = er0 != null && (er0.contains("denied", true) || er0.contains("отказано", true))
@@ -356,7 +365,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             if (k.id.startsWith("Ti|")) {
                 val ti = CloudTrash.tkItems[k.id]
                 val dirTxt = ti?.let { "/" + it.origPath.trim('/').substringBeforeLast('/', "") }
-                val whenTxt = ti?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
+                val whenTxt = ti?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
                 rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, tnet = c, titem = ti,
                     side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(dirTxt, whenTxt).joinToString("  ·  "),
                     selE = ti?.let { FmRootCfg.SelE(k.id, c, id, "", k.name, k.path, k.isDir, it) })
@@ -364,7 +373,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             }
             if (k.id.startsWith("Ki|")) {
                 val fi = FmTrash.tk[k.id]
-                val whenTxt = fi?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
+                val whenTxt = fi?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
                 rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, fitem = fi,
                     side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(fi?.folder?.let { shortMiddle(it, 24) }, whenTxt, fi?.volLabel).joinToString("  ·  "),
                     selE = fi?.let { FmRootCfg.SelE(k.id, null, id, "", k.name, k.path, k.isDir, null, it) })
@@ -373,7 +382,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             if (k.id.startsWith("Te|")) { rows += RR("t:" + k.id, k.name, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level); return@forEach }
             if (!k.isDir) {
                 val item = FmItem(k.name, false, k.size, "")
-                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
+                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null, act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
             } else if (k.id.startsWith("Aitem|")) {
                 val key = k.id.split('|')[1]
                 rows += RR("t:" + k.id, k.name, Icons.Filled.Android, Color(0xFF9CCC65), level = level, appName = k.name, act = { Fm.openApps(p, key) })
@@ -420,8 +429,9 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     }
     LaunchedEffect(FmTrash.ver, FmDel.trashOn, Fm.vols.size) { FmTrash.refreshSum() }
     val lan = favs.filter { it.kind != "dav" && it.kind != "cloud" }
-    val dav = favs.filter { it.kind == "dav" || it.kind == "cloud" }
-    if ("lan" in shown || "cloud" in shown || "adb" in shown) rows += RR("h:net", stringResource(R.string.rt_group_net), Icons.Filled.Lan, prim, header = 1)
+    val dav = favs.filter { (it.kind == "dav" && !WifiExplorer.isWifi(it)) || it.kind == "cloud" }
+    val wifiSaved = favs.filter { WifiExplorer.isWifi(it) && it !in WifiExplorer.found }
+    if ("lan" in shown || "cloud" in shown || "wifi" in shown || "adb" in shown) rows += RR("h:net", stringResource(R.string.rt_group_net), Icons.Filled.Lan, prim, header = 1)
     if ("lan" in shown) {
         rows += RR("lan", stringResource(R.string.rt_lan), Icons.Filled.Lan, Color(0xFF42A5F5), expandKey = "lan")
         if ("lan" in p.rootOpen) {
@@ -444,6 +454,29 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 if (tid in virtIds) addVirt(c, tid) else addKids(tid, 2, c)
             }
             rows += RR("cloud+", stringResource(R.string.rt_add_cloud), Icons.Filled.Add, prim, level = 1, act = { Fm.dlg = FmDlg.CloudAdd() })
+        }
+    }
+    // «Wi-Fi проводник»: найденные поиском, свой сервер (галочка), сохранённые устройства, «Добавить устройство» (запускает поиск)
+    if ("wifi" in shown) {
+        val wfTint = if (WifiShare.running) Color(0xFF2E9E4F) else Color(0xFFF57C00)   // сервер включён: зелёный, выключен: оранжевый
+        LaunchedEffect(Unit) { WifiExplorer.load(ctx) }
+        rows += RR("wifi", stringResource(R.string.rt_wifi), Icons.Filled.Wifi, wfTint, expandKey = "wifi",
+            subText = stringResource(R.string.wf_mode_label, stringResource(when (WifiExplorer.mode) { "lan" -> R.string.wf_mode_lan; "direct" -> R.string.wf_mode_direct; else -> R.string.wf_mode_auto })))
+        if ("wifi" in p.rootOpen) {
+            val needKeyTxt = stringResource(R.string.wf_need_key)
+            val srvOn = stringResource(R.string.wf_on_sub, WifiShare.url); val srvOff = stringResource(R.string.wf_off)
+            if (WifiExplorer.scanning) rows += RR("wifi:scan", stringResource(R.string.wf_scanning, WifiExplorer.progress), Icons.Filled.Search, prim, level = 1, busy = true, subText = stringResource(R.string.wf_cancel_hint), act = { WifiExplorer.cancel() })
+            fun devRow(c: NetConn, saved: Boolean) {
+                val tid = "N|" + c.kind + "|" + c.host + "|" + c.user + "|"
+                rows += RR("wifi:" + (if (saved) "s:" else "f:") + c.host, c.name.ifBlank { WifiExplorer.hostText(c) }, Icons.Filled.PhoneAndroid, if (saved) Color(0xFF26A69A) else Color(0xFFFFC107), net = c, level = 1, wifi = true,
+                    subText = WifiExplorer.hostText(c) + (if (!saved && WifiExplorer.needKey[c.host] == true) "  ·  " + needKeyTxt else ""), treeId = tid, act = { fmLeaveRoot(p); Fm.connectNet(p, c) })
+                if (saved) pend(tid)
+                addKids(tid, 2, c)
+            }
+            WifiExplorer.found.toList().forEach { devRow(it, false) }
+            rows += RR("wifi:srv", stringResource(R.string.wf_server_row), Icons.Filled.Wifi, Color(0xFF29B6F6), level = 1, tog = WifiShare.running, subText = if (WifiShare.running) srvOn else srvOff, act = { WifiExplorer.toggleServer(ctx) })
+            wifiSaved.forEach { devRow(it, true) }
+            rows += RR("wifi+", stringResource(R.string.wf_add), Icons.Filled.Add, prim, level = 1, act = { WifiExplorer.scan(ctx) })
         }
     }
     // число в строках «Корзина»: когда папки облака уже показаны, по одному облаку за раз
@@ -506,10 +539,13 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FmRootCfg.sel.isNotEmpty() && (e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU || e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_INFO)) { runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess } else false
     }) {
         val rootState = rememberSavedLazyList("files.root." + p.id)
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().verticalScrollbar(rootState)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(Modifier.fillMaxWidth().fillMaxHeight().verticalScrollbar(rootState)
             // пульт: «вниз» с последней строки списка уходит на нижнюю панель значков (если есть отмеченное), а не на нижнюю навигацию
-            .focusProperties { exit = { d -> if (d == androidx.compose.ui.focus.FocusDirection.Down && FmRootCfg.sel.isNotEmpty()) FmRootCfg.barFocus else androidx.compose.ui.focus.FocusRequester.Default } }.focusGroup(), state = rootState, contentPadding = androidx.compose.foundation.layout.PaddingValues(end = SbMath.RESERVE_DP.dp), verticalArrangement = Arrangement.spacedBy(if (tv) 2.dp else 0.dp)) {
+            .focusProperties { exit = { d -> if (d == androidx.compose.ui.focus.FocusDirection.Down && FmRootCfg.sel.isNotEmpty()) FmRootCfg.barFocus else androidx.compose.ui.focus.FocusRequester.Default } }.focusGroup(), state = rootState, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (tv) 2.dp else 0.dp)) {
             items(rows, key = { it.key }) { r -> FmRootRowView(p, r, tv) }
+        }
+        ScrollbarHandle(rootState, Modifier.align(if (scrollbarLeft()) Alignment.CenterStart else Alignment.CenterEnd))
         }
         androidx.compose.runtime.SideEffect { FmRootCfg.lastVisKey = rootState.layoutInfo.visibleItemsInfo.lastOrNull()?.key as? String }
         if (FmRootCfg.sel.isNotEmpty()) RootSelBar(p)
@@ -822,11 +858,11 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 26.dp).clickable { treeToggle(r.treeId) }.padding(4.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
             else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 26.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-            if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.net != null) NetBrandIcon(r.net, if (CloudCatalog.bigRows) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
+            if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.file != null && r.lpath != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
-                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = (15f * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
+                    else MqText(r.title, active = rowActive, wrap = true, modifier = Modifier.weight(1f), fontSize = (15f * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
                     r.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } }?.let { NetDot(it) } }
                 }
                 // у томов первым свободное место (то, что нужно видеть), затем файловая система, счётчики папок и файлов в конце
@@ -843,6 +879,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 if (r.total > 0) FmSpaceBar(1f - r.free.toFloat() / r.total, Modifier.fillMaxWidth().padding(top = 1.dp))
             }
             if (r.ro) Icon(Icons.Filled.Lock, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+            r.tog?.let { on -> androidx.compose.material3.Checkbox(on, { r.act() }, Modifier.size(if (tv) 40.dp else 32.dp)) }
             r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
             r.selE?.let { e -> androidx.compose.material3.Checkbox(FmRootCfg.sel.containsKey(e.key), { Fm.active = p.id; FmRootCfg.toggleSel(e) }, Modifier.size(if (tv) 40.dp else 32.dp)) }
         }
@@ -915,11 +952,27 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_internal), Fm.str(R.string.fm_vol_body, "/sdcard", if (r.total > 0) Fm.str(R.string.fm_free_of, fmSize(r.free), fmSize(r.total)) else "-", "-", Fm.str(R.string.fm_src_phone)))
             }
             r.net?.takeIf { !r.drive }?.let { c ->
-                item(R.string.rt_details) { Fm.dlg = FmDlg.Props(c.title, Fm.str(R.string.fm_net_body, c.kind.uppercase(), c.host, c.user.ifBlank { "-" })) }
-                item(R.string.rt_edit) { Fm.dlg = FmDlg.EditNet(c) }
-                item(R.string.rt_forget) { NetStore.remove(ctx, c); FmRootCfg.ver++ }
+                if (r.wifi) {
+                    if (c in WifiExplorer.found) item(R.string.wf_add) { Fm.dlg = FmDlg.WifiDev(null, WifiExplorer.hostText(c), c.name) }
+                    else {
+                        item(R.string.rt_edit) { Fm.dlg = FmDlg.WifiDev(c, "", "") }
+                        item(R.string.rt_forget) { NetStore.remove(ctx, c); FmRootCfg.ver++; WifiExplorer.ver++ }
+                    }
+                } else {
+                    item(R.string.rt_details) { Fm.dlg = FmDlg.Props(c.title, Fm.str(R.string.fm_net_body, c.kind.uppercase(), c.host, c.user.ifBlank { "-" })) }
+                    item(R.string.rt_edit) { Fm.dlg = FmDlg.EditNet(c) }
+                    item(R.string.rt_forget) { NetStore.remove(ctx, c); FmRootCfg.ver++ }
+                }
             }
-            if (r.key in setOf("root", "recent", "adb", "lan", "cloud", "apps")) item(R.string.rt_hide) { FmRootCfg.set(ctx, r.key, false) }
+            if (r.wifi && r.net?.host?.startsWith("http://192.168.49.") == true) item(R.string.wd_leave) { Fm.scope.launch { Fm.say(Fm.str(if (WifiDirect.leave()) R.string.wd_left else R.string.wd_left_no)) } }
+            if (r.key == "wifi") {
+                // выбор способа связи с другим устройством
+                for ((m, res) in listOf("auto" to R.string.wf_mode_auto, "lan" to R.string.wf_mode_lan, "direct" to R.string.wf_mode_direct))
+                    DropdownMenuItem({ Text((if (WifiExplorer.mode == m) "✓ " else "") + stringResource(res), fontSize = 14.sp) }, { menu = false; WifiExplorer.setMode(ctx, m) })
+            }
+            if (r.key == "wifi:srv") item(R.string.wf_link) { Fm.dlg = FmDlg.WifiServer("/sdcard") }
+            if (r.key == "wifi+") item(R.string.wf_manual) { Fm.dlg = FmDlg.WifiDev(null, "", "") }
+            if (r.key in setOf("root", "recent", "adb", "lan", "cloud", "wifi", "apps")) item(R.string.rt_hide) { FmRootCfg.set(ctx, r.key, false) }
         }
     }
 }
@@ -928,7 +981,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
 @Composable
 fun RootShowDialog(close: () -> Unit) {
     val ctx = LocalContext.current
-    val names = mapOf("root" to "Root", "recent" to stringResource(R.string.rt_recent), "lan" to stringResource(R.string.rt_lan), "cloud" to stringResource(R.string.rt_cloud), "apps" to stringResource(R.string.rt_apps), "tree" to stringResource(R.string.rt_tree), "adb" to stringResource(R.string.rt_adb))
+    val names = mapOf("root" to "Root", "recent" to stringResource(R.string.rt_recent), "lan" to stringResource(R.string.rt_lan), "cloud" to stringResource(R.string.rt_cloud), "wifi" to stringResource(R.string.rt_wifi), "apps" to stringResource(R.string.rt_apps), "tree" to stringResource(R.string.rt_tree), "adb" to stringResource(R.string.rt_adb))
     LAlertDialog(
         onDismissRequest = close, title = { Text(stringResource(R.string.rt_showhide)) },
         text = {

@@ -224,7 +224,7 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
         onDismissRequest = close,
         title = { androidx.compose.material3.Text(stringResource(R.string.sort_title) + "  ·  " + stringResource(if (p.id == 0) R.string.fm_pane_left else R.string.fm_pane_right), fontSize = 18.sp) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 // область действия настройки
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(!folderOn, { SortStore.clearFolder(p, p.path) }, { androidx.compose.material3.Text(stringResource(R.string.sort_scope_all), fontSize = 12.sp) })

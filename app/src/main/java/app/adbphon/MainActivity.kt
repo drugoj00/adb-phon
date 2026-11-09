@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -18,6 +19,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.combinedClickable
@@ -49,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -187,8 +196,9 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     }
     Feedback.host = (baseCtx as? ComponentActivity)?.window?.decorView
     CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang) {
+    ImeGateHost {
     MaterialTheme(colorScheme = if (dark) Dark else Light) {
-        Surface(Modifier.fillMaxSize().pointerInput(Unit) {
+        Surface(Modifier.fillMaxSize().imeGateKeys().pointerInput(Unit) {
             // пока палец на экране (в том числе прокрутка списков), бегущие строки стоят: нагрузки нет
             awaitPointerEventScope { while (true) { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial); Marq.touching = e.changes.any { it.pressed } } }
         }, color = MaterialTheme.colorScheme.background) {
@@ -197,6 +207,17 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             // если процесс был убит посреди игры, а настройки ориентации остались изменёнными: тихо вернуть прежние значения, как только появится подключение
             LaunchedEffect(vm.connected) { if (vm.connected) OrientAssist.restoreIfPending(baseCtx) }
             var showSettings by remember { mutableStateOf(false) }
+            // первый запуск: окна по порядку с включением нужных разрешений и спецвозможностей
+            LaunchedEffect(Unit) {
+                val on = Build.VERSION.SDK_INT >= 30 && AutoPairService.isEnabled(baseCtx)
+                if (!Setup.done(baseCtx)) Setup.open = true
+                else if (Build.VERSION.SDK_INT >= 30 && !on && Setup.sp0(baseCtx).getBoolean("acc_was_on", false)) { Setup.only = "acc"; Setup.open = true }   // Android сбрасывает службу при обновлении программы
+                if (on) Setup.sp0(baseCtx).edit().putBoolean("acc_was_on", true).apply()
+            }
+            if (Setup.open) FirstRunSetup()
+            if (Setup.adbAsk) AdbFirstAsk()
+            if (Setup.devAsk) DevOptionsAsk()
+            if (Setup.askKey != null) PermAsk()
             val snack = remember { SnackbarHostState() }
             val snackScope = androidx.compose.runtime.rememberCoroutineScope()
             // при запуске остаёмся на «Связь» (в т.ч. если автоподключение уже сработало); на «Софт»/«Пульт» переходим только после ручного подключения
@@ -401,7 +422,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     if (showSettings) SettingsScreen(vm) else when (tab) {
                         0 -> ConnectScreen(vm)
-                        1 -> NeedConnection(vm) { if (vm.remoteHost != null) LocalOnly() else AppsScreen(vm) }
+                        1 -> NeedConnection(vm) { if (vm.remoteHost != null) LocalOnly(vm) else AppsScreen(vm) }
                         2 -> FileManagerScreen(vm) { tab = 0 }
                         3 -> NeedConnection(vm) { RemoteScreen(vm) }
                         else -> MoreScreen(vm)
@@ -424,15 +445,21 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
         }
     }
     }
+    }
 }
 
 /** Ландшафт: ширина больше высоты (и не совсем узкий экран). Экран делится на две равные половины. */
 fun isLandscapeBox(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp): Boolean = w > h && w >= 480.dp
 
 @Composable
-fun LocalOnly() {
+fun LocalOnly(vm: MainViewModel) {
+    // «Софт» показывает приложения только этого устройства: если программа сейчас управляет другим, не пустая заглушка, а подсказка и кнопка отключения
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(stringResource(R.string.local_only), fontSize = 16.sp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.local_only), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.local_only_hint, vm.names[vm.remoteHost ?: ""] ?: vm.remoteHost.orEmpty()), fontSize = 14.sp)
+            OutlinedButton(onClick = { vm.disconnect() }) { Text(stringResource(R.string.btn_disconnect)) }
+        }
     }
 }
 
@@ -455,7 +482,8 @@ fun ConnectScreen(vm: MainViewModel) {
     var favFor by remember { mutableStateOf<Found?>(null) }
     var favName by remember { mutableStateOf("") }
     val askName: (Found) -> Unit = { favName = vm.names[it.host].orEmpty(); favFor = it }
-    Column(Modifier.verticalScroll(rememberSavedScroll("tab.connect")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    TabColumn("tab.connect", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
+        if (android.os.Build.VERSION.SDK_INT >= 30) WifiDebugCard(vm)
         Text(
             if (vm.connected && !Adb.isRoot && vm.remoteHost != null)
                 stringResource(R.string.msg_connected_to, vm.names[vm.remoteHost!!] ?: stringResource(R.string.net_name_unknown), vm.remoteHost!!)
@@ -581,9 +609,11 @@ fun ConnectScreen(vm: MainViewModel) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.root_title), fontWeight = FontWeight.Bold)
                     Text(stringResource(R.string.root_hint), fontSize = 14.sp)
-                    Button(onClick = { vm.connectRoot() }, enabled = !vm.busy) { Text(stringResource(R.string.root_connect_btn)) }
+                    val hasSu = Adb.suPresent
+                    if (!hasSu) Text(stringResource(R.string.root_none), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    Button(onClick = { vm.connectRoot() }, enabled = !vm.busy && hasSu) { Text(stringResource(R.string.root_connect_btn)) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        androidx.compose.material3.Switch(useRoot, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } })
+                        androidx.compose.material3.Switch(useRoot && hasSu, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } }, enabled = hasSu)
                         Text(stringResource(R.string.root_use_title), fontSize = 14.sp, modifier = Modifier.weight(1f))
                     }
                 }
@@ -703,6 +733,7 @@ private fun actLabel(a: Act): Int = when (a) {
     Act.RESTORE -> R.string.act_restore
     Act.STOP -> R.string.act_stop
     Act.CLEAR -> R.string.act_clear
+    Act.CACHE -> R.string.act_cache
     Act.SAVE -> R.string.act_save
 }
 
@@ -718,12 +749,30 @@ fun AppsScreen(vm: MainViewModel) {
     var showActions by remember { mutableStateOf(false) }
     // долгий тап по приложению: окно с полными сведениями, которые не поместились в строке
     var infoFor by remember { mutableStateOf<AppEntry?>(null) }
+    // последнее отмеченное в списке приложение: его сведения показываются справа от списка
+    var lastTap by remember { mutableStateOf<String?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(vm.selected.isEmpty()) { if (vm.selected.isEmpty()) showActions = false }
     // компактный вид (просьба владелицы 26.10.2026): без лишней высоты у флажков и чипов, поиск вдвое ниже, строка приложения в две строки
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
     val land = isLandscapeBox(maxWidth, maxHeight)
+    val roomy = maxHeight >= 560.dp
+    val curPkg = lastTap?.takeIf { it in vm.selected } ?: vm.selected.firstOrNull()
+    val curApp = vm.apps.firstOrNull { it.pkg == curPkg }
+    val ramCtx = LocalContext.current
+    val ramScope = rememberCoroutineScope()
+    // какое окно активно (как активная панель в «Файлах»): 0 список, 1 сведения; рамка активного окна толще и цветная
+    var pane by remember { mutableStateOf(0) }
+    val compactLand = land && !roomy
+    // строка «Установить APK / Копии / Очистить ОЗУ»; на низком экране телефона в ландшафте она уходит вниз окна сведений
+    val installRow: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            EqTextButton(stringResource(R.string.act_install)) { installHub = true }
+            EqTextButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
+            if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
+        }
+    }
     // поиск, фильтры, счётчик и кнопки: в портрете сверху, в ландшафте в правой половине
     val controlsUi: @Composable () -> Unit = {
         androidx.compose.foundation.text.BasicTextField(
@@ -747,11 +796,11 @@ fun AppsScreen(vm: MainViewModel) {
             Filter.USER to R.string.f_user, Filter.SYSTEM to R.string.f_system, Filter.ALL to R.string.f_all, Filter.DISABLED to R.string.f_disabled,
             Filter.REMOVED to R.string.f_removed, Filter.BLOAT to R.string.f_bloat,
         )
-        if (land) {
+        if (land && roomy) {
             // ландшафт: фильтры переносятся на следующую строку, без горизонтальной прокрутки
             androidx.compose.foundation.layout.FlowRow(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 filters.forEach { (f, s) -> FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) }) }
             }
@@ -764,8 +813,6 @@ fun AppsScreen(vm: MainViewModel) {
             Text(stringResource(R.string.bloat_hint), fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         }
         Text(stringResource(R.string.apps_count, visible.size, vm.selected.size), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-        val ramCtx = LocalContext.current
-        val ramScope = rememberCoroutineScope()
         val canAct = vm.selected.isNotEmpty()
         val prim = MaterialTheme.colorScheme.primary
         val checkBtn: @Composable () -> Unit = {
@@ -783,21 +830,6 @@ fun AppsScreen(vm: MainViewModel) {
                 )
             }
         }
-        if (land) {
-            // ландшафт: все кнопки одним потоком с переносом строк (размер кнопки как в портрете), без прокрутки
-            androidx.compose.foundation.layout.FlowRow(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                EqFlowButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
-                checkBtn()
-                EqFlowButton(stringResource(R.string.select_none)) { vm.clearSelection() }
-                if (vm.filter == Filter.BLOAT) EqFlowButton(stringResource(R.string.bloat_pick_safe)) { vm.selectSafeBloat() }
-                EqFlowButton(stringResource(R.string.act_install)) { installHub = true }
-                EqFlowButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
-                if (vm.remoteHost == null) EqFlowButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
-            }
-        } else
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 EqTextButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
@@ -805,7 +837,7 @@ fun AppsScreen(vm: MainViewModel) {
                 EqTextButton(stringResource(R.string.select_none)) { vm.clearSelection() }
                 if (vm.filter == Filter.BLOAT) EqTextButton(stringResource(R.string.bloat_pick_safe)) { vm.selectSafeBloat() }
             }
-            Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!compactLand) Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 EqTextButton(stringResource(R.string.act_install)) { installHub = true }
                 EqTextButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
                 if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
@@ -814,22 +846,36 @@ fun AppsScreen(vm: MainViewModel) {
     }
     // список приложений: в портрете под кнопками, в ландшафте в левой половине
     val listUi: @Composable (Modifier) -> Unit = { listMod ->
-        LazyColumn(listMod, state = rememberSavedLazyList("tab.soft.list")) {
+        val ls = rememberSavedLazyList("tab.soft.list")
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+        val sbl = scrollbarLeft()
+        val listOn = pane == 0
+        Box(
+            listMod.padding(horizontal = 8.dp, vertical = 6.dp).clip(shape)
+                .border(if (listOn) 2.dp else 1.dp, if (listOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .5f), shape)
+                .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial); pane = 0 } }
+                .onFocusChanged { if (it.hasFocus) pane = 0 },
+        ) {
+        LazyColumn(
+            Modifier.fillMaxSize().verticalScrollbar(ls), state = ls,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = if (sbl) SbMath.RESERVE_DP.dp else 0.dp, end = if (sbl) 0.dp else SbMath.RESERVE_DP.dp, top = 6.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(visible, key = { it.pkg }) { a ->
                 Row(
                     Modifier.fillMaxWidth()
                         .combinedClickable(
-                            onClick = { vm.toggle(a.pkg) },
+                            onClick = { vm.toggle(a.pkg); lastTap = a.pkg },
                             onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); infoFor = a },
                         )
-                        .padding(horizontal = 12.dp, vertical = 0.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg) }, Modifier.size(32.dp))
                     AppIcon(a.pkg, 32.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(a.label, fontFamily = UiPrefs.listFont, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        // длинное название переносится на несколько строк
+                        Text(a.label, fontFamily = UiPrefs.listFont, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                         val tags = buildList {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
@@ -851,8 +897,12 @@ fun AppsScreen(vm: MainViewModel) {
                             fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    // флажок выбора справа, как в «Файлах»
+                    Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg); lastTap = a.pkg }, Modifier.size(32.dp))
                 }
             }
+        }
+        ScrollbarHandle(ls, Modifier.align(if (sbl) Alignment.CenterStart else Alignment.CenterEnd))
         }
     }
         PermsDialog(vm)
@@ -875,8 +925,9 @@ fun AppsScreen(vm: MainViewModel) {
         if (showBackups) FullBackupsDialog { showBackups = false; vm.loadApps() }
         infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }
     val actionsUi: @Composable () -> Unit = {
-        if (showActions && vm.selected.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // в ландшафте кнопки действий видны всегда, когда что-то выбрано; в портрете их открывает кнопка с галочкой
+        if ((showActions || land) && vm.selected.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val lPerms = stringResource(R.string.act_perms)
                 val lSpecial = stringResource(R.string.act_special)
                 val lVersions = stringResource(R.string.act_versions)
@@ -892,7 +943,7 @@ fun AppsScreen(vm: MainViewModel) {
                 fun act(x: Act) = actLabels.getValue(x) to { confirm = x }
                 EqChipRow(listOf(act(Act.DISABLE), act(Act.ENABLE), act(Act.UNINSTALL)))
                 EqChipRow(listOf(act(Act.RESTORE), act(Act.STOP)))
-                EqChipRow(listOf(act(Act.CLEAR), act(Act.SAVE)))
+                EqChipRow(listOf(act(Act.CACHE), act(Act.CLEAR), act(Act.SAVE)))
                 EqChipRow(listOf(lFull to { vm.fullBackup() }))
             }
         }
@@ -902,9 +953,18 @@ fun AppsScreen(vm: MainViewModel) {
         SplitHalves(Modifier.fillMaxSize(), spacing = 0.dp,
             rest = { Box(Modifier.weight(1f).fillMaxHeight()) { listUi(Modifier.fillMaxSize()) } },
             controls = {
-                FitHeight(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    controlsUi()
-                    actionsUi()
+                if (roomy) {
+                    // достаточно высоты: окно сведений занимает всё свободное место, кнопки действий прижаты к низу экрана
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        controlsUi()
+                        AppInfoPanel(curApp, vm.selected.size, Modifier.weight(1f), scroll = true, active = pane == 1, onActive = { pane = 1 })
+                        actionsUi()
+                    }
+                } else {
+                    // телефон в ландшафте: сверху поиск и кнопки, ниже окно сведений на весь остаток высоты; оно прокручивается само, кнопки действий в нём внизу
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        AppInfoPanel(curApp, vm.selected.size, Modifier.weight(1f), scroll = true, big = true, active = pane == 1, onActive = { pane = 1 }, top = { controlsUi(); installRow() }, bottom = { actionsUi() })
+                    }
                 }
             })
     } else {
@@ -923,7 +983,7 @@ fun AppsScreen(vm: MainViewModel) {
             onDismissRequest = { confirm = null },
             title = { Text(stringResource(R.string.confirm_title, label, vm.selected.size)) },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
+                Column(Modifier.barScroll()) {
                     if ((act == Act.UNINSTALL || act == Act.DISABLE) && hasSystem) Text(stringResource(R.string.confirm_system))
                     if (act == Act.CLEAR) Text(stringResource(R.string.confirm_clear))
                     if (act == Act.UNINSTALL && Cfg.backupOnDelete(LocalContext.current)) Text(stringResource(R.string.confirm_copy_saved))
@@ -935,36 +995,144 @@ fun AppsScreen(vm: MainViewModel) {
     }
 }
 
-/** Полные сведения о приложении: имя, пакет, версия, состояние, категория и пути APK. */
+@Composable
+fun rememberAppExtra(a: AppEntry?): AppExtra? {
+    val extra by produceState<AppExtra?>(null, a?.pkg) { value = null; if (a != null) value = AppExtras.load(a.pkg, a.paths) }
+    return extra
+}
+
+/**
+ * Сведения о программе: общий вид для панели во вкладке «Софт» и для окна по долгому нажатию.
+ * [twoCols]: два блока рядом (ландшафт): слева пакет, версия, состояние, память; справа размеры и пути APK. [big]: крупнее шрифт.
+ */
+@Composable
+fun AppInfoBlocks(a: AppEntry, extra: AppExtra?, twoCols: Boolean, big: Boolean, header: Boolean, full: Boolean = false, stack: Boolean = false) {
+    val ctx = LocalContext.current
+    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val known = Debloat.known[a.pkg]
+    val green = if (dark) Color(0xFF81C784) else Color(0xFF2E7D32)
+    val blue = if (dark) Color(0xFF64B5F6) else Color(0xFF1565C0)
+    val yellow = if (dark) Color(0xFFFFD54F) else Color(0xFFD99A00)
+    val red = if (dark) Color(0xFFEF5350) else Color(0xFFD32F2F)
+    val orange = if (dark) Color(0xFFFFA726) else Color(0xFFE65100)
+    val stText: String
+    val stColor: Color
+    when {
+        !a.system -> { stText = stringResource(R.string.st_user); stColor = green }
+        known?.risk == Risk.SAFE -> { stText = stringResource(R.string.tag_system) + ", " + stringResource(Debloat.riskLabel(Risk.SAFE)); stColor = blue }
+        known != null -> { stText = stringResource(R.string.tag_system) + ", " + stringResource(Debloat.riskLabel(known.risk)); stColor = red }
+        else -> { stText = stringResource(R.string.tag_system); stColor = yellow }
+    }
+    val enabledS = stringResource(R.string.st_enabled)
+    val disabledS = stringResource(R.string.tag_disabled)
+    val removedS = stringResource(R.string.tag_removed)
+    val abi = extra?.abi
+    val state = androidx.compose.ui.text.buildAnnotatedString {
+        withStyle(androidx.compose.ui.text.SpanStyle(color = stColor, fontWeight = FontWeight.Bold)) { append(stText) }
+        append(", " + (if (a.enabled) enabledS else disabledS))
+        if (!a.installed) append(", $removedS")
+        if (abi != null) { append(" · "); withStyle(androidx.compose.ui.text.SpanStyle(color = orange, fontWeight = FontWeight.Bold)) { append(abi) } }
+    }
+    fun sz(v: Long?): String = if (extra == null) "…" else if (v == null) "—" else android.text.format.Formatter.formatShortFileSize(ctx, v)
+    val kSp = if (big) 14.sp else 11.sp
+    val vSp = if (big) 18.sp else 12.sp
+    @Composable fun lineA(k: Int, v: androidx.compose.ui.text.AnnotatedString, lines0: Int = 2) {
+        // в окне по долгому нажатию текст виден целиком (окно прокручивается), без «…»
+        val lines = if (full) Int.MAX_VALUE else lines0
+        if (twoCols || stack) Column {
+            Text(stringResource(k), fontSize = kSp, lineHeight = kSp * 1.2f, color = dim)
+            Text(v, fontSize = vSp, lineHeight = vSp * 1.2f, maxLines = lines, overflow = TextOverflow.Ellipsis)
+        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(k), fontSize = kSp, lineHeight = kSp * 1.25f, color = dim, modifier = Modifier.width(if (big) 130.dp else 92.dp))
+            Text(v, fontSize = vSp, lineHeight = vSp * 1.2f, maxLines = lines, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+    }
+    @Composable fun line(k: Int, v: String, lines: Int = 2) = lineA(k, androidx.compose.ui.text.AnnotatedString(v), lines)
+    @Composable fun leftBlock() {
+        line(R.string.info_pkg, a.pkg)
+        if (a.version.isNotEmpty()) line(R.string.info_ver, a.version)
+        lineA(R.string.info_state, state, 3)
+        if (known != null) line(R.string.info_cat, stringResource(Debloat.catLabel(known.cat)) + ", " + stringResource(Debloat.riskLabel(known.risk)))
+        AppExtras.storageRes(a.paths)?.let { line(R.string.info_storage, stringResource(it)) }
+    }
+    @Composable fun rightBlock() {
+        line(R.string.info_size_apk, sz(extra?.apk))
+        line(R.string.info_size_data, sz(extra?.data))
+        line(R.string.info_size_cache, sz(extra?.cache))
+        if ((extra?.obb ?: 0L) > 0) line(R.string.info_size_obb, sz(extra?.obb))
+        if (a.paths.isNotEmpty()) line(R.string.info_paths, a.paths.joinToString("\n"), if (twoCols) 4 else 3)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(if (full) 16.dp else if (twoCols) 6.dp else 4.dp)) {   // в окне по долгому нажатию между пунктами зазор, внутри пункта строки вплотную
+        if (header) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, if (big) 36.dp else 32.dp) }
+            Text(a.label, fontSize = if (big) 17.sp else 15.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+        if (twoCols) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { leftBlock() }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { rightBlock() }
+        } else { leftBlock(); rightBlock() }
+    }
+}
+
+/** Справа от списка (ландшафт): окно со сведениями о выбранной программе. */
+@Composable
+fun AppInfoPanel(a: AppEntry?, selectedCount: Int, modifier: Modifier = Modifier, scroll: Boolean = false, big: Boolean = false, active: Boolean = false, onActive: () -> Unit = {}, top: (@Composable () -> Unit)? = null, bottom: (@Composable () -> Unit)? = null) {
+    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val extra = rememberAppExtra(a)
+    val sc = rememberScrollState()
+    val sbLeft = scrollbarLeft()
+    val sbScope = rememberCoroutineScope()
+    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
+    var selfFocus by remember { mutableStateOf(false) }
+    // рамка как у активной панели в «Файлах»: активное окно (нажатие или фокус пульта) толще и цветное; пультом окно прокручивается стрелками
+    Box(
+        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+            .border(if (active) 2.dp else 1.dp, if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .5f), shape)
+            .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial); onActive() } }
+            .onFocusChanged { selfFocus = it.isFocused; if (it.hasFocus) onActive() }
+            .onPreviewKeyEvent { e ->
+                if (!scroll || !selfFocus || e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) false
+                else when (e.key) {
+                    androidx.compose.ui.input.key.Key.DirectionDown -> if (sc.canScrollForward) { sbScope.launch { sc.animateScrollBy(stepPx) }; true } else false
+                    androidx.compose.ui.input.key.Key.DirectionUp -> if (sc.canScrollBackward) { sbScope.launch { sc.animateScrollBy(-stepPx) }; true } else false
+                    else -> false
+                }
+            }
+            .focusable(),
+    ) {
+        Column(
+            Modifier.then(if (scroll) Modifier.fillMaxSize().verticalScrollbar(sc, sbLeft).verticalScroll(sc) else Modifier)
+                .padding(start = if (scroll && sbLeft) (10 + SbMath.RESERVE_DP).dp else 10.dp, end = if (scroll && !sbLeft) (10 + SbMath.RESERVE_DP).dp else 10.dp, top = 8.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            top?.invoke()
+            if (a == null) { Text(stringResource(R.string.info_pick), fontSize = 12.sp, color = dim); return@Column }
+            AppInfoBlocks(a, extra, twoCols = false, big = big, header = true)
+            if (selectedCount > 1) Text(stringResource(R.string.info_more_sel, selectedCount), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+            bottom?.invoke()
+        }
+        if (scroll) ScrollbarHandle(sc, Modifier.align(if (sbLeft) Alignment.CenterStart else Alignment.CenterEnd))
+    }
+}
+
+/** Полные сведения о приложении (долгое нажатие): в портрете одно окно, в ландшафте широкое окно с двумя блоками. */
 @Composable
 fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val copied = stringResource(R.string.copied)
-    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
-    val state = buildList {
-        if (a.system) add(stringResource(R.string.tag_system))
-        if (!a.enabled) add(stringResource(R.string.tag_disabled))
-        if (!a.installed) add(stringResource(R.string.tag_removed))
-    }
-    val known = Debloat.known[a.pkg]
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val land = cfg.screenWidthDp > cfg.screenHeightDp
+    val extra = rememberAppExtra(a)
     LAlertDialog(
         onDismissRequest = onClose,
+        wide = land,
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AppIcon(a.pkg, 40.dp)
+            androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, 40.dp) }
             Text(a.label, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         } },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                @Composable fun row(k: Int, v: String) {
-                    Column { Text(stringResource(k), fontSize = 11.sp, color = dim); Text(v, fontSize = 14.sp) }
-                }
-                row(R.string.info_pkg, a.pkg)
-                if (a.version.isNotEmpty()) row(R.string.info_ver, a.version)
-                row(R.string.info_state, if (state.isEmpty()) stringResource(R.string.info_state_user) else state.joinToString(", "))
-                if (known != null) row(R.string.info_cat, stringResource(Debloat.catLabel(known.cat)) + ", " + stringResource(Debloat.riskLabel(known.risk)))
-                if (a.paths.isNotEmpty()) row(R.string.info_paths, a.paths.joinToString("\n"))
-            }
-        },
+        text = { Column(Modifier.then(Modifier.androidxHeightIn((cfg.screenHeightDp * 0.55f).dp)).barScroll()) { AppInfoBlocks(a, extra, twoCols = false, big = true, header = false, full = true, stack = !land) } },
         confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
         dismissButton = {
             TextButton({
@@ -1028,7 +1196,7 @@ fun DeviceScreen(vm: MainViewModel) {
     var dpi by remember { mutableStateOf("") }
     var reboot by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { if (vm.deviceInfo.isEmpty()) vm.refreshInfo() }
-    Column(Modifier.verticalScroll(rememberSavedScroll("tab.device")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    TabColumn("tab.device", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.dev_info), fontWeight = FontWeight.Bold)
@@ -1093,7 +1261,7 @@ fun DeviceScreen(vm: MainViewModel) {
 fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
     val ctx = LocalContext.current
     val copied = stringResource(R.string.copied)
-    Column(if (embedded) Modifier else Modifier.verticalScroll(rememberSavedScroll("tab.about")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(if (embedded) Modifier else Modifier.tabScroll(rememberSavedScroll("tab.about")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(64.dp))
             Column {
@@ -1119,3 +1287,5 @@ fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
         if (licOpen) { Text(stringResource(R.string.licenses_text), fontSize = 11.sp, fontFamily = FontFamily.Monospace); Text(stringResource(R.string.licenses_brands), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
+
+private fun Modifier.androidxHeightIn(max: androidx.compose.ui.unit.Dp): Modifier = this.then(Modifier.heightIn(max = max))

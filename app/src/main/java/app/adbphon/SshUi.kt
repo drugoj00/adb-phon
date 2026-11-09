@@ -227,7 +227,7 @@ fun SshScreen() {
 
 @Composable
 private fun SshLogin(ctx: Context) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberSavedScroll("tab.ssh")).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    TabColumn("tab.ssh", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.ssh_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         OutlinedTextField(SshModel.host, { SshModel.host = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.ssh_host)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))

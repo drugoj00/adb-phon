@@ -210,7 +210,9 @@ object Thumbs {
 
     suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load("a:$path") {
         val pm = ctx.packageManager
-        val info = pm.getPackageArchiveInfo(path, 0)?.applicationInfo ?: return@load null
+        val info = pm.getPackageArchiveInfo(path, 0)?.applicationInfo
+        android.util.Log.i("ApkIcon", "path=$path exists=${java.io.File(path).canRead()} info=${info != null}")
+        if (info == null) return@load null
         info.sourceDir = path; info.publicSourceDir = path
         val d = info.loadIcon(pm)
         Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also { b -> val c = android.graphics.Canvas(b); d.setBounds(0, 0, 96, 96); d.draw(c) }
@@ -238,6 +240,9 @@ object Thumbs {
         }
     }
 }
+
+/** Дата «2026-11-08 03:32» на экране как «08.11.2026 03:32» (день.месяц.год). */
+fun fmDate(s: String): String = Regex("""^(\d{4})-(\d{2})-(\d{2})(.*)$""").replace(s) { m -> "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}${m.groupValues[4]}" }
 
 /**
  * Единый значок файла для списка, дерева и диалогов: цветной значок по типу; для фото и видео (локальные файлы) миниатюра; для APK значок самого

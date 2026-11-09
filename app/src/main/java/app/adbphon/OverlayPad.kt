@@ -40,6 +40,7 @@ class OverlayPadService : Service() {
     private var watch: Job? = null
     private var builtPortrait = false
     private var builtW = 0
+    private var builtH = 0
     private val views = ArrayList<View>()
     private lateinit var wm: WindowManager
 
@@ -74,7 +75,7 @@ class OverlayPadService : Service() {
             build()
             if (loop == null) loop = scope.launch { Pad.loop() }
             // автопереключение портрет/альбом без перезапуска службы: следим за реальными размерами дисплея
-            if (watch == null) watch = scope.launch { while (true) { kotlinx.coroutines.delay(300); if (running) { val q = realSize(); val port = q.y > q.x; if (port != builtPortrait || q.x != builtW) { clear(); build() } } } }
+            if (watch == null) watch = scope.launch { while (true) { kotlinx.coroutines.delay(300); if (running) { val q = realSize(); val port = q.y > q.x; if (port != builtPortrait || q.x != builtW || q.y != builtH) { clear(); build() } } } }
         }
         return START_STICKY      // после убийства процесса система перезапускает службу: оверлей поднимается заново и подключается к живому помощнику
     }
@@ -96,7 +97,13 @@ class OverlayPadService : Service() {
     private fun realSize(): android.graphics.Point {
         val m = DisplayMetrics()
         @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(m)
-        return android.graphics.Point(m.widthPixels, m.heightPixels)
+        // ширина без боковой панели навигации (телефон в ландшафте, панель слева или справа): окна оверлея отсчитываются от её края, иначе правые кнопки уходят за экран
+        val u = DisplayMetrics()
+        @Suppress("DEPRECATION") wm.defaultDisplay.getMetrics(u)
+        // панель навигации может стоять снизу (портрет), слева или справа (ландшафт) и быть видна в игре: берём область без неё по обеим осям
+        val w = if (u.widthPixels in (m.widthPixels / 2)..m.widthPixels) u.widthPixels else m.widthPixels
+        val h = if (u.heightPixels in (m.heightPixels / 2)..m.heightPixels) u.heightPixels else m.heightPixels
+        return android.graphics.Point(w, h)
     }
 
     private fun add(v: View, x: Int, y: Int, w: Int, h: Int) {
@@ -111,7 +118,7 @@ class OverlayPadService : Service() {
         val p = realSize(); val W = p.x; val H = p.y
         val a = Pad.alpha.coerceIn(0.15f, 1f)
         val sz = Pad.scale.coerceIn(0.7f, 1.3f)
-        builtPortrait = H > W; builtW = W
+        builtPortrait = H > W; builtW = W; builtH = H
         if (H > W) buildPortrait(W, H, a, sz) else buildLandscape(W, H, a, sz)
     }
 

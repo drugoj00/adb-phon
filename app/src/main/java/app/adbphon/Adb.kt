@@ -34,6 +34,16 @@ object Adb {
         }
     val isRoot: Boolean get() = rootOn
 
+    /** На устройстве есть программа su (root). Проверка файлов без запуска su: на телефоне без root переключатель root делаем неактивным. */
+    val suPresent: Boolean by lazy {
+        val dirs = (System.getenv("PATH") ?: "").split(':').filter { it.isNotBlank() } +
+            listOf("/system/bin", "/system/xbin", "/sbin", "/su/bin", "/system/sbin", "/vendor/bin", "/product/bin", "/odm/bin", "/apex/com.android.runtime/bin", "/debug_ramdisk")
+        // файлы su могут быть скрыты, а root есть: root уже работал раньше, или su просто запускается (ошибка запуска = su нет)
+        dirs.any { runCatching { java.io.File(it, "su").exists() }.getOrDefault(false) } ||
+            (::appCtx.isInitialized && appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false)) ||
+            runCatching { ProcessBuilder("su", "-c", "true").redirectErrorStream(true).start().also { it.destroy() }; true }.getOrDefault(false)
+    }
+
     /** Идёт подключение или отключение: библиотека держит блокировку, и опрос состояния из интерфейса вешал его на десятки секунд (приставка, 08.11.2026). */
     @Volatile private var busyConn = 0
     @Volatile private var lastConn = false
@@ -49,7 +59,7 @@ object Adb {
         if (rootSuppressed) return@withContext false
         val ok = runCatching { rootRun("id", null, 30_000).contains("uid=0") }
             .onFailure { AppLog.i("ADBphon", "root недоступен: ${it.message}") }.getOrDefault(false)
-        if (ok) { runCatching { guarded { mgr.disconnect() } }; lastConn = false; rootOn = true; currentHost = "" }
+        if (ok) { runCatching { guarded { mgr.disconnect() } }; lastConn = false; rootOn = true; currentHost = ""; if (::appCtx.isInitialized) appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("root_ok", true).apply() }
         AppLog.i("ADBphon", "root=$ok")
         ok
     }

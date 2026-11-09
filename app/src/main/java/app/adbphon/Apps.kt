@@ -141,7 +141,7 @@ class AppsFs : RemoteFs {
 /** Действия над приложением из меню строки. Возвращают короткое сообщение для пользователя. */
 object AppActions {
     private fun ctx() = FmIo.app
-    private suspend fun adb(cmd: String): String? = if (Adb.isConnected) Adb.shell(cmd, 30_000, fast = true) else null
+    private suspend fun adb(cmd: String): String? = if (AutoAdb.ensure()) Adb.shell(cmd, 30_000, fast = true) else null
 
     fun info(pkg: String) { runCatching { ctx().startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
 
@@ -156,19 +156,19 @@ object AppActions {
     }
 
     suspend fun setEnabled(pkg: String, on: Boolean): String {
-        val out = adb(if (on) "pm enable $pkg" else "pm disable-user --user 0 $pkg") ?: return Fm.str(R.string.ap_need_adb)
+        val out = adb(if (on) "pm enable $pkg" else "pm disable-user --user 0 $pkg") ?: return AutoAdb.hint()
         return if (out.contains("Exception", true) || out.contains("Error", true) || out.contains("Unknown", true)) out.lines().first { it.isNotBlank() } else Fm.str(R.string.ap_done)
     }
 
     /** Обычное приложение: системное окно удаления; системное и прочее: pm uninstall --user 0 через ADB или root. */
     suspend fun uninstall(pkg: String, system: Boolean): String {
         if (!system) { saveCopy(pkg); runCatching { ctx().startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; return Fm.str(R.string.ap_done) }
-        val out = adb("pm uninstall --user 0 $pkg") ?: return Fm.str(R.string.ap_need_adb)
+        val out = adb("pm uninstall --user 0 $pkg") ?: return AutoAdb.hint()
         return if (out.contains("Success")) Fm.str(R.string.ap_done) else out.lines().firstOrNull { it.isNotBlank() } ?: Fm.str(R.string.ap_done)
     }
 
     suspend fun reinstall(pkg: String): String {
-        val out = adb("cmd package install-existing $pkg") ?: return Fm.str(R.string.ap_need_adb)
+        val out = adb("cmd package install-existing $pkg") ?: return AutoAdb.hint()
         return if (out.contains("installed", true)) Fm.str(R.string.ap_done) else out.lines().firstOrNull { it.isNotBlank() } ?: Fm.str(R.string.ap_done)
     }
 
@@ -180,7 +180,7 @@ object AppActions {
 
     /** Очистка кэша: с root полностью, по ADB внешний кэш (внутренний чужого приложения без root недоступен). Возвращает (успех, сообщение). */
     suspend fun clearCache(pkg: String): Pair<Boolean, String> {
-        if (!Adb.isConnected) return false to Fm.str(R.string.ap_need_adb)
+        if (!AutoAdb.ensure()) return false to AutoAdb.hint()
         if (Adb.isRoot) {
             Adb.shell("rm -rf /data/data/$pkg/cache/* /data/data/$pkg/code_cache/* /data/user_de/0/$pkg/cache/* /data/user_de/0/$pkg/code_cache/* /sdcard/Android/data/$pkg/cache/* /sdcard/Android/data/$pkg/code_cache/* 2>&1", 60_000, fast = true)
             return true to Fm.str(R.string.ap_done)
@@ -192,7 +192,7 @@ object AppActions {
     }
 
     suspend fun clearData(pkg: String): Pair<Boolean, String> {
-        if (!Adb.isConnected) return false to Fm.str(R.string.ap_need_adb)
+        if (!AutoAdb.ensure()) return false to AutoAdb.hint()
         val o = Adb.shell("pm clear $pkg 2>&1", 60_000, fast = true)
         return if (o.contains("Success")) true to Fm.str(R.string.ap_done) else false to (o.lines().firstOrNull { it.isNotBlank() } ?: "?")
     }
@@ -203,13 +203,13 @@ object AppActions {
         return when (action) {
             "stop" -> true to stop(pkg)
             "disable", "enable" -> {
-                if (!Adb.isConnected) return false to Fm.str(R.string.ap_need_adb)
+                if (!AutoAdb.ensure()) return false to AutoAdb.hint()
                 val r = setEnabled(pkg, action == "enable")
                 (r == Fm.str(R.string.ap_done)) to r
             }
             "uninstall" -> {
                 if (isSystem(pkg)) return false to Fm.str(R.string.ap_err_system)
-                if (!Adb.isConnected) return false to Fm.str(R.string.ap_need_adb)
+                if (!AutoAdb.ensure()) return false to AutoAdb.hint()
                 saveCopy(pkg)
                 val o = Adb.shell("pm uninstall --user 0 $pkg 2>&1", 60_000, fast = true)
                 if (o.contains("Success")) true to Fm.str(R.string.ap_done) else false to (o.lines().firstOrNull { it.isNotBlank() } ?: "?")

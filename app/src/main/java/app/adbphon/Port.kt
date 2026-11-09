@@ -127,19 +127,11 @@ fun AutoConnectCard(vm: MainViewModel) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val old = android.os.Build.VERSION.SDK_INT < 30
     var autoOn by remember { mutableStateOf(!old && AutoPairService.isEnabled(ctx)) }
+    // сами попытки подключения идут в MainViewModel (с любой вкладки); здесь только слежение за службой спецвозможностей и поиск сопряжения
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (!old) Pairing.start(ctx)
-        var n = 0
         while (true) {
             if (!old) autoOn = AutoPairService.isEnabled(ctx)
-            // тихие попытки: порт 5555 и (Android 11+) уже сопряжённое устройство по беспроводной отладке
-            if (!Adb.autoOff && !Adb.isConnected && !vm.busy && Cfg.useRoot(ctx) && !Adb.rootSuppressed && n == 0) Adb.tryRoot()
-            if (!Adb.autoOff && !Adb.isConnected && !vm.busy && n % 2 == 0) {
-                Adb.connectLocal(5555)
-                if (!Adb.isConnected && !old && n % 8 == 0) Adb.connectWireless(ctx, null)
-            }
-            if (Adb.isConnected) Hooks.refresh()
-            n++
             kotlinx.coroutines.delay(1800)
         }
     }
@@ -162,13 +154,7 @@ fun AutoConnectCard(vm: MainViewModel) {
                     runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }) { Text(androidx.compose.ui.res.stringResource(R.string.autopair_enable)) }
                 androidx.compose.material3.Button(onClick = {
-                    Pairing.autoStart()
-                    Pairing.start(ctx)
-                    val tries = listOf(
-                        android.content.Intent("android.settings.ADB_WIRELESS_SETTINGS"),
-                        android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-                    )
-                    for (i in tries) { if (runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) break }
+                    Pairing.startAutoFlow(ctx)
                 }, enabled = autoOn && !vm.busy) { Text(androidx.compose.ui.res.stringResource(R.string.autopair_run)) }
             }
         }

@@ -65,13 +65,13 @@ fun FmPermsDialog(p: FmPane, names: List<String>, close: () -> Unit) {
         title = { Text(stringResource(R.string.perm_title), fontSize = 18.sp) },
         ime = true,
         text = {
-            Column(Modifier.widthIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.widthIn(max = 360.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (multi) stringResource(R.string.perm_multi, paths.size) else paths[0], fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 when {
                     loading -> Text(stringResource(R.string.perm_loading), fontSize = 14.sp)
                     failed && fix != null -> {
                         Text(stringResource(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text), fontSize = 14.sp)
-                        androidx.compose.material3.Button({ if (fix == "wifi") { Fm.enableWifiDebug(p); retry++ } else { close(); Fm.goConnect?.invoke() } }) {
+                        androidx.compose.material3.Button({ if (fix == "wifi") { Fm.fixAction(p, "wifi"); retry++ } else { close(); Fm.fixAction(p, "pair") } }) {
                             Text(stringResource(if (fix == "wifi") R.string.fm_fix_wifi_btn else R.string.fm_fix_pair_btn), fontSize = 13.sp)
                         }
                     }

@@ -142,7 +142,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
         testMsg?.let { Text(it, fontSize = 12.sp, color = if (it == okTxt) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
         Text(stringResource(R.string.fm_net_secure), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 6, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         if (edit == null) found.forEach { h ->
-            Column(Modifier.fillMaxWidth().clickable { host = h.ip; kind = h.kinds.firstOrNull() ?: kind; if (kind == "dav") host = (if (h.ports.contains(443)) "https://" else "http://") + h.ip }.padding(vertical = 4.dp)) {
+            Column(Modifier.fillMaxWidth().clickable { host = h.ip; kind = h.kinds.firstOrNull() ?: kind; if (kind == "dav") host = davUrlOf(h) }.padding(vertical = 4.dp)) {
                 Text(h.ip + if (h.name.isNotBlank()) "  ·  " + h.name else "", fontSize = 14.sp, maxLines = 1)
                 Text(h.kinds.joinToString(" · ") { it.uppercase() }, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
             }
@@ -151,7 +151,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
 
     val titleRes = if (edit != null) R.string.fm_net_edit_title else R.string.fm_source
     val body: @Composable () -> Unit = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (!netForm) {
                 opt(R.string.fm_src_local, R.string.fm_src_local_hint, p.src == "local") { close(); Fm.setSource(p, "local") }
                 opt(R.string.fm_src_adb, R.string.fm_src_adb_hint, p.src == "adb") { close(); Fm.setSource(p, "adb") }
@@ -178,7 +178,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { fPath(); fPort(); fUser(); fPass(); fSmb() }
                     }
                     if (edit == null) found.forEach { h ->
-                        Column(Modifier.fillMaxWidth().clickable { host = h.ip; kind = h.kinds.firstOrNull() ?: kind; if (kind == "dav") host = (if (h.ports.contains(443)) "https://" else "http://") + h.ip }.padding(vertical = 3.dp)) {
+                        Column(Modifier.fillMaxWidth().clickable { host = h.ip; kind = h.kinds.firstOrNull() ?: kind; if (kind == "dav") host = davUrlOf(h) }.padding(vertical = 3.dp)) {
                             Text(h.ip + if (h.name.isNotBlank()) "  ·  " + h.name else "", fontSize = 13.sp, maxLines = 1)
                         }
                     }
@@ -260,4 +260,12 @@ private fun ScanBtn(short: Boolean, scanning: Boolean, setScanning: (Boolean) ->
     OutlinedButton({
         if (!scanning) { setScanning(true); setFound(emptyList()); scope.launch { setFound(runCatching { NetDiscover.scan(ctx) { setFound(it) } }.getOrDefault(found)); setScanning(false) } }
     }, modifier, enabled = !scanning, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(if (scanning) R.string.fm_net_scanning else if (short) R.string.fm_net_scan_short else R.string.fm_net_scan), fontSize = 13.sp, maxLines = 1) }
+}
+
+/** Адрес WebDAV найденного устройства: порт добавляется, если это не 80 и не 443 (например, Wi-Fi сервер ADB-phon на 8080). */
+private fun davUrlOf(h: NetHost): String {
+    if (h.ports.contains(443)) return "https://" + h.ip
+    if (h.ports.contains(80)) return "http://" + h.ip
+    val p = listOf(8080, 8081, 5005, 5006).firstOrNull { it in h.ports }
+    return "http://" + h.ip + (if (p != null) ":$p" else "")
 }

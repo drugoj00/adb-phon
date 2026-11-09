@@ -19,10 +19,12 @@ object PadLayout {
     class Box(val cx: Float, val cy: Float, val w: Float, val h: Float)
 
     // ---- стики, крестовина, ABXY
-    val lStick = Pt(0.17f, 0.46f)
-    val rStick = Pt(0.67f, 0.76f)
-    val dpad = Pt(0.33f, 0.72f)
-    val abxy = Pt(0.83f, 0.46f)
+    // 09.11.2026 (слово владелицы, «как в игре»): верхний ряд (y 0,46) крестовина слева и ABXY справа, нижний ряд (y 0,72) левый и правый стик
+    // 09.11.2026 (слово владелицы): расстояние между левой и правой половинами увеличено
+    val lStick = Pt(0.27f, 0.72f)
+    val rStick = Pt(0.73f, 0.72f)
+    val dpad = Pt(0.11f, 0.46f)
+    val abxy = Pt(0.88f, 0.46f)
     // ---- малые круглые кнопки
     // Back, Guide («Ш») и Start на одной горизонтальной линии с L3 и R3 (y = 0,30); по горизонтали остаются в центре между блоками
     val select = Pt(0.42f, 0.30f)
@@ -50,7 +52,7 @@ object PadLayout {
     val flip = Box(0.082f, 0.922f, 0.306f, 0.097f)
     val mode = Box(0.082f, 0.806f, 0.306f, 0.097f)
     val layout = Box(0.935f, 0.922f, 0.233f, 0.097f)
-    val device = Box(0.927f, 0.806f, 0.268f, 0.097f)
+    val device = Box(0.50f, 0.58f, 0.14f, 0.14f)   // 09.11.2026 (слово владелицы): значок Bluetooth в голубом вертикальном овале точно по центру экрана
     /** Подпись с именем текущего устройства: центр по x и y, размер шрифта (доли u). */
     val caption = Pt(0.5f, 0.972f)
     const val CAPTION_SIZE = 0.027f

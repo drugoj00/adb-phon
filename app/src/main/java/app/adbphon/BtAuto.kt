@@ -66,6 +66,7 @@ object BtAuto {
     fun manualConnect(ctx: Context, r: BtRow, switching: Boolean = false) {
         val app = ctx.applicationContext
         pauseReconnect = true; userStopped = false
+        BtHid.wantedAddr = r.address    // выбор человека: подключения от других устройств отклоняются
         PadKeeper.setPaused(app, false)    // ручное подключение: после «Отключить» в шторке фоновая служба снова может работать
         job?.cancel(); busy = false
         manualJob?.cancel()
@@ -101,7 +102,7 @@ object BtAuto {
     /** Человек сам отключил и забыл устройство: фоновое подключение молчит, пока он не выберет устройство или не зайдёт на раздел. */
     @Volatile var userStopped = false
     val manualActive get() = manualJob?.isActive == true
-    fun userDisconnect() { pauseReconnect = true; userStopped = true; BtHid.disconnect() }
+    fun userDisconnect() { pauseReconnect = true; userStopped = true; BtHid.wantedAddr = null; BtHid.disconnect() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
 
@@ -109,7 +110,8 @@ object BtAuto {
     private fun s(ctx: Context, id: Int, vararg a: Any): String = runCatching { ctx.getString(id, *a) }.getOrDefault("")
     private fun adapter(ctx: Context) = (ctx.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    fun autoLast(ctx: Context) = prefs(ctx).getBoolean("auto_last", true)
+    // 09.11.2026 (слово владелицы): автоподключение к последнему устройству по умолчанию ВЫКЛЮЧЕНО (оно само цеплялось к компьютеру, когда нужен другой телефон)
+    fun autoLast(ctx: Context) = prefs(ctx).getBoolean("auto_last", false)
     fun setAutoLast(ctx: Context, v: Boolean) { prefs(ctx).edit().putBoolean("auto_last", v).apply() }
 
     /** Адреса устройств, сопряжённых автоматически по ADB: это Android-приставки и телефоны, им предупреждение не нужно. */

@@ -175,7 +175,7 @@ fun FmDialogFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> 
             val land = maxWidth > maxHeight
             val w = if (land || tv) minOf(maxWidth * 0.88f, if (tv) 720.dp else 760.dp) else maxWidth - 20.dp
             androidx.compose.material3.Surface(Modifier.width(w).heightIn(max = maxHeight * 0.92f), shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp) {
-                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+                Column(Modifier.barScroll().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             }
         }
     }
@@ -194,7 +194,7 @@ private val cfGrey = Color(0xFF78909C)
 private fun fmtWhen(ms: Long): String {
     if (ms <= 0) return ""
     val cal = java.util.Calendar.getInstance(); val y = cal.get(java.util.Calendar.YEAR); cal.timeInMillis = ms
-    return SimpleDateFormat(if (cal.get(java.util.Calendar.YEAR) == y) "dd.MM HH:mm" else "dd.MM.yy", Locale.getDefault()).format(Date(ms))
+    return SimpleDateFormat(if (cal.get(java.util.Calendar.YEAR) == y) "dd.MM.yyyy HH:mm" else "dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(ms))
 }
 
 /** Окно «Файл уже существует»: ряд кнопок-значков, заголовок, список совпадений в колонках «Было» и «Стало», «Для всех». */

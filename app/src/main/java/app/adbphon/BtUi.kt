@@ -186,7 +186,7 @@ private fun BtOffBlock(ctx: Context) {
         if (r.resultCode == android.app.Activity.RESULT_OK) { denied = false; BtHid.start(ctx) } else denied = true
     }
     fun prompt() { runCatching { enable.launch(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)) }.onFailure { denied = true } }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.bt_off_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
         if (BtPower.busy) Text(stringResource(R.string.bt_pwr_busy), fontSize = 13.sp)
         else {
@@ -255,10 +255,10 @@ private fun BtPairing(ctx: Context, land: Boolean = false, pad: Boolean = false,
     if (land) {
         // ландшафт (правша): слева список устройств, справа подсказка в одну строку, статус и «Сделать видимым»; левша зеркально
         SplitHalves(Modifier.fillMaxSize(), spacing = 12.dp,
-            rest = { Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { listBlock() } },
-            controls = { Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { hintBlock() } })
+            rest = { Column(Modifier.weight(1f).fillMaxHeight().barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { listBlock() } },
+            controls = { Column(Modifier.weight(1f).fillMaxHeight().barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { hintBlock() } })
     } else {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { hintBlock(); listBlock() }
+        Column(Modifier.fillMaxSize().barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { hintBlock(); listBlock() }
     }
 }
 
@@ -364,7 +364,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.BtControls(host: Stri
         // ландшафт (правша): ПРАВАЯ половина = окно курсора и под ним ряд кнопок мыши; ЛЕВАЯ = подключение, стрелки и клавиши, поле текста. Левша: зеркально (SplitHalves)
         SplitHalves(Modifier.weight(1f).fillMaxWidth(), spacing = 12.dp,
             rest = {
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.weight(1f).fillMaxHeight().barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     hostRow(); keysUi(); textRowUi()
                 }
             },

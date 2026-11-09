@@ -379,7 +379,7 @@ fun CloudTrashDlg(c: NetConn, close: () -> Unit, initConfirm: String? = null) {
     }
     LaunchedEffect(Unit) { reload() }
     var autoDone by remember { mutableStateOf(false) }
-    val dateFmt = remember { java.text.SimpleDateFormat("dd.MM.yy HH:mm", java.util.Locale.getDefault()) }
+    val dateFmt = remember { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()) }
     fun runConfirm(cf: String) {
         if (busy) return
         busy = true

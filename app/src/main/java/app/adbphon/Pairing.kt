@@ -32,9 +32,46 @@ object Pairing {
     /** Пользователь нажал «Подключить автоматически»: служба спецвозможностей сама ведёт по настройкам и читает код. */
     @Volatile var autoWanted = false
 
+    /** Служба только открывает страницу «Отладка по Wi-Fi» (переключатель не трогает). */
+    @Volatile var openOnly = false
+
+    fun openWifiPage(ctx: Context) {
+        // без службы спецвозможностей дойти до страницы «Отладка по Wi-Fi» некому: сначала окно с просьбой её включить
+        if (Build.VERSION.SDK_INT >= 30 && !AutoPairService.isEnabled(ctx) && !Setup.need(ctx, "acc")) return
+        val tries = listOf(Intent("android.settings.ADB_WIRELESS_SETTINGS"), Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        if (Build.VERSION.SDK_INT >= 30 && AutoPairService.isEnabled(ctx)) { openOnly = true; wantSwitchOn = null; autoStart() }
+        for (i in tries) { if (runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }.isSuccess) break }
+    }
+
+    /** null: служба включает переключатель сама (путь автоподключения); false: служба должна его выключить. */
+    @Volatile var wantSwitchOn: Boolean? = null
+
+    fun startAutoFlowSwitch(ctx: Context, on: Boolean) {
+        if (on) { startAutoFlow(ctx); return }
+        wantSwitchOn = false
+        autoStart()
+        val tries = listOf(Intent("android.settings.ADB_WIRELESS_SETTINGS"), Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        for (i in tries) { if (runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }.isSuccess) break }
+    }
+
     fun autoStart() {
         autoWanted = true
         CoroutineScope(Dispatchers.Default).launch { kotlinx.coroutines.delay(180_000); autoWanted = false }
+    }
+
+    /** Полный автоматический путь: служба сама ведёт по настройкам, читает код и сопрягается (нужна включённая служба спецвозможностей). */
+    fun startAutoFlow(ctx: Context) {
+        wantSwitchOn = null; openOnly = false
+        // параметры разработчика выключены (или не открывались): сначала их надо включить, об этом коротко говорит окно
+        if (runCatching { android.provider.Settings.Global.getInt(ctx.contentResolver, android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) }.getOrDefault(0) != 1) { Setup.devAsk = true; return }
+        autoStart()
+        start(ctx)
+        val tries = listOf(
+            Intent("android.settings.ADB_WIRELESS_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+        )
+        // CLEAR_TASK: настройки открываются с нужной страницы, а не с той, где их оставили раньше (иначе служба блуждает по чужой странице)
+        for (i in tries) { if (runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }.isSuccess) break }
     }
 
     /** Сопряжение с кодом, прочитанным из окна настроек. */
@@ -48,6 +85,7 @@ object Pairing {
                 repeat(4) { if (!ok) { Adb.connectWireless(app, null); ok = Adb.isConnected; if (!ok) kotlinx.coroutines.delay(1500) } }
                 Conn.refresh()
                 autoWanted = false
+                if (ok) Fm.onAdbReady()
                 showResult(app, app.getString(if (ok) R.string.notif_ok else R.string.notif_paired_only))
                 // вернуться в программу
                 runCatching { app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }

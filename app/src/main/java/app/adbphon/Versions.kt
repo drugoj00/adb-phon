@@ -171,7 +171,7 @@ object AppBackups {
     suspend fun installFiles(ctx: Context, pkg: String, files: List<File>, code: Long): String = withContext(Dispatchers.IO) {
         val cur = installedVersion(ctx, pkg)?.second
         val down = cur != null && code < cur
-        if (!Adb.isConnected) return@withContext "need_adb"
+        if (!AutoAdb.ensure()) return@withContext "need_adb"
         if (!down) {
             val r = Adb.installFiles(files, "-r")
             return@withContext if (r.contains("Success", true)) "ok" else "fail:" + r.take(140)

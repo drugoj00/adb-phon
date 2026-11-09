@@ -84,7 +84,7 @@ fun MakeArcDialog(d: FmDlg.MakeArchive, close: () -> Unit) {
     LAlertDialog(
         onDismissRequest = close, title = { Text(stringResource(R.string.fm_make_archive), maxLines = 1) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth().androidxHScroll(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ArcCreate.formats.forEach { f -> FilterChip(fmt == f, { fmt = f }, { Text(f, fontSize = 12.sp) }) }
                 }

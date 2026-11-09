@@ -47,6 +47,7 @@ object FmIo {
         val cr = app.contentResolver
         fun wifiOn() = runCatching { android.provider.Settings.Global.getInt(cr, "adb_wifi_enabled", 0) == 1 }.getOrDefault(false)
         if (android.os.Build.VERSION.SDK_INT >= 30 && !wifiOn()) {
+            if (WifiDebug.userOff(app)) return "wifi"   // пользователь выключил переключателем: сами не включаем
             // права WRITE_SECURE_SETTINGS у приложения уже есть (выдаются по ADB): включаем отладку по Wi-Fi сами
             runCatching { android.provider.Settings.Global.putInt(cr, "adb_wifi_enabled", 1) }
             kotlinx.coroutines.delay(1500)
@@ -365,7 +366,7 @@ object FmIo {
                 sb.append(s(R.string.fm_type)).append(": ").append(if (f.isDirectory) "dir ($cnt)" else "file").append('\n')
                 sb.append(s(R.string.fm_size)).append(": ").append(fmSize(size)).append('\n')
                 sb.append(s(R.string.fm_rights)).append(": ").append(if (f.canRead()) "r" else "-").append(if (f.canWrite()) "w" else "-").append(if (f.canExecute()) "x" else "-").append('\n')
-                sb.append(s(R.string.fm_modified)).append(": ").append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(f.lastModified()))).append('\n')
+                sb.append(s(R.string.fm_modified)).append(": ").append(SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date(f.lastModified()))).append('\n')
                 if (f.isFile && Arc.kindOf(f.name) != null) sb.append('\n').append(runCatching { archiveSummary(f) }.getOrDefault(""))
             }
         }
