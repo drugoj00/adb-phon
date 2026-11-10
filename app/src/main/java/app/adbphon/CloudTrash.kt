@@ -76,6 +76,12 @@ object CloudTrash {
 
     /** Итог корзины для строки «Корзина» в дереве и панели: count < 0: узнать не удалось. */
     class Sum(val count: Int, val total: Long)
+    /** Сколько ВСЕГО элементов в родной корзине, если их больше показываемых 300 (10.11.2026: счётчик вечно показывал «300», а удаление шло, но видно этого не было). */
+    val fullCount = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    /** Сколько элементов родной корзины загружается в списки (10.11.2026: было 300, а «Отметить всё» брало ещё меньше, 200 строк дерева: теперь все до 3000). */
+    const val TRASH_CAP = 3000
+    /** Итог корзины: если элементов больше показываемых, число полное, а размер неизвестен (-1). */
+    fun sumOf(remote: String, items: List<TItem>, total: Long): Sum { val full = fullCount[remote]; return if (full != null && full > items.size) Sum(full, -1) else Sum(items.size, total) }
     val sums = androidx.compose.runtime.mutableStateMapOf<String, Sum>()
     private val sumBusy = java.util.Collections.synchronizedSet(HashSet<String>())
 
@@ -117,7 +123,7 @@ object CloudTrash {
             val s = try {
                 when (mode(typeOf(ctx, remote))) {
                     OWN -> { val sc = scanOwn(ctx, remote); Sum(sc.ids.size, sc.total) }
-                    NATIVE -> { val l = list(ctx, remote); Sum(l.size, l.sumOf { it.size }) }
+                    NATIVE -> { val l = list(ctx, remote); sumOf(remote, l, l.sumOf { it.size }) }
                     else -> Sum(-1, 0)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { Sum(-1, 0) }
@@ -150,7 +156,8 @@ object CloudTrash {
         val r = CloudFs.lockOf(remote).withLock { Rclone.run(ctx, listOf("lsjson", "$remote:", "-R", "--files-only", "--drive-trashed-only", "--no-mimetype", "--no-modtime") + Rclone.common, 150_000) }
         if (!r.ok) throw CloudErr.fromText(ctx, r.err + "\n" + r.out, typeOf(ctx, remote))
         val a = JSONArray(r.out.trim().ifEmpty { "[]" })
-        return (0 until minOf(a.length(), 300)).map { a.getJSONObject(it) }.map { o -> TItem(o.getString("Path"), o.getString("Name"), o.getString("Path"), false, o.optLong("Size", 0).coerceAtLeast(0), 0, "") }
+        if (a.length() > TRASH_CAP) fullCount[remote] = a.length() else fullCount.remove(remote)
+        return (0 until minOf(a.length(), TRASH_CAP)).map { a.getJSONObject(it) }.map { o -> TItem(o.getString("Path"), o.getString("Name"), o.getString("Path"), false, o.optLong("Size", 0).coerceAtLeast(0), 0, "") }
     }
 
     /**
@@ -343,6 +350,22 @@ object CloudTrash {
         if (r.ok || notFound(r)) null else errText(ctx, remote, r)
     } catch (e: Throwable) { e.message ?: e.javaClass.simpleName }
 
+    /**
+     * Несколько ФАЙЛОВ родной корзины Google Диска за один запуск движка (10.11.2026: по одному элементу выходило около 5 с на файл, 200 штук около 17 минут):
+     * список путей кладётся во временный файл, команда «delete --files-from» стирает именно их навсегда (флаги те же, что у одиночного удаления).
+     */
+    suspend fun purgeNativeBatch(ctx: Context, remote: String, items: List<TItem>): String? = try {
+        AppLog.note("корзина: пакетное удаление навсегда из родной корзины: ${items.size} шт.")
+        val f = java.io.File(ctx.cacheDir, "trash_batch_" + System.nanoTime() + ".txt")
+        f.writeText(items.joinToString("\n") { it.origPath.trimStart('/') })
+        try {
+            val r = lrun(ctx, remote, listOf("delete", "$remote:", "--files-from", f.absolutePath, "--drive-trashed-only", "--drive-use-trash=false") + Rclone.common, 60 * 60_000L)
+            AppLog.note("корзина: пакет код ${r.code}: " + (r.err + " " + r.out).replace('\n', ' ').take(500))
+            // «не найдено» здесь НЕ считается успехом (10.11.2026: так пакет «удалял» молча, ничего не стерев); итог проверяется перечитыванием корзины
+            if (r.ok) null else errText(ctx, remote, r)
+        } finally { f.delete() }
+    } catch (e: Throwable) { e.message ?: e.javaClass.simpleName }
+
     /** Один элемент корзины: навсегда, для родной корзины облака и для корзины программы. */
     suspend fun purgeAny(ctx: Context, remote: String, it: TItem): String? = if (mode(typeOf(ctx, remote)) == NATIVE) purgeNative(ctx, remote, it) else purgeItem(ctx, remote, it)
 
@@ -372,7 +395,7 @@ fun CloudTrashDlg(c: NetConn, close: () -> Unit, initConfirm: String? = null) {
         scope.launch {
             if (c.kind != "cloud") runCatching { NetTrash.ensure(ctx, c) }
             val r = runCatching { if (own) CloudTrash.listOwn(ctx, rid) else CloudTrash.Listing(CloudTrash.list(ctx, rid), -1L) }
-            items.clear(); r.getOrNull()?.let { items.addAll(it.items); total = it.total; CloudTrash.sums[rid] = CloudTrash.Sum(it.items.size, if (it.total >= 0) it.total else it.items.sumOf { x -> maxOf(x.size, 0L) }) }
+            items.clear(); r.getOrNull()?.let { items.addAll(it.items); total = it.total; CloudTrash.sums[rid] = CloudTrash.sumOf(rid, it.items, if (it.total >= 0) it.total else it.items.sumOf { x -> maxOf(x.size, 0L) }) }
             msg = r.exceptionOrNull()?.message.orEmpty()
             loading = false
         }

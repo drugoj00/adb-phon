@@ -248,7 +248,7 @@ sealed class FmDlg {
     class Storage : FmDlg()
     class WifiServer(val dir: String) : FmDlg()
     class WifiDev(val conn: NetConn?, val host: String, val name: String) : FmDlg()
-    class Source : FmDlg()
+    class Source(val prefill: NetHost? = null) : FmDlg()
     class CloudAdd : FmDlg()
     /** Нужен модуль «ADB-phon Облака»: скачать и установить; после установки выполняется [then]. */
     class CloudModule(val then: (() -> Unit)? = null) : FmDlg()
@@ -971,6 +971,9 @@ object Fm {
     private suspend fun runJob(title: String, names: List<String>, op: suspend (String) -> String?): Boolean =
         runJob(title, names, bytes = true) { _, n -> op(n) }
 
+    /** Длительное действие над элементами по одному с полоской хода (удаление навсегда из корзин); [op] получает имя очередного элемента. */
+    suspend fun stepJob(title: String, names: List<String>, total: Int, op: suspend (FmJob, String) -> String?): Boolean = runJob(title, names, bytes = false, units = { total.toLong() }) { j, n -> op(j, n) }
+
     /** Путь с названием источника: «SMB: //хост/папка», «ADB: путь», для телефона просто путь. */
     fun pathLabel(p: FmPane, srcName: String, path: String): String = when (srcName) {
         "smb" -> if (p.smb is ArchiveFs) (p.smb as ArchiveFs).label + path.trimEnd('/') else {
@@ -1341,7 +1344,7 @@ object Fm {
         val f = join(p.path, it.name)
         if (Adb.isConnected && !FmIo.remote && p.src == "local") {
             say(str(R.string.inst_installing))
-            val out = runCatching { Adb.shell("pm install -r '${f.replace("'", "'\\''")}' 2>&1", 180_000L) }.getOrElse { FmIo.nice(it) }
+            val out = runCatching { Adb.shell(pmInstallCmd(f), 180_000L) }.getOrElse { FmIo.nice(it) }
             say(if (out.contains("Success")) str(R.string.fm_installed) else str(R.string.fm_error, out.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty()))
             return@launch
         }
@@ -1371,7 +1374,7 @@ object Fm {
             "video" -> openBuiltin(sctx, p, it, "video", f)
             "archive" -> openArchive(p, it.name)
             "apk" -> if (p.src == "adb") {
-                val out = runCatching { Adb.shell("pm install -r '${f.replace("'", "'\\''")}' 2>&1", 120_000L) }.getOrDefault("")
+                val out = runCatching { Adb.shell(pmInstallCmd(f), 120_000L) }.getOrDefault("")
                 say(if (out.contains("Success")) str(R.string.fm_installed) else str(R.string.fm_error, out.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty()))
             } else if (!openWithPkg(p, it, null, "application/vnd.android.package-archive")) say(str(R.string.fm_no_app))
             else -> if (!openWithPkg(p, it, null, "*/*")) say(str(R.string.fm_no_app))
@@ -1434,7 +1437,7 @@ object Fm {
         }
         when (p.src) {
             "adb" -> if (it.ext == "apk") {
-                val out = runCatching { Adb.shell("pm install -r '${f.replace("'", "'\\''")}' 2>&1", 120_000L) }.getOrDefault("")
+                val out = runCatching { Adb.shell(pmInstallCmd(f), 120_000L) }.getOrDefault("")
                 say(if (out.contains("Success")) str(R.string.fm_installed) else str(R.string.fm_error, out.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty()))
             } else {
                 val t = mimeOf(it.ext)
@@ -1508,8 +1511,8 @@ fun iconFor(it: FmItem): ImageVector = if (it.isDir) Icons.Filled.Folder else wh
 object FmMetrics {
     val OUTER_PAD = 2.dp          // отступ раскладки от краёв окна
     val STRIP_END = 6.dp          // дополнительный отступ колонки от правого края (кнопки не лезут под жесты)
-    val STRIP_W = 52.dp           // ширина колонки
-    val BTN_W = 50.dp             // ширина квадратной кнопки (прижата к левому краю колонки)
+    val STRIP_W = 46.dp           // ширина колонки (10.11.2026: было 52, кнопки уже; значок и подпись внутри не менялись)
+    val BTN_W = 44.dp             // ширина квадратной кнопки (прижата к левому краю колонки; было 50)
     /** Расстояние от правого края окна до оси кнопок правой колонки. */
     val stripCenterFromRight get() = OUTER_PAD + STRIP_END + (STRIP_W - BTN_W) + BTN_W / 2
 }
@@ -1637,7 +1640,7 @@ private fun rememberFmActions(): List<FmAction> {
     val sctx = LocalContext.current
     return listOf(
         FmAction(Icons.Filled.ArrowUpward, R.string.fm_up) { Fm.up(p) },
-        FmAction(Icons.Filled.Refresh, R.string.fm_refresh) { Fm.load(p, remember = false) },
+        FmAction(Icons.Filled.Refresh, R.string.fm_refresh) { if (p.root) FmRootCfg.refreshAll(Fm.sctx) else Fm.load(p, remember = false) },
         FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { Fm.copyMove(false, p, o, Fm.targets(p)) },
         FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { Fm.copyMove(true, p, o, Fm.targets(p)) },
         FmAction(Icons.Filled.DeleteOutline, R.string.fm_delete, sel) { Fm.askDelete(p, Fm.targets(p)) },
@@ -1776,7 +1779,12 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Icon(a.icon, null, Modifier.size(icon), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha))
-        Text(stringResource(a.label), fontSize = label, lineHeight = label * 1.12f, maxLines = 2, overflow = TextOverflow.Ellipsis, fontFamily = CondFont,
+        // 10.11.2026: длинное слово («Сортировка», «Инверсия») не должно рваться посреди слова: шрифт слегка уменьшается так, чтобы слово влезло (9 букв при 7,5 sp в кнопке 44 dp влезают)
+        val txt = stringResource(a.label)
+        val longest = txt.split(' ', '-').maxOfOrNull { it.length } ?: 0
+        val maxChars = 9f * ((size.value - 4f) / 40f) * (7.5f / label.value)
+        val lblSize = if (longest > maxChars && longest > 0) (label.value * (maxChars / longest)).coerceAtLeast(label.value * 0.8f).sp else label
+        Text(txt, fontSize = lblSize, lineHeight = lblSize * 1.12f, maxLines = 2, overflow = TextOverflow.Ellipsis, fontFamily = CondFont,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
     }
 }
@@ -1822,7 +1830,8 @@ private fun FmChip(text: String, click: () -> Unit) {
 @Composable
 private fun FmStrip(actions: List<FmAction>, modifier: Modifier) {
     Column(modifier.verticalScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        actions.forEach { FmSquareButton(it, FmMetrics.BTN_W, 17.dp, 7.5.sp) }
+        // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
+        actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.forEach { FmSquareButton(it, FmMetrics.BTN_W, 17.dp, 7.5.sp) }
     }
 }
 
@@ -1868,7 +1877,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
                 val rid = NetTrash.rid(c)
                 if (c.kind != "cloud") NetTrash.ensure(tctx, c)
                 val l = if (CloudTrash.mode(CloudTrash.typeFor(tctx, c)) == CloudTrash.OWN) CloudTrash.listOwn(tctx, rid) else CloudTrash.Listing(CloudTrash.list(tctx, rid), -1L)
-                CloudTrash.sums[rid] = CloudTrash.Sum(l.items.size, if (l.total >= 0) l.total else l.items.sumOf { maxOf(it.size, 0L) })
+                CloudTrash.sums[rid] = CloudTrash.sumOf(rid, l.items, if (l.total >= 0) l.total else l.items.sumOf { maxOf(it.size, 0L) })
                 p.trashItems.clear(); p.trashItems.addAll(l.items)
             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { p.trashErr = e.message ?: e.javaClass.simpleName }
             p.trashLoading = false
@@ -2058,6 +2067,10 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
                 if (i < parts.lastIndex) Text("›", fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, lineHeight = fs * 1.05f, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .5f))
             }
         }
+        // 10.11.2026 (владелица: «надо кнопка обновить, чтобы можно было и самому обновлять»): на экране «Устройства» справа в заголовке кнопка «Обновить» (перечитывает всё раскрытое: диски, облака, корзины)
+        if (p.root) androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 38.dp).clickable { Fm.active = p.id; FmRootCfg.refreshAll(Fm.sctx) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Refresh, stringResource(R.string.fm_refresh), Modifier.size(20.dp), tint = prim)
+        }
     }
 }
 
@@ -2166,7 +2179,7 @@ private fun FmTrashItemRow(p: FmPane, ti: CloudTrash.TItem) {
             Text(listOf(dirTxt, dateTxt).filter { it.isNotEmpty() }.joinToString("  ·  "), fontSize = 11.sp, fontFamily = UiPrefs.listFont, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
         }
         if (ti.size >= 0 && !ti.isDir) Text(fmSize(ti.size), fontSize = 13.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-        androidx.compose.material3.Checkbox(sel, { toggle() }, Modifier.size(if (tv) 40.dp else 32.dp))
+        SmallCheck(sel, tv) { toggle() }
     }
 }
 
@@ -2297,7 +2310,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (treeOn) {
-                Spacer(Modifier.width((22 * depth).dp))
+                Spacer(Modifier.width((TREE_IND * depth).dp))
                 if (f.isDir) androidx.compose.material3.IconButton({ Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, Modifier.size(22.dp)) {
                     Icon(if (isOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
                 } else Spacer(Modifier.width(22.dp))
@@ -2314,7 +2327,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }?.let { fmDate(it) }).joinToString("  ·  ")
                 if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
-            Checkbox(sel, { Fm.active = p.id; Fm.toggleSel(p, selKey) }, Modifier.size(if (dense) 32.dp else 36.dp))
+            SmallCheck(sel, false) { Fm.active = p.id; Fm.toggleSel(p, selKey) }   // 10.11.2026: маленькая галочка у края, как в «домике»
         }
         FmItemMenu(p, f, node)
     }
@@ -2485,7 +2498,7 @@ private fun FmDialogs() {
             Fm.goTo(Fm.cur, it, false)
         }
         is FmDlg.Tree -> if (Fm.cur.src == "smb") { close(); Fm.say(Fm.str(R.string.fm_err_unsupported)) } else TreeDlg(close)
-        is FmDlg.Source -> SourceDlg(close)
+        is FmDlg.Source -> SourceDlg(close, prefill = d.prefill)
         is FmDlg.CloudModule -> CloudModuleDialog(d, close)
         is FmDlg.CloudAdd, is FmDlg.MegaAdd, is FmDlg.CloudForm, is FmDlg.CloudAll, is FmDlg.OwnKey, is FmDlg.OwnKeyPick, is FmDlg.Trash -> {
             val cx = LocalContext.current

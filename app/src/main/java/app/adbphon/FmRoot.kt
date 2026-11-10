@@ -53,6 +53,8 @@ import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -120,6 +122,46 @@ object FmRootCfg {
     /** Число папок и файлов в корне тома, считается в фоне. */
     val counts = mutableStateMapOf<String, Pair<Int, Int>>()
     var ver by mutableStateOf(0)
+    /** Поиск устройств по LAN (SMB, SFTP, FTP, WebDAV) прямо в группе «LAN» (10.11.2026: раньше он был спрятан в окне «Добавить подключение» → «Сеть»). */
+    val lanFound = androidx.compose.runtime.mutableStateListOf<NetHost>()
+    var lanScanning by mutableStateOf(false)
+    var lanNone by mutableStateOf(false)
+    private var lanJob: kotlinx.coroutines.Job? = null
+    /** Узлы, у которых нажали галочку «отметить всё», пока они были свёрнуты: после загрузки содержимого отмечается всё. */
+    val selAllPending = HashSet<String>()
+    private fun selOfKid(k: TK, parent: String, c: NetConn?, rootPath: String? = null): SelE? {
+        val pp = if (parent.startsWith("L|")) parent.removePrefix("L|") else if (parent.startsWith("N|")) (rootPath ?: parent.split('|', limit = 5).getOrNull(4).orEmpty().ifEmpty { "/" }) else return null
+        return SelE(k.id, if (parent.startsWith("N|")) c else null, parent, pp, k.name, k.path, k.isDir, null)
+    }
+    /** Тип, выбранный в окне «Источник» (smb, sftp, ftp, dav): показываются только устройства с этим протоколом; null: все найденные. */
+    var lanKind: String? = null
+    fun lanScan(ctx: Context, kind: String? = null) {
+        if (lanScanning) return
+        lanKind = kind
+        lanFound.clear(); lanNone = false; lanScanning = true
+        lanJob = Fm.scope.launch {
+            try {
+                val res = runCatching { NetDiscover.scan(ctx.applicationContext) { l -> lanFound.clear(); lanFound.addAll(lanFilter(l)) } }.getOrDefault(lanFound.toList())
+                lanFound.clear(); lanFound.addAll(lanFilter(res))
+            } finally { lanScanning = false; lanNone = lanFound.isEmpty() && lanJob?.isCancelled != true }
+        }
+    }
+    fun lanCancel() { lanJob?.cancel(); lanScanning = false }
+    /** Ручное «Обновить» на экране «Устройства»: сбрасывает загруженное содержимое раскрытых узлов и кэш корзин, всё читается заново. */
+    fun refreshAll(ctx: Context) {
+        Fm.scope.launch {
+            kids.clear(); kidErr.clear(); autoRetry.clear()
+            NetStore.list(ctx).forEach { c -> runCatching { CloudTrash.invalidate(NetTrash.rid(c)) } }
+            CloudTrash.ver++
+            runCatching { FmTrash.bump(); FmTrash.refreshSum() }
+            runCatching { Fm.refreshVols() }
+            ver++
+            Fm.say(Fm.str(R.string.fm_refreshed))
+        }
+    }
+    /** Подключение к найденному по LAN устройству: лучший протокол по открытым портам, гость; в избранное не сохраняется, пока владелица не сохранит сама. */
+    private fun lanFilter(l: List<NetHost>): List<NetHost> { val k = lanKind; return if (k == null) l else l.filter { k in it.kinds } }
+    fun lanConn(h: NetHost): NetConn { val k = lanKind?.takeIf { it in h.kinds } ?: h.kinds.firstOrNull() ?: "smb"; return NetConn(k, if (k == "dav") davUrlOf(h) else h.ip, 0, "", "", "", "", h.name) }
     /** Фокус пульта: первый значок нижней панели выбора и ключ последней видимой строки списка (стрелка «вниз» на ней уходит на панель). */
     val barFocus = androidx.compose.ui.focus.FocusRequester()
     @Volatile var lastVisKey: String? = null
@@ -152,6 +194,8 @@ object FmRootCfg {
         kidErr.remove(id); kidErrOwnKey.remove(id)
         // облачные узлы без модуля «ADB-phon Облака»: сеть не трогаем, узел покажет «Нужен модуль облаков»
         if ((id.startsWith("N|cloud|") || (id.startsWith("T|") && !NetTrash.isRid(id.removePrefix("T|")))) && !CloudModule.ok(Fm.sctx)) { kidErr[id] = CloudModule.MARK; return }
+        var cSel: NetConn? = null
+        var pSel: String? = null
         try {
             val list: List<TK> = if (id == "H|") {
                 // «Недавние»: недавние папки (только существующие на телефоне)
@@ -167,9 +211,9 @@ object FmRootCfg {
                 if (NetTrash.isRid(host)) NetTrash.ensureAll(ctx)
                 val l = if (CloudTrash.mode(CloudTrash.typeOfRid(ctx, host)) == CloudTrash.OWN) CloudTrash.listOwn(ctx, host)
                     else CloudTrash.Listing(CloudTrash.list(ctx, host), -1L)
-                CloudTrash.sums[host] = CloudTrash.Sum(l.items.size, if (l.total >= 0) l.total else l.items.sumOf { maxOf(it.size, 0L) })
+                CloudTrash.sums[host] = CloudTrash.sumOf(host, l.items, if (l.total >= 0) l.total else l.items.sumOf { maxOf(it.size, 0L) })
                 if (l.items.isEmpty()) listOf(TK(Fm.str(R.string.tr_none), "Te|" + host, "", false, 0))
-                else l.items.take(LIMIT).map { ti -> val kid = "Ti|" + host + "|" + ti.id; CloudTrash.tkItems[kid] = ti; TK(ti.name, kid, ti.origPath, ti.isDir, ti.size) }
+                else l.items.take(CloudTrash.TRASH_CAP).map { ti -> val kid = "Ti|" + host + "|" + ti.id; CloudTrash.tkItems[kid] = ti; TK(ti.name, kid, ti.origPath, ti.isDir, ti.size) }
             } else if (id.startsWith("A|")) {
                 // «Приложения»: папка группы раскрывается в список приложений (первые 150, остальное счётчиком)
                 val key = id.removePrefix("A|")
@@ -200,9 +244,11 @@ object FmRootCfg {
             } else {
                 val a = id.split('|', limit = 5)
                 val c = favs.firstOrNull { it.kind == a[1] && it.host == a[2] && it.user == a[3] } ?: error("?")
+                cSel = c
                 val fs = fsCache.getOrPut(a[1] + "|" + a[2] + "|" + a[3]) { c.fs() }
                 (fs as? KeepFs)?.connect(); (fs as? CloudFs)?.connect()
                 val path = if (a.getOrNull(4) == NetTrash.ROOT_MARK) NetTrash.rootPath(c, fs) else a.getOrNull(4)?.takeIf { it.isNotEmpty() } ?: fs.root
+                pSel = path
                 withContext(Dispatchers.IO) {
                     val all = fs.list(path)
                     appCount[id] = all.size
@@ -296,6 +342,15 @@ private class RR(
     /** Ветви дерева: для уровней 1..level true, если ниже есть ещё элемент того же уровня; lx: позиция вертикали уровня (dp). */
     var more: BooleanArray = BooleanArray(0)
     var lx: FloatArray = FloatArray(0)
+    /** Своя ветвь (уровень level): засечка к строке и конец вертикали (до середины строки). Как в X-plore: линия одна, от родителя к раскрытому потомку цепочки. */
+    var tick: Boolean = true
+    var half: Boolean = true
+    /** Раскрытое устройство или папка: все элементы внутри (папки и файлы). Галочка справа от такой строки отмечает или снимает отметку со всех сразу, как в X-plore. */
+    var selAll: List<FmRootCfg.SelE> = emptyList()
+    /** Устройство или подключение без своей отметки: показывается галочка «отметить всё внутри». */
+    var selReq: Boolean = false
+    /** Для устройства с «Корзиной» и «диском»: узел «диск» (корень источника), в котором отмечается всё. */
+    var selTarget: String? = null
 }
 
 private fun statOf(path: String): Pair<Long, Long> = runCatching {
@@ -307,7 +362,9 @@ private fun statOf(path: String): Pair<Long, Long> = runCatching {
 fun FmRootList(p: FmPane, modifier: Modifier) {
     val ctx = LocalContext.current
     val shown = FmRootCfg.shown
-    val favs = remember(Fm.dlg, p.root, FmRootCfg.ver, WifiExplorer.ver) { NetStore.list(ctx) + WifiExplorer.found.toList() }
+    val favsSaved = remember(Fm.dlg, p.root, FmRootCfg.ver, WifiExplorer.ver) { NetStore.list(ctx) + WifiExplorer.found.toList() }
+    // 10.11.2026 (владелица): найденные по LAN диски раскрываются как папки, даже если не добавлены в избранное: их подключения тоже в этом списке (для раскрытия), но не в списках групп
+    val favs = favsSaved + FmRootCfg.lanFound.map { FmRootCfg.lanConn(it) }
     val tv = Marq.tv
     val prim = MaterialTheme.colorScheme.primary
     val (devTotal, devFree) = remember(p.root) { statOf("/sdcard") }
@@ -428,9 +485,9 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         addKids("K|", 1, null)
     }
     LaunchedEffect(FmTrash.ver, FmDel.trashOn, Fm.vols.size) { FmTrash.refreshSum() }
-    val lan = favs.filter { it.kind != "dav" && it.kind != "cloud" }
-    val dav = favs.filter { (it.kind == "dav" && !WifiExplorer.isWifi(it)) || it.kind == "cloud" }
-    val wifiSaved = favs.filter { WifiExplorer.isWifi(it) && it !in WifiExplorer.found }
+    val lan = favsSaved.filter { it.kind != "dav" && it.kind != "cloud" }
+    val dav = favsSaved.filter { (it.kind == "dav" && !WifiExplorer.isWifi(it)) || it.kind == "cloud" }
+    val wifiSaved = favsSaved.filter { WifiExplorer.isWifi(it) && it !in WifiExplorer.found }
     if ("lan" in shown || "cloud" in shown || "wifi" in shown || "adb" in shown) rows += RR("h:net", stringResource(R.string.rt_group_net), Icons.Filled.Lan, prim, header = 1)
     if ("lan" in shown) {
         rows += RR("lan", stringResource(R.string.rt_lan), Icons.Filled.Lan, Color(0xFF42A5F5), expandKey = "lan")
@@ -440,6 +497,20 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 rows += RR("net:" + c.kind + c.host + c.user, c.title, Icons.Filled.Dns, Color(0xFF42A5F5), net = c, level = 1, act = { fmLeaveRoot(p); Fm.connectNet(p, c) }, treeId = tid)
                 pend(tid)
                 if (tid in virtIds) addVirt(c, tid) else addKids(tid, 2, c)
+            }
+            val savedKeys = favsSaved.map { it.kind + "|" + it.host + "|" + it.user }.toSet()
+            FmRootCfg.lanFound.toList().forEach { h ->
+                val c = FmRootCfg.lanConn(h)
+                if ((c.kind + "|" + c.host + "|" + c.user) in savedKeys) return@forEach
+                val tid = "N|" + c.kind + "|" + c.host + "|" + c.user + "|"
+                rows += RR("lanf:" + c.kind + c.host, h.name.ifBlank { h.ip }, Icons.Filled.Dns, Color(0xFFFFC107), net = c, level = 1,
+                    subText = (if (h.name.isNotBlank() && h.name != h.ip) h.ip + "  ·  " else "") + h.kinds.joinToString(" · ") { it.uppercase() }, act = { fmLeaveRoot(p); Fm.connectNet(p, c) }, treeId = tid)
+                addKids(tid, 2, c)
+            }
+            if (FmRootCfg.lanScanning) rows += RR("lan:scan", stringResource(R.string.fm_net_scanning), Icons.Filled.Search, prim, level = 1, busy = true, subText = stringResource(R.string.wf_cancel_hint), act = { FmRootCfg.lanCancel() })
+            else {
+                if (FmRootCfg.lanNone && FmRootCfg.lanFound.isEmpty()) rows += RR("lan:none", stringResource(R.string.wf_none), Icons.Filled.Search, Color(0xFF9E9E9E), level = 1)
+                rows += RR("lan:find", stringResource(R.string.fm_net_scan_short), Icons.Filled.Search, prim, level = 1, act = { FmRootCfg.lanScan(ctx) })
             }
             rows += RR("lan+", stringResource(R.string.rt_add_net), Icons.Filled.Add, prim, level = 1, act = { Fm.dlg = FmDlg.Source() })
         }
@@ -465,7 +536,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if ("wifi" in p.rootOpen) {
             val needKeyTxt = stringResource(R.string.wf_need_key)
             val srvOn = stringResource(R.string.wf_on_sub, WifiShare.url); val srvOff = stringResource(R.string.wf_off)
-            if (WifiExplorer.scanning) rows += RR("wifi:scan", stringResource(R.string.wf_scanning, WifiExplorer.progress), Icons.Filled.Search, prim, level = 1, busy = true, subText = stringResource(R.string.wf_cancel_hint), act = { WifiExplorer.cancel() })
+            if (WifiExplorer.scanning) rows += RR("wifi:scan", if (WifiExplorer.progress >= 100) stringResource(R.string.wf_scanning_direct) else stringResource(R.string.wf_scanning, WifiExplorer.progress), Icons.Filled.Search, prim, level = 1, busy = true, subText = stringResource(R.string.wf_cancel_hint), act = { WifiExplorer.cancel() })
             fun devRow(c: NetConn, saved: Boolean) {
                 val tid = "N|" + c.kind + "|" + c.host + "|" + c.user + "|"
                 rows += RR("wifi:" + (if (saved) "s:" else "f:") + c.host, c.name.ifBlank { WifiExplorer.hostText(c) }, Icons.Filled.PhoneAndroid, if (saved) Color(0xFF26A69A) else Color(0xFFFFC107), net = c, level = 1, wifi = true,
@@ -474,6 +545,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 addKids(tid, 2, c)
             }
             WifiExplorer.found.toList().forEach { devRow(it, false) }
+            if (WifiExplorer.noneFound && !WifiExplorer.scanning && WifiExplorer.found.isEmpty()) rows += RR("wifi:none", stringResource(R.string.wf_none), Icons.Filled.Search, Color(0xFF9E9E9E), level = 1, subText = stringResource(R.string.wf_none_hint), act = { WifiExplorer.scan(ctx) })
             rows += RR("wifi:srv", stringResource(R.string.wf_server_row), Icons.Filled.Wifi, Color(0xFF29B6F6), level = 1, tog = WifiShare.running, subText = if (WifiShare.running) srvOn else srvOff, act = { WifiExplorer.toggleServer(ctx) })
             wifiSaved.forEach { devRow(it, true) }
             rows += RR("wifi+", stringResource(R.string.wf_add), Icons.Filled.Add, prim, level = 1, act = { WifiExplorer.scan(ctx) })
@@ -511,27 +583,54 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         }
     }
     LaunchedEffect(Unit) { androidx.compose.runtime.snapshotFlow { p.rootSel }.collect { s -> if (s != null) ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("root_sel_p${p.id}", s).apply() } }
+    // 10.11.2026 (владелица: «галочка у любого раскрытого устройства или папки, везде и у всех»): у каждой раскрытой строки дерева (устройство, том, облако, диск, папка, корзина) галочка отмечает всё, что отмечаемо в ней (прямые дети);
+    // у строки без своей отметки и свёрнутой галочка тоже есть: нажатие раскрывает узел и отмечает всё внутри после загрузки
+    val applyNow = ArrayList<Pair<String, List<FmRootCfg.SelE>>>()
+    for (i in rows.indices) {
+        val r = rows[i]; val tid = r.treeId ?: continue
+        if (!treeOn || r.header == 1 || tid !in p.rootOpen) continue
+        val acc = LinkedHashMap<String, FmRootCfg.SelE>()
+        var j = i + 1
+        while (j < rows.size && rows[j].header != 1 && rows[j].level > r.level) { if (rows[j].level == r.level + 1) rows[j].selE?.let { acc[it.key] = it }; j++ }
+        if (acc.isNotEmpty()) { r.selAll = acc.values.toList(); if (tid in FmRootCfg.selAllPending) applyNow += tid to r.selAll }
+    }
+    androidx.compose.runtime.SideEffect { for ((tid, list) in applyNow) if (FmRootCfg.selAllPending.remove(tid)) list.forEach { FmRootCfg.sel[it.key] = it } }
+    // 10.11.2026 (владелица): групповых галочек (LAN, Облачные диски, Wi-Fi, Приложения) и галочек у аккаунтов облаков нет: галочка только у раскрытой строки, где ПРЯМО внутри есть папки или файлы
+    // 10.11.2026 (владелица): галочка «всё внутри» только у групп, у строки «ADB» и у РАСКРЫТЫХ строк; у свёрнутых устройств и папок её нет
+    for (r in rows) {
+        val tid = r.treeId ?: continue
+        if (true) continue   // 10.11.2026 (владелица): галочка только у РАСКРЫТЫХ строк, где есть что отмечать; «пустых» галочек (LAN без папок, свёрнутые устройства) нет
+        if (!treeOn || r.header == 1 || r.selE != null || r.selAll.isNotEmpty() || r.file != null || r.appName != null) continue
+        r.selReq = true
+        if (tid in virtIds) r.selTarget = tid + (if (tid.startsWith("N|cloud|")) "/" else NetTrash.ROOT_MARK)
+    }
     for (i in rows.indices) {
         val lv = rows[i].level
         if (lv <= 0 || rows[i].header == 1) continue
-        rows[i].more = BooleanArray(lv) { idx ->
-            val k = idx + 1
-            var j = i + 1
-            var r = false
-            while (j < rows.size) {
-                val rj = rows[j]
-                if (rj.header == 1 || rj.level < k) break
-                if (rj.level == k) { r = true; break }
+        // 10.11.2026 (владелица: «в X-plore там одна линия»): вертикаль уровня k идёт от родителя вниз до раскрытого ребёнка цепочки (или до последнего ребёнка, если раскрытых нет); у соседей параллельных линий и засечек нет
+        val moreArr = BooleanArray(lv)
+        var tickOwn = true; var halfOwn = true
+        for (k in 1..lv) {
+            var pj = i - 1
+            while (pj >= 0 && !(rows[pj].level == k - 1 && rows[pj].header == 0)) pj--
+            if (pj < 0) continue
+            var j = pj + 1; var lastChild = -1; var openChild = -1
+            while (j < rows.size && rows[j].header != 1 && rows[j].level >= k) {
+                if (rows[j].level == k) { lastChild = j; if (j + 1 < rows.size && rows[j + 1].header != 1 && rows[j + 1].level > k) openChild = j }
                 j++
             }
-            r
+            if (lastChild < 0) continue
+            val end = if (openChild >= 0) openChild else lastChild
+            moreArr[k - 1] = i < end
+            if (k == lv) { halfOwn = i == end; tickOwn = if (openChild >= 0) i == end else true }
         }
+        rows[i].more = moreArr; rows[i].tick = tickOwn; rows[i].half = halfOwn
         rows[i].lx = FloatArray(lv) { idx ->
             val k = idx + 1
             var j = i - 1
             while (j >= 0 && !(rows[j].level == k - 1 && rows[j].header == 0)) j--
             val groupParent = j >= 0 && rows[j].expandKey != null
-            (8 + 22 * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 13)).toFloat()
+            (8 + TREE_IND * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 10)).toFloat()
         }
     }
     Column(modifier.then(Modifier.fillMaxWidth()).onPreviewKeyEvent { e ->
@@ -604,9 +703,49 @@ internal fun RootSelBar(p: FmPane) {
         val list = trash.toList(); val hosts = list.mapNotNull { it.net?.let { n -> NetTrash.rid(n) } }
         FmRootCfg.sel.clear()
         Fm.scope.launch {
-            for (e in list) { if (e.fi != null) FmTrash.purge(e.fi)?.let { err -> Fm.say(err) } else e.net?.let { n -> CloudTrash.purgeAny(ctx, NetTrash.rid(n), e.ti!!)?.let { err -> Fm.say(err) } } }
-            hosts.distinct().forEach { CloudTrash.invalidate(it) }
+            // 10.11.2026 (владелица: «в облачной корзине не могу удалить выбранные», «добавь полоску процесса»): удаление идёт заданием с полоской хода, потом список перечитывается и показывается итог
+            var ok = 0; var firstErr: String? = null; var si = 0
+            // файлы родной корзины Google Диска стираются пакетами по 25 за один запуск движка (по одному было около 5 с на файл), остальное по одному
+            val batchable = list.filter { e -> e.fi == null && e.ti != null && !e.ti.isDir && e.net != null && CloudTrash.mode(CloudTrash.typeOfRid(ctx, NetTrash.rid(e.net))) == CloudTrash.NATIVE }
+            val steps = ArrayList<Triple<String, Int, suspend () -> String?>>()
+            batchable.groupBy { NetTrash.rid(it.net!!) }.forEach { (rid, es) ->
+                es.chunked(25).forEach { ch -> steps += Triple(ch.first().name + " (" + ch.size + ")", ch.size, { CloudTrash.purgeNativeBatch(ctx, rid, ch.map { it.ti!! }) }) }
+            }
+            list.filter { it !in batchable }.forEach { e ->
+                steps += Triple(e.name, 1, { if (e.fi != null) FmTrash.purge(e.fi) else e.net?.let { n -> CloudTrash.purgeAny(ctx, NetTrash.rid(n), e.ti!!) } })
+            }
+            // в окне хода: «Осталось: X из N» (N: все выбранные элементы), раньше висело «Подсчёт…» (общий объём не задавался)
+            Fm.stepJob(Fm.str(R.string.sel_forever_title), steps.map { it.first }, list.size) { j, _ ->
+                val st = steps[si++]
+                val err = st.third()
+                if (err == null) ok += st.second else if (firstErr == null) firstErr = err
+                repeat(st.second) { j.item() }
+                null
+            }
+            // проверка: пакет мог «пройти» и ничего не удалить; корзина перечитывается, оставшееся удаляется по одному
+            if (batchable.isNotEmpty()) {
+                val redo = ArrayList<FmRootCfg.SelE>()
+                for ((rid, es) in batchable.groupBy { NetTrash.rid(it.net!!) }) {
+                    val left = runCatching { CloudTrash.list(ctx, rid) }.getOrNull() ?: continue
+                    redo += es.filter { e -> left.any { it.origPath == e.ti!!.origPath } }
+                }
+                if (redo.isNotEmpty()) {
+                    ok = (ok - redo.size).coerceAtLeast(0)
+                    Fm.say(Fm.str(R.string.sel_forever_redo, redo.size))
+                    var ri = 0
+                    Fm.stepJob(Fm.str(R.string.sel_forever_title), redo.map { it.name }, redo.size) { j, _ ->
+                        val e = redo[ri++]
+                        val err = e.net?.let { n -> CloudTrash.purgeAny(ctx, NetTrash.rid(n), e.ti!!) }
+                        if (err == null) ok++ else if (firstErr == null) firstErr = err
+                        j.item()
+                        null
+                    }
+                }
+            }
+            hosts.distinct().forEach { CloudTrash.invalidate(it); FmRootCfg.kids.remove("T|$it"); FmRootCfg.kidErr.remove("T|$it") }
+            CloudTrash.ver++
             if (list.any { it.fi != null }) { FmTrash.bump(); FmTrash.refreshSum() }
+            Fm.say(if (firstErr == null) Fm.str(R.string.sel_forever_done, ok) else Fm.str(R.string.sel_forever_part, ok, list.size, firstErr.take(120)))
         }
     }
     val foreverOk = trash.isNotEmpty() && files.isEmpty()
@@ -631,6 +770,8 @@ internal fun RootSelBar(p: FmPane) {
                 }
                 SelIcon(Icons.Filled.DeleteOutline, R.string.sb_delete, red) { deleteFiles() }
             }
+            // отмечены и файлы, и элементы корзины: действия не показываются, объясняем почему (10.11.2026)
+            if (trash.isNotEmpty() && files.isNotEmpty()) Text(stringResource(R.string.sel_mixed), Modifier.padding(horizontal = 6.dp), fontSize = 11.sp, lineHeight = 13.sp, maxLines = 3, color = MaterialTheme.colorScheme.error)
             if (trash.isNotEmpty() && files.isEmpty()) {
                 SelIcon(Icons.Filled.RestoreFromTrash, R.string.sb_restore, MaterialTheme.colorScheme.primary) {
                     val hosts = trash.mapNotNull { it.net?.let { n -> NetTrash.rid(n) } }
@@ -727,9 +868,40 @@ private fun rootAccordion(p: FmPane, id: String) {
         }
         return path(id).trimEnd('/').startsWith("$po/")
     }
-    val drop = p.rootOpen.filter { o -> o != id && !isAncestor(o) }
+    // 10.11.2026 (владелица: на S9 при раскрытии диска всё дерево «Облачные диски» схлопывалось): группа, в которой лежит открываемый узел («lan», «cloud», «wifi», «apps»), остаётся раскрытой
+    val keepGroup: String? = when {
+        id.startsWith("A|") -> "apps"
+        id.startsWith("T|") -> "cloud"
+        id.startsWith("N|") -> {
+            val a = id.split('|', limit = 5)
+            when (a.getOrNull(1)) {
+                "cloud" -> "cloud"
+                "dav" -> {
+                    val c = (NetStore.list(Fm.sctx) + WifiExplorer.found.toList()).firstOrNull { it.kind == "dav" && it.host == a.getOrNull(2) && it.user == a.getOrNull(3) }
+                    // найденное по LAN устройство с WebDAV лежит в группе «LAN», а не «Облачные диски» (10.11.2026: из-за этого нажатие сворачивало всю группу LAN)
+                    val inLan = c == null && FmRootCfg.lanFound.any { h -> FmRootCfg.lanConn(h).let { lc -> lc.kind == "dav" && lc.host == a.getOrNull(2) && lc.user == a.getOrNull(3) } }
+                    if (inLan) "lan" else if (c != null && WifiExplorer.isWifi(c)) "wifi" else "cloud"
+                }
+                else -> "lan"
+            }
+        }
+        else -> null
+    }
+    // 10.11.2026 (владелица: «нажимаю на корзину, и диск сворачивается»; затем «везде одинаково: раскрыл одно, другое свернулось»): «Корзина» и «Облачный диск» — соседи и сворачивают друг друга, как всё остальное;
+    // аккаунт облака (их родитель) при раскрытии корзины остаётся раскрытым
+    fun acct(o: String): String? = when {
+        o.startsWith("N|") -> o.split('|').take(4).joinToString("|")
+        o.startsWith("T|") -> { val r = o.removePrefix("T|"); (NetStore.list(Fm.sctx) + WifiExplorer.found.toList() + FmRootCfg.lanFound.map { FmRootCfg.lanConn(it) }).firstOrNull { NetTrash.rid(it) == r }?.let { "N|" + it.kind + "|" + it.host + "|" + it.user } }
+        else -> null
+    }
+    val myAcct = acct(id)
+    fun sameAcctTrashPair(o: String): Boolean = id.startsWith("T|") && myAcct != null && o.startsWith("N|") && acct(o) == myAcct && o.split('|', limit = 5).getOrNull(4).isNullOrEmpty()
+    val drop = p.rootOpen.filter { o -> o != id && !isAncestor(o) && o != keepGroup && !sameAcctTrashPair(o) }
     p.rootOpen.removeAll(drop.toSet())
 }
+
+/** Сдвиг одного уровня дерева (dp): вертикальные линии ветвей стоят максимально близко (было 22). Общая для дерева «домика» и дерева папок в панели. */
+const val TREE_IND = 11
 
 private fun sameNet(a: NetConn?, b: NetConn?): Boolean = if (a == null || b == null) a == null && b == null else a.kind == b.kind && a.host == b.host && a.user == b.user
 
@@ -743,6 +915,19 @@ private fun rootDragStart(p: FmPane, e: FmRootCfg.SelE, at: androidx.compose.ui.
     val names = list.map { it.path.removePrefix(baseP.trimEnd('/') + "/") }
     val vp = FmPane(8, baseP).also { if (e.net == null) it.src = "local" else { it.src = "smb"; it.net = e.net; it.smb = e.net.fs() } }
     FmDnd.beginNames(vp, FmItem(e.name, e.isDir, 0, ""), at, pid, names)
+}
+
+/** Маленькая галочка выбора в строках «домика» (10.11.2026, владелица: «квадратики в два раза меньше и ближе к краю»): квадрат 11 dp вместо 22, область нажатия 26 dp, прижата к правому краю. */
+@Composable
+internal fun SmallCheck(on: Boolean, tv: Boolean, onClick: () -> Unit) {
+    val sz = if (tv) 16.dp else 11.dp
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(2.dp)
+    Box(Modifier.size(if (tv) 34.dp else 26.dp).clickable(remember { MutableInteractionSource() }, null) { onClick() }, contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.size(sz).clip(shape).background(if (on) cs.primary else Color.Transparent).border(1.5.dp, if (on) cs.primary else cs.onSurface.copy(alpha = .7f), shape), contentAlignment = Alignment.Center) {
+            if (on) Icon(Icons.Filled.Check, null, Modifier.size(sz - 2.dp), tint = cs.onPrimary)
+        }
+    }
 }
 
 @Composable
@@ -797,9 +982,10 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                         if (k < lv) {
                             if (r.more[k - 1]) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height + ext), w)
                         } else {
-                            drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, if (r.more[k - 1]) size.height + ext else size.height / 2), w)
+                            if (r.more[k - 1]) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height + ext), w)
+                            else if (r.half) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height / 2), w)
                             val hasChev = r.treeId != null && FmRootCfg.treeOn
-                            drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, size.height / 2), androidx.compose.ui.geometry.Offset((8 + 22 * lv + (if (hasChev) 4 else 0) - 1).dp.toPx(), size.height / 2), w)
+                            if (r.tick) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, size.height / 2), androidx.compose.ui.geometry.Offset((8 + TREE_IND * lv + (if (hasChev) (if (tv) 4 else 1) else 0) - 1).dp.toPx(), size.height / 2), w)
                         }
                     }
                 }
@@ -851,18 +1037,18 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             .hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
                 onClick = { Fm.active = p.id; p.rootSel = r.key; if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) treeToggle(r.treeId) else r.act() },
                 onLongClick = { Fm.active = p.id; p.rootSel = r.key; menu = true })
-            .heightIn(min = if (tv) 52.dp else 38.dp).padding(start = 8.dp + (r.level * 22).dp, end = 8.dp, top = if (tv) 3.dp else 2.dp, bottom = if (tv) 3.dp else 2.dp),
+            .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
             if (r.expandKey != null) Icon(if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-            else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 26.dp).clickable { treeToggle(r.treeId) }.padding(4.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
-            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 26.dp))      // место под шеврон: значок и подпись встают правее значка родителя
+            else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 20.dp).clickable { treeToggle(r.treeId) }.padding(if (tv) 4.dp else 1.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
+            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-            if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.file != null && r.lpath != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
+            if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.file != null && r.lpath != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
-                    else MqText(r.title, active = rowActive, wrap = true, modifier = Modifier.weight(1f), fontSize = (15f * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
+                    else MqText(r.title, active = rowActive, wrap = true, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
                     r.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } }?.let { NetDot(it) } }
                 }
                 // у томов первым свободное место (то, что нужно видеть), затем файловая система, счётчики папок и файлов в конце
@@ -874,14 +1060,29 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     r.fs.takeIf { it.isNotBlank() }, if (r.ro) stringResource(R.string.rt_ro) else null, if (r.warn) stringResource(R.string.fm_vol_unsupported_short) else null,
                     r.file?.let { fmSize(it.size) }, r.subText?.takeIf { it.isNotEmpty() }, r.path?.takeIf { r.net == null && r.file == null && r.treeId == null },
                     cnt?.let { stringResource(R.string.rt_counts, it.first, it.second) },
+                    if (r.level > 0) r.side?.takeIf { it.isNotBlank() } else null,   // 10.11.2026: число и размер корзины облака во вложенной строке идут второй строкой (справа они выдавливали название в столбик из букв)
                 ).joinToString("  ·  ")
                 if (sub.isNotEmpty()) MqText(sub, active = rowActive, modifier = Modifier.fillMaxWidth(), fontSize = (11 * bigFont).sp, lineHeight = (13 * bigFont).sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
                 if (r.total > 0) FmSpaceBar(1f - r.free.toFloat() / r.total, Modifier.fillMaxWidth().padding(top = 1.dp))
             }
             if (r.ro) Icon(Icons.Filled.Lock, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
             r.tog?.let { on -> androidx.compose.material3.Checkbox(on, { r.act() }, Modifier.size(if (tv) 40.dp else 32.dp)) }
-            r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
-            r.selE?.let { e -> androidx.compose.material3.Checkbox(FmRootCfg.sel.containsKey(e.key), { Fm.active = p.id; FmRootCfg.toggleSel(e) }, Modifier.size(if (tv) 40.dp else 32.dp)) }
+            if (r.level == 0) r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
+            if (r.selAll.isNotEmpty()) {
+                // раскрытая папка или устройство: галочка отмечает или снимает всё внутри
+                val allOn = r.selAll.all { FmRootCfg.sel.containsKey(it.key) }
+                SmallCheck(allOn, tv) { Fm.active = p.id; if (allOn) r.selAll.forEach { FmRootCfg.sel.remove(it.key) } else r.selAll.forEach { FmRootCfg.sel[it.key] = it } }
+            } else if (r.selReq && (r.treeId != null || r.expandKey != null)) {
+                SmallCheck(false, tv) {
+                    Fm.active = p.id
+                    if (r.expandKey != null) { if (r.expandKey !in p.rootOpen) p.rootOpen.add(r.expandKey); return@SmallCheck }
+                    val tid0 = r.treeId ?: return@SmallCheck
+                    val tgt = r.selTarget ?: tid0
+                    FmRootCfg.selAllPending.add(tgt)
+                    if (tid0 !in p.rootOpen) treeToggle(tid0)
+                    if (tgt != tid0 && tgt !in p.rootOpen) treeToggle(tgt)
+                }
+            } else r.selE?.let { e -> SmallCheck(FmRootCfg.sel.containsKey(e.key), tv) { Fm.active = p.id; FmRootCfg.toggleSel(e) } }
         }
         LDropdownMenu(menu, { menu = false }) {
             @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { menu = false; run() })
@@ -971,6 +1172,12 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     DropdownMenuItem({ Text((if (WifiExplorer.mode == m) "✓ " else "") + stringResource(res), fontSize = 14.sp) }, { menu = false; WifiExplorer.setMode(ctx, m) })
             }
             if (r.key == "wifi:srv") item(R.string.wf_link) { Fm.dlg = FmDlg.WifiServer("/sdcard") }
+            // найденное по LAN, ещё не сохранённое: сохранить в избранное как есть или сначала изменить (имя, пользователь, пароль, тип)
+            if (r.key.startsWith("lanf:") && r.net != null) {
+                val nc = r.net
+                item(R.string.fm_net_save) { NetStore.save(ctx, nc); FmRootCfg.lanFound.removeAll { h -> FmRootCfg.lanConn(h).host == nc.host }; FmRootCfg.ver++ }
+                item(R.string.fm_net_edit_title) { val h = FmRootCfg.lanFound.firstOrNull { FmRootCfg.lanConn(it).host == nc.host }; if (h != null) Fm.dlg = FmDlg.Source(h) }
+            }
             if (r.key == "wifi+") item(R.string.wf_manual) { Fm.dlg = FmDlg.WifiDev(null, "", "") }
             if (r.key in setOf("root", "recent", "adb", "lan", "cloud", "wifi", "apps")) item(R.string.rt_hide) { FmRootCfg.set(ctx, r.key, false) }
         }

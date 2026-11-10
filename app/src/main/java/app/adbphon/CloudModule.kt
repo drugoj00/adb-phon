@@ -31,6 +31,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
+/**
+ * Команда установки APK из файла: содержимое подаётся потоком (`cat | pm install -S размер`). Установка по пути (`pm install -r путь`) на части прошивок
+ * (S9, Android 10) не работает: системная служба не может читать файл в каталоге приложения на карте («System server has no access to read file»).
+ */
+fun pmInstallCmd(path: String): String {
+    val q = "'" + path.replace("'", "'\\''") + "'"
+    return "n=\$(wc -c < $q); cat $q | pm install -r -S \$n 2>&1"
+}
+
 /** Облако без модуля: понятное сообщение вместо падения (движок живёт в отдельном пакете «ADB-phon Облака»). */
 class CloudModuleMissing(msg: String) : IllegalStateException(msg)
 
@@ -45,18 +54,18 @@ object CloudModule {
     /** Нужная версия протокола между основной программой и модулем (meta-data ENGINE_API у модуля). */
     const val API_NEEDED = 1
     /** Известная версия модуля, которую предлагаем скачать. Файлов четыре, по одному на архитектуру (один пакет, одна подпись). */
-    const val VERSION = "1.0"
-    const val VERSION_CODE = 1
+    const val VERSION = "1.1"   // 6.0: 1.1 = движок упакован (UPX), установленный вес модуля 105 → 44 МБ; протокол прежний (ENGINE_API 1), модуль 1.0 остаётся рабочим
+    const val VERSION_CODE = 2
 
     /** Вариант модуля: ключ, имя файла, ABI, e_machine движка в ELF, versionCode (база*10+номер), размер (МБ) и SHA-256 файла. */
     class Variant(val key: String, val abi: String, val machine: Int, val code: Int, val sizeMb: Int, val sha: String) {
         val file get() = "ADB-phon-Clouds-$VERSION-$key.apk"
     }
     val VARIANTS = listOf(
-        Variant("arm64", "arm64-v8a", 183, 12, 26, "6aa991e0b024d82d76288f121d07f13b1fb725c007190c78ea3e2e17a87880e4"),
-        Variant("arm32", "armeabi-v7a", 40, 11, 27, "176d066da36dc508be4ea4f5e55d350232cde95a89314fc1bd7f8860dd5d1ce5"),
-        Variant("x86_64", "x86_64", 62, 14, 29, "99ba0bfd69f4e036d2aa170198a6d6ed3d045d733f99a09c72836156ddfe140e"),
-        Variant("x86", "x86", 3, 13, 27, "f63389aa716a36a093a34a6dc215f71f527a356a02ef2a86e1432143d31648db"),
+        Variant("arm64", "arm64-v8a", 183, 22, 22, "b92067e2f0ec41efb7a2c7040863044c183797deba00de3d8bb35bc0c80bf42e"),
+        Variant("arm32", "armeabi-v7a", 40, 21, 24, "c8194b78f34fe2bcad5a857f992b8c9b628fe76e177f864edcbbd528fb57cac2"),
+        Variant("x86_64", "x86_64", 62, 24, 25, "489935ab5c2da93b5aafad556152f1d33c8fd8a9f698860fe29fee2278c9430e"),
+        Variant("x86", "x86", 3, 23, 24, "807c6a53026ef1bc27e7d54ae8229eb6c27da0ef273cb3cd549b09e89d467a28"),
     )
 
     /** Вариант для этого устройства: первый подходящий из SUPPORTED_ABIS (порядок задаёт система: на 64-разрядном ядре с 32-разрядным пространством пользователя в списке только 32-разрядные). null: архитектура не поддерживается. */
@@ -215,14 +224,10 @@ object CloudModule {
             val got = withContext(Dispatchers.IO) { sha256(f) }
             if (got != sha(app)) { error = app.getString(R.string.cm_sha_bad); phase = 4; return false }
             phase = 3
-            val silent = Adb.isConnected && !FmIo.remote && Adb.currentHost.isEmpty()
-            if (silent) {
-                val out = runCatching { Adb.shell("pm install -r '${f.absolutePath.replace("'", "'\\''")}' 2>&1", 180_000L) }.getOrElse { it.message.orEmpty() }
-                if (!out.contains("Success")) { error = out.lines().firstOrNull { it.isNotBlank() }.orEmpty().ifEmpty { app.getString(R.string.cm_failed) }; phase = 4; return false }
-            } else {
-                val r = SessionInstall.install(app, listOf(f))
-                if (!r.ok) { error = if (r.cancelled) app.getString(R.string.fm_cancelled) else r.message.ifBlank { app.getString(R.string.cm_failed) }; phase = 4; return false }
-            }
+            // 10.11.2026 (владелица: «пусть ставится как положено»): всегда обычной установкой с подтверждением системы, без тихой установки через ADB
+            // (на S9 с Android 10 «pm install» по пути не открывал файл из кэша, и модуль не ставился)
+            val r = SessionInstall.install(app, listOf(f))
+            if (!r.ok) { error = if (r.cancelled) app.getString(R.string.fm_cancelled) else r.message.ifBlank { app.getString(R.string.cm_failed) }; phase = 4; return false }
             // пакет модуля появляется не мгновенно
             repeat(20) { if (ok(app)) return@repeat; delay(250) }
             if (!ok(app)) { error = app.getString(R.string.cm_failed); phase = 4; return false }
@@ -238,8 +243,7 @@ object CloudModule {
         if (phase in 1..3) return
         // модуль уже стоит (поставили снаружи): ничего не скачиваем, система не должна предлагать «обновление»
         if (ok(ctx)) { reset(); if (Fm.dlg is FmDlg.CloudModule) Fm.dlg = null; then?.invoke(); return }
-        val silent = Adb.isConnected && !FmIo.remote && Adb.currentHost.isEmpty()
-        if (!silent && !Fm.ensureInstallPermission { start(ctx, then) }) return
+        if (!Fm.ensureInstallPermission { start(ctx, then) }) return
         Fm.scope.launch {
             val done = fetchAndInstall(ctx)
             if (done) { Fm.say(ctx.getString(R.string.cm_done)); if (Fm.dlg is FmDlg.CloudModule) Fm.dlg = null; then?.invoke() }

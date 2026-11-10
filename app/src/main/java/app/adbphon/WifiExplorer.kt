@@ -55,6 +55,8 @@ object WifiExplorer {
     fun setMode(ctx: Context, m: String) { modeLoaded = true; mode = m; ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("wifi_mode", m).apply(); ver++ }
     var scanning by mutableStateOf(false)
     var progress by mutableStateOf(0)
+    /** Поиск закончился, и ничего не найдено: в списке остаётся строка с подсказкой (10.11.2026: поиск доходил до 100% и молча пропадал). */
+    var noneFound by mutableStateOf(false)
     var ver by mutableStateOf(0)
     private var job: Job? = null
 
@@ -104,7 +106,7 @@ object WifiExplorer {
 
     fun scan(ctx: Context) {
         if (scanning) return
-        found.clear(); needKey.clear(); scanning = true; progress = 0; ver++
+        found.clear(); needKey.clear(); noneFound = false; scanning = true; progress = 0; ver++
         val app = ctx.applicationContext
         job = Fm.scope.launch {
             try {
@@ -149,11 +151,11 @@ object WifiExplorer {
                         }.awaitAll()
                     }
                 }
-            } finally { scanning = false; progress = 100; ver++ }
+            } finally { scanning = false; progress = 100; noneFound = found.isEmpty() && job?.isCancelled != true; ver++ }
         }
     }
 
-    fun cancel() { job?.cancel(); scanning = false; ver++ }
+    fun cancel() { job?.cancel(); scanning = false; noneFound = false; ver++ }
 
     /** Сохранить найденное или введённое устройство постоянно. */
     fun save(ctx: Context, old: NetConn?, c: NetConn) {

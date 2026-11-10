@@ -75,13 +75,13 @@ fun CField(label: String, value: String, onChange: (String) -> Unit, modifier: M
  * Альбом: две колонки (слева название, тип, версия SMB, адрес; справа папка, порт, логин, пароль), внизу на всю ширину сохранение, проверка и кнопки; портрет: одна колонка.
  */
 @Composable
-fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
+fun SourceDlg(close: () -> Unit, edit: NetConn? = null, prefill: NetHost? = null) {
     val ctx = LocalContext.current
     val cfg = LocalConfiguration.current
     val land = cfg.screenWidthDp > cfg.screenHeightDp
-    var netForm by remember { mutableStateOf(edit != null) }
-    var kind by remember { mutableStateOf(edit?.kind ?: "smb") }
-    var host by remember { mutableStateOf(edit?.host ?: "") }
+    var netForm by remember { mutableStateOf(edit != null || prefill != null) }
+    var kind by remember { mutableStateOf(edit?.kind ?: prefill?.kinds?.firstOrNull() ?: "smb") }
+    var host by remember { mutableStateOf(edit?.host ?: prefill?.let { h -> if (h.kinds.firstOrNull() == "dav") davUrlOf(h) else h.ip } ?: "") }
     var port by remember { mutableStateOf(edit?.port?.takeIf { it > 0 }?.toString() ?: "") }
     var user by remember { mutableStateOf(edit?.user ?: "") }
     var pass by remember { mutableStateOf("") }
@@ -114,7 +114,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
 
     // поля формы
     @Composable fun fName() = CField(stringResource(R.string.fm_net_name), name, { name = it })
-    @Composable fun fKind() = EqChoices(listOf("smb" to "SMB", "sftp" to "SFTP", "ftp" to "FTP", "ftps" to "FTPS", "dav" to "WebDAV").map { (k, n) -> EqChoice(n, kind == k) { kind = k; if (k == "dav" && host.isBlank()) host = "https://" } }, perRow = 5, minH = 30.dp, fontSp = 12)
+    @Composable fun fKind() = EqChoices(listOf("smb" to "SMB", "sftp" to "SFTP", "ftp" to "FTP", "ftps" to "FTPS", "dav" to "WebDAV").map { (k, n) -> EqChoice(n, kind == k) { kind = k; if (k == "dav" && host.isBlank()) host = "https://" } }, perRow = 5, minH = 30.dp, fontSp = 10)
     @Composable fun fSmb() {
         if (kind == "smb") {
             Text(stringResource(R.string.fm_smb_version), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
@@ -136,11 +136,11 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CheckBtn(true, testing, { host.isBlank() }, hostEmpty, { err = it }, { testing = it; testMsg = null }, { build() }, okTxt, { testMsg = it }, scope, Modifier.weight(1f))
-            if (edit == null) ScanBtn(true, scanning, { scanning = it }, { found = it }, found, scope, ctx, Modifier.weight(1f))
+            if (edit == null) ScanBtn(true, scanning, { close(); fmShowRoot(p); if ("lan" !in p.rootOpen) p.rootOpen.add("lan"); FmRootCfg.lanScan(ctx, kind) }, Modifier.weight(1f))
         }
         err?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
         testMsg?.let { Text(it, fontSize = 12.sp, color = if (it == okTxt) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
-        Text(stringResource(R.string.fm_net_secure), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 6, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        // 10.11.2026 (владелица): пояснение про хранение пароля и ключ Android Keystore убрано из окна «Источник» (строка fm_net_secure в ресурсах осталась)
         if (edit == null) found.forEach { h ->
             Column(Modifier.fillMaxWidth().clickable { host = h.ip; kind = h.kinds.firstOrNull() ?: kind; if (kind == "dav") host = davUrlOf(h) }.padding(vertical = 4.dp)) {
                 Text(h.ip + if (h.name.isNotBlank()) "  ·  " + h.name else "", fontSize = 14.sp, maxLines = 1)
@@ -153,9 +153,11 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
     val body: @Composable () -> Unit = {
         Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (!netForm) {
-                opt(R.string.fm_src_local, R.string.fm_src_local_hint, p.src == "local") { close(); Fm.setSource(p, "local") }
+                // 10.11.2026 (владелица): порядок «Сеть», «ADB», «Память» (было: Память, ADB, Сеть)
+                // 10.11.2026 (владелица): при открытии окна по умолчанию отмечена «Сеть» (кроме случая, когда сейчас открыт ADB)
+                opt(R.string.fm_src_net, R.string.fm_src_net_hint, p.src != "adb") { netForm = true }
                 opt(R.string.fm_src_adb, R.string.fm_src_adb_hint, p.src == "adb") { close(); Fm.setSource(p, "adb") }
-                opt(R.string.fm_src_net, R.string.fm_src_net_hint, p.src == "smb") { netForm = true }
+                opt(R.string.fm_src_local, R.string.fm_src_local_hint, false) { close(); Fm.setSource(p, "local") }
                 if (favs.isNotEmpty()) {
                     Text(stringResource(R.string.fm_net_favs), fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
                     favs.forEach { f ->
@@ -226,7 +228,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null) {
                                 androidx.compose.material3.Checkbox(saveFav, { saveFav = it }, Modifier.size(32.dp)); Text(stringResource(R.string.fm_net_save_short), fontSize = 12.sp, maxLines = 1)
                             }
                             CheckBtn(land, testing, { host.isBlank() }, hostEmpty, { err = it }, { testing = it; testMsg = null }, { build() }, okTxt, { testMsg = it }, scope)
-                            if (edit == null) ScanBtn(land, scanning, { scanning = it }, { found = it }, found, scope, ctx)
+                            if (edit == null) ScanBtn(land, scanning, { close(); fmShowRoot(p); if ("lan" !in p.rootOpen) p.rootOpen.add("lan"); FmRootCfg.lanScan(ctx, kind) })
                             Box(Modifier.weight(1f))
                             cancelBtn(); okBtn()
                         }
@@ -256,14 +258,15 @@ private fun CheckBtn(short: Boolean, testing: Boolean, hostBlank: () -> Boolean,
 
 /** Кнопка «Найти устройства в сети». */
 @Composable
-private fun ScanBtn(short: Boolean, scanning: Boolean, setScanning: (Boolean) -> Unit, setFound: (List<NetHost>) -> Unit, found: List<NetHost>, scope: kotlinx.coroutines.CoroutineScope, ctx: android.content.Context, modifier: Modifier = Modifier) {
+private fun ScanBtn(short: Boolean, scanning: Boolean, go: () -> Unit, modifier: Modifier = Modifier) {
+    // 10.11.2026 (владелица): найденное по LAN сразу появляется в дереве «LAN», а не списком в этом окне: окно закрывается, поиск идёт в дереве (FmRootCfg.lanScan)
     OutlinedButton({
-        if (!scanning) { setScanning(true); setFound(emptyList()); scope.launch { setFound(runCatching { NetDiscover.scan(ctx) { setFound(it) } }.getOrDefault(found)); setScanning(false) } }
+        if (!scanning) go()
     }, modifier, enabled = !scanning, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(if (scanning) R.string.fm_net_scanning else if (short) R.string.fm_net_scan_short else R.string.fm_net_scan), fontSize = 13.sp, maxLines = 1) }
 }
 
 /** Адрес WebDAV найденного устройства: порт добавляется, если это не 80 и не 443 (например, Wi-Fi сервер ADB-phon на 8080). */
-private fun davUrlOf(h: NetHost): String {
+fun davUrlOf(h: NetHost): String {
     if (h.ports.contains(443)) return "https://" + h.ip
     if (h.ports.contains(80)) return "http://" + h.ip
     val p = listOf(8080, 8081, 5005, 5006).firstOrNull { it in h.ports }

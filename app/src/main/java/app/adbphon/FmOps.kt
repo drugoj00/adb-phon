@@ -312,7 +312,9 @@ class FmOpService : Service() {
     }
 
     private fun build(j: FmJob?): Notification {
-        val b = Notification.Builder(this).setSmallIcon(android.R.drawable.stat_sys_download).setOngoing(true).setOnlyAlertOnce(true)
+        // значок: корзина у удаления, «копия файлов» у остальных операций (стрелка вниз выглядела как загрузка)
+        val isDelete = j != null && (j.title == getString(R.string.fm_deleting) || j.title == getString(R.string.sel_forever_title))
+        val b = Notification.Builder(this).setSmallIcon(if (isDelete) R.drawable.ic_stat_trash else R.drawable.ic_stat_files).setOngoing(true).setOnlyAlertOnce(true)
         if (android.os.Build.VERSION.SDK_INT >= 26) b.setChannelId(CH)
         val open = PendingIntent.getActivity(this, 0, packageManager.getLaunchIntentForPackage(packageName), PendingIntent.FLAG_IMMUTABLE)
         b.setContentIntent(open)

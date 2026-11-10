@@ -753,6 +753,21 @@ fun AppsScreen(vm: MainViewModel) {
     var lastTap by remember { mutableStateOf<String?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(vm.selected.isEmpty()) { if (vm.selected.isEmpty()) showActions = false }
+    // 10.11.2026 (владелица): вошла в «Софт», а связи ADB ещё нет: сразу окно выбора подключения (то же, что вкладка «Связь»); закрывается само, когда связь появилась, или кнопкой
+    var connDismissed by remember { mutableStateOf(false) }
+    if (!vm.connected && !connDismissed) androidx.compose.ui.window.Dialog(onDismissRequest = { connDismissed = true }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        LangScopePublic {
+            androidx.compose.material3.Surface(Modifier.fillMaxWidth(.96f).fillMaxHeight(.92f), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 6.dp) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.conn_choose_title), Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        TextButton({ connDismissed = true }) { Text(stringResource(R.string.btn_close)) }
+                    }
+                    Box(Modifier.weight(1f)) { ConnectScreen(vm) }
+                }
+            }
+        }
+    }
     // компактный вид (просьба владелицы 26.10.2026): без лишней высоты у флажков и чипов, поиск вдвое ниже, строка приложения в две строки
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -868,7 +883,7 @@ fun AppsScreen(vm: MainViewModel) {
                             onClick = { vm.toggle(a.pkg); lastTap = a.pkg },
                             onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); infoFor = a },
                         )
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(start = 12.dp, top = 4.dp, end = 3.dp, bottom = 4.dp),   // 10.11.2026: справа 3 dp, галочка у самого края
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AppIcon(a.pkg, 32.dp)
@@ -898,7 +913,7 @@ fun AppsScreen(vm: MainViewModel) {
                         )
                     }
                     // флажок выбора справа, как в «Файлах»
-                    Checkbox(a.pkg in vm.selected, { vm.toggle(a.pkg); lastTap = a.pkg }, Modifier.size(32.dp))
+                    SmallCheck(a.pkg in vm.selected, false) { vm.toggle(a.pkg); lastTap = a.pkg }   // 10.11.2026: маленькая галочка у края, как в «домике»
                 }
             }
         }
