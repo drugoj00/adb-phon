@@ -14,8 +14,8 @@ android {
         applicationId = "app.adbphon"
         minSdk = 26
         targetSdk = 34
-        versionCode = 36
-        versionName = "5.0"
+        versionCode = 38
+        versionName = "6.0"
         // оставляем только языки программы (ru, uk, en): строки библиотек на других языках не нужны
         resourceConfigurations += listOf("ru", "uk", "en")
     }
