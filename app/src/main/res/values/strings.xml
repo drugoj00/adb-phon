@@ -1511,6 +1511,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="conn_choose_title">Choose an ADB connection</string>
     <string name="sel_forever_redo">Batch delete did not remove %1$d items, deleting them one by one…</string>
     <string name="fm_refreshed">Refreshed</string>
+    <string name="cm_ask_upgrade">A new version of the “ADB-phon Clouds” module is available: it takes less space on the phone. Download (about %1$d MB) and update?</string>
     <string name="sel_forever_start">Deleting %1$d permanently…</string>
     <string name="sel_forever_done">Deleted permanently: %1$d</string>
     <string name="sel_forever_part">Deleted %1$d of %2$d. Error: %3$s</string>
