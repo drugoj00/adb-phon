@@ -1499,6 +1499,7 @@
     <string name="conn_choose_title">Выбери подключение к ADB</string>
     <string name="sel_forever_redo">Пакет не удалил %1$d шт., удаляю по одному…</string>
     <string name="fm_refreshed">Обновлено</string>
+    <string name="cm_ask_upgrade">Доступна новая версия модуля «ADB-phon Облака»: она занимает меньше места на телефоне. Скачать (около %1$d МБ) и обновить?</string>
     <string name="sel_forever_start">Удаляю навсегда: %1$d…</string>
     <string name="sel_forever_done">Удалено навсегда: %1$d</string>
     <string name="sel_forever_part">Удалено %1$d из %2$d. Ошибка: %3$s</string>
