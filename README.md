@@ -16,13 +16,13 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 **Version 6.0.** [ADB-phon-6.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `3c09a4e8214a714c97f502ae97f1ff0af63ea5c6bedf846f2f7cf72c76c2b386`
+SHA-256: `64d73544c6d5578868c8f3eac617035c47504aaf1019b52939a023a93f98df48`
 
 ## What's new in 6.0
 
 - Interface improvements.
 - Fixed installation of the module for cloud drives.
-- Smaller installed size of the module for cloud drives.
+- Smaller installed size of the module for cloud drives: from 105 MB to 44 MB (ARM 64-bit).
 - Critical bugs fixed.
 
 ## Features
