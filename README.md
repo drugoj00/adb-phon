@@ -25,6 +25,8 @@ SHA-256: `64d73544c6d5578868c8f3eac617035c47504aaf1019b52939a023a93f98df48`
 - Smaller installed size of the module for cloud drives: from 105 MB to 44 MB (ARM 64-bit).
 - Critical bugs fixed.
 
+The cloud drives module needs to be updated to version 1.1: ADB-phon 6.0 will offer this by itself.
+
 ## Features
 
 - **Install APK over ADB.** Install or update apps through ADB, no computer needed. Sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search on the internet (F-Droid, GitHub, a link). Multi-part packages APKS, APKM, XAPK and ZIP with APK and OBB: the parts for your phone are picked automatically. Batch install.
