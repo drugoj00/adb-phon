@@ -14,16 +14,16 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 5.0.** [ADB-phon-5.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 6.0.** [ADB-phon-6.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `2e3864aaa0f62b614a886785f3453a5e9292b4c97e396748e4d3dc22709f6bf2`
+SHA-256: `3c09a4e8214a714c97f502ae97f1ff0af63ea5c6bedf846f2f7cf72c76c2b386`
 
-## What's new in 5.0
+## What's new in 6.0
 
-- **File manager:** Two panels side by side. Phone memory, memory card, USB drives, archives, Android/data over ADB, network folders and cloud drives in one tree (the “home” screen). Copy, move, delete, rename, new folders, text files and ZIP, selection by mask, “Tree” mode. Drag and drop between panels. Press and hold a file or a folder (a long touch on a touch screen), drag it to the neighbouring panel and drop it there or on any folder. Hold it over a folder and the folder opens; hold it over the tab of the other panel and the panel switches. On release the app asks “Copy”, “Move” or “Cancel”. A recycle bin for the phone, memory card, clouds and network folders (Google Drive uses its own bin with “Delete forever” and “Restore”); the “File already exists” window with “Rename”, “Replace”, “Cancel” and “Apply to all”; safe writing: the original survives a failure or cancel. Archives ZIP, 7z, RAR (including RAR5) and TAR open like folders; extract, create ZIP (also with a password), 7z and TAR. Files open right in the app. Photos (swipe, zoom, slideshow), a video player, a music player that keeps playing in the background with a mini player, a text editor (UTF-8, Windows-1251, DOS-866; txt, json, csv, code and more), a PDF viewer and a viewer for Word, Excel, PowerPoint and OpenDocument files (docx, xlsx, pptx, odt, ods, odp): text and tables without formatting, read only. Network sources SFTP, FTP, FTPS (browse and download), WebDAV and SMB; copy directly between two network sources and from a cloud to the network; SSH terminal with sign-in by key. After a restart folders, places, open panels, scroll position and selected items come back, including clouds and network folders.
-- **Cloud drives:** Google Drive, MEGA, Dropbox, OneDrive, Yandex Disk, Box, pCloud and dozens of other services work like ordinary folders: browse, copy, move, recycle bin. Cloud drives need the “ADB-phon Clouds” module to be installed (free, a separate app). The app offers to download and install it by itself when you create your first cloud drive (internet and Android’s permission to install apps are needed); the downloaded file deletes itself after installation. The module exists for ARM 64/32-bit, x86 and x86_64, and the app picks the right one. Without the module the main app stays light and works with everything else. Adding a cloud is easy: after choosing a service you only sign in in the browser. For Google Drive the app has a shared key (a trial one, for the first 100 users); after that the “Own key” wizard walks you through creating your own: it puts the needed texts on the clipboard, finds the copied client ID and secret and signs in by itself. Sign in with a login and password right in the app (Yandex Disk with an app password, Mail.ru and others).
-- **Gamepad:** The on-screen gamepad “Play on this phone” turns the phone or the TV box into a controller: sticks, A/B/X/Y, triggers and bumpers, Back, Guide and Start over any game. Xbox or PlayStation layout, dead zone, size and transparency; works on Android 8 and newer. Tilting the phone can replace a stick (for example steering in racing games): the angle, dead zone and smoothing are adjustable. Requirements: ADB to the phone itself (wireless debugging on Android 11 and newer; on Android 8–10 run adb tcpip 5555 from a computer once) or root, the “Display over other apps” permission; the game must support a gamepad; for heavy games 6 GB of memory or more is recommended. The phone as a Bluetooth gamepad for a PC with vibration from the PC and a Bluetooth button for choosing the device. Requirements: Bluetooth on the phone with the HID device role (Android 9 and newer on most phones) and pairing with a Windows computer; for vibration from the PC and the Xbox controller mode install “ADB-phon Bridge” on the computer (driver, tray icon, starts with Windows). When the game device is reachable over ADB, connecting the gamepad frees its memory and warns about extra virtual controllers.
-- **More:** Landscape layout of the “Apps”, “Files”, “Remote” and “PC mouse” tabs (handy for car head units and wide screens), choice of the side for the button panel. “Apps”: clearing cache and data, batch actions on the selected apps (disable, enable, stop, clear cache, save APK, uninstall), saved APK copies with install and delete. “PC mouse”: Bluetooth turns on by itself when you open the section and off when you leave, the last connection comes first; automatic connection to an Android box over ADB; auto-connect to the last Bluetooth device is off by default, another device that tries to connect gets a request. Rotating the phone screen from the app; a “Disconnect” button on the connection notification in the shade.
+- Interface improvements.
+- Fixed installation of the module for cloud drives.
+- Smaller installed size of the module for cloud drives.
+- Critical bugs fixed.
 
 ## Features
 
@@ -74,7 +74,7 @@ SHA-256: `2e3864aaa0f62b614a886785f3453a5e9292b4c97e396748e4d3dc22709f6bf2`
 
 ## Quick start
 
-1. Download ADB-phon-5.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-6.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
