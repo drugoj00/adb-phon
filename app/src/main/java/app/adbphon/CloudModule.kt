@@ -149,6 +149,15 @@ object CloudModule {
 
     fun ok(ctx: Context) = state(ctx) == State.OK
 
+    /** Процесс уже спрашивал про обновление модуля (один раз за запуск программы). */
+    @Volatile var upgradeAsked = false
+    /** Модуль установлен, рабочий, но старее известного (6.0: стоит 1.0, а есть 1.1 с меньшим весом): программа сама предлагает обновить обычной установкой, не втихую. */
+    fun upgradeAvailable(ctx: Context): Boolean {
+        val v = variant() ?: return false
+        if (state(ctx) != State.OK) return false
+        return installedCode(ctx) in 1 until v.code.toLong()
+    }
+
     /** Исполняемый файл движка из каталога библиотек модуля; null, если модуля нет, он чужой или устарел. */
     fun engine(ctx: Context): File? {
         if (!ok(ctx)) return null
@@ -239,10 +248,10 @@ object CloudModule {
     }
 
     /** Нажатие «Скачать и установить»: при необходимости сначала разрешение на установку, затем загрузка; потом [then]. */
-    fun start(ctx: Context, then: (() -> Unit)?) {
+    fun start(ctx: Context, then: (() -> Unit)?, upgrade: Boolean = false) {
         if (phase in 1..3) return
-        // модуль уже стоит (поставили снаружи): ничего не скачиваем, система не должна предлагать «обновление»
-        if (ok(ctx)) { reset(); if (Fm.dlg is FmDlg.CloudModule) Fm.dlg = null; then?.invoke(); return }
+        // модуль уже стоит (поставили снаружи): ничего не скачиваем, система не должна предлагать «обновление» (кроме явного обновления старого модуля)
+        if (ok(ctx) && !(upgrade && upgradeAvailable(ctx))) { reset(); if (Fm.dlg is FmDlg.CloudModule) Fm.dlg = null; then?.invoke(); return }
         if (!Fm.ensureInstallPermission { start(ctx, then) }) return
         Fm.scope.launch {
             val done = fetchAndInstall(ctx)
@@ -260,7 +269,7 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
     // модуль появился не из этого окна (поставлен файловым менеджером или из настроек): окно закрывается само и продолжается прерванное действие
     val modVer = CloudModule.ver
     androidx.compose.runtime.LaunchedEffect(modVer, st) {
-        if (st == CloudModule.State.OK && CloudModule.phase !in 1..3) { CloudModule.reset(); close(); d.then?.invoke() }
+        if (st == CloudModule.State.OK && CloudModule.phase !in 1..3 && !(d.upgrade && CloudModule.upgradeAvailable(ctx))) { CloudModule.reset(); close(); d.then?.invoke() }
     }
     LAlertDialog(
         onDismissRequest = { if (phase !in 1..3) { CloudModule.reset(); close() } else { CloudModule.cancel(ctx); close() } },
@@ -279,12 +288,12 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
                         Text(stringResource(R.string.cm_failed), fontSize = 14.sp)
                         if (CloudModule.error.isNotBlank()) Text(CloudModule.error.take(200), fontSize = 12.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
                     }
-                    else -> Text(stringResource(when (st) { CloudModule.State.OUTDATED -> R.string.cm_ask_update; CloudModule.State.WRONG_ABI -> R.string.cm_ask_abi; else -> R.string.cm_ask }, CloudModule.sizeMb()), fontSize = 14.sp)
+                    else -> Text(stringResource(if (d.upgrade && st == CloudModule.State.OK) R.string.cm_ask_upgrade else when (st) { CloudModule.State.OUTDATED -> R.string.cm_ask_update; CloudModule.State.WRONG_ABI -> R.string.cm_ask_abi; else -> R.string.cm_ask }, CloudModule.sizeMb()), fontSize = 14.sp)
                 }
             }
         },
         confirmButton = {
-            if (phase == 0 || phase == 4) TextButton({ CloudModule.reset(); CloudModule.start(ctx, d.then); }) { Text(stringResource(R.string.cm_install)) }
+            if (phase == 0 || phase == 4) TextButton({ CloudModule.reset(); CloudModule.start(ctx, d.then, d.upgrade); }) { Text(stringResource(R.string.cm_install)) }
         },
         dismissButton = { TextButton({ CloudModule.cancel(ctx); CloudModule.reset(); close() }) { Text(stringResource(R.string.btn_cancel)) } },
     )

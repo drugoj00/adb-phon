@@ -251,7 +251,7 @@ sealed class FmDlg {
     class Source(val prefill: NetHost? = null) : FmDlg()
     class CloudAdd : FmDlg()
     /** Нужен модуль «ADB-phon Облака»: скачать и установить; после установки выполняется [then]. */
-    class CloudModule(val then: (() -> Unit)? = null) : FmDlg()
+    class CloudModule(val upgrade: Boolean = false, val then: (() -> Unit)? = null) : FmDlg()
     class MegaAdd : FmDlg()
     class CloudForm(val entry: CEntry) : FmDlg()
     class CloudAll : FmDlg()
@@ -1523,6 +1523,11 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
     Fm.goConnect = onConnectTab
     FmIo.remote = vm.remoteHost != null
     LaunchedEffect(Unit) { Fm.init(ctx); Fm.panes.forEach { if (it.error != null) Fm.load(it, remember = false) } }
+    // 6.0: стоит старый модуль облаков (1.0), есть новый (1.1, меньше места): один раз за запуск предлагаем обновить обычной установкой (окно системы подтверждает установку)
+    LaunchedEffect(Fm.dlg == null) {
+        delay(2500)
+        if (!CloudModule.upgradeAsked && Fm.dlg == null && CloudModule.upgradeAvailable(ctx)) { CloudModule.upgradeAsked = true; Fm.dlg = FmDlg.CloudModule(upgrade = true) }
+    }
     Fm.sctx = ctx
     // на Android 6-10 доступ просится обычным системным окном
     val legacy = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { Fm.recheck(ctx) }
