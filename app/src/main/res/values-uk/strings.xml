@@ -1499,6 +1499,7 @@
     <string name="conn_choose_title">Обери підключення до ADB</string>
     <string name="sel_forever_redo">Пакет не видалив %1$d шт., видаляю по одному…</string>
     <string name="fm_refreshed">Оновлено</string>
+    <string name="cm_ask_upgrade">Доступна нова версія модуля «ADB-phon Хмари»: вона займає менше місця на телефоні. Завантажити (близько %1$d МБ) і оновити?</string>
     <string name="sel_forever_start">Видаляю назавжди: %1$d…</string>
     <string name="sel_forever_done">Видалено назавжди: %1$d</string>
     <string name="sel_forever_part">Видалено %1$d з %2$d. Помилка: %3$s</string>
