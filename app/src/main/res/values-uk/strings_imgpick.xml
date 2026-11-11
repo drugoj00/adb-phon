@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="imgsrc_title">Вибір картинки</string>
+    <string name="imgsrc_own">Теки на пристрої</string>
+    <string name="imgsrc_own_hint">Вбудований огляд, системне вікно не потрібне</string>
+    <string name="imgsrc_apps">Або вибрати картинку у файловому менеджері:</string>
+    <string name="imgsrc_back">Назад</string>
+    <string name="imgsrc_device">Пристрій</string>
+    <string name="imgsrc_empty">Тут немає картинок</string>
+    <string name="imgsrc_noaccess">Немає доступу до файлів. Дозволь ADB-phon доступ до всіх файлів у майстрі налаштування.</string>
+</resources>

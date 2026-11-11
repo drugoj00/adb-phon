@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_title">Відеодзвінки</string>
+    <string name="call_listen">Приймати дзвінки у фоні (у шторці лишається маленький значок)</string>
+    <string name="call_myname">Імʼя в дзвінках</string>
+    <string name="call_empty">Людей поки немає. Додай людину за кодом її програми.</string>
+    <string name="call_btn">Подзвонити</string>
+    <string name="call_add">Додати людину…</string>
+    <string name="call_add_title">Нова людина</string>
+    <string name="call_add_name">Імʼя</string>
+    <string name="call_add_code">Код програми (XXXX-XXXX-XXXX)</string>
+    <string name="call_add_bad">У коді має бути 12 літер і цифр.</string>
+    <string name="call_add_save">Додати</string>
+    <string name="call_cancel">Скасувати</string>
+    <string name="call_remove">Прибрати</string>
+    <string name="call_hint">Код є в іншій програмі: на Windows у «Звʼязку через інтернет», на Android у цьому розділі. Дзвінок іде напряму між пристроями, браузер не потрібен.</string>
+    <string name="call_in_title">Дзвонить</string>
+    <string name="call_in_hint">Камера й мікрофон увімкнуться, лише коли натиснеш «Відповісти».</string>
+    <string name="call_answer">Відповісти</string>
+    <string name="call_decline">Відхилити</string>
+    <string name="call_cancelled">Дзвінок скасовано</string>
+    <string name="call_missed">Пропущений дзвінок</string>
+    <string name="call_busy_now">Дзвінок уже йде.</string>
+    <string name="call_notif_ring">Дзвонить %1$s</string>
+    <string name="call_listen_notif">Прийом відеодзвінків</string>
+    <string name="call_listen_off">Вимкнути</string>
+    <string name="call_incall_notif">Відеодзвінок: %1$s</string>
+    <string name="call_no_start">Дзвінок не розпочався.</string>
+</resources>
