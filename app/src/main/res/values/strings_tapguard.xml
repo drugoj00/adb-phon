@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_title">Double-tap protection</string>
+    <string name="tg_hint">Ignores a second tap in the same spot right after the first one, and a second OK key sent for one press. TV boxes with a mouse or a remote sometimes send two. Turn it off if quick repeated taps are needed.</string>
+</resources>
