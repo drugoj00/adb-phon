@@ -25,6 +25,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- 7.0 видеозвонок: камера и микрофон запрашиваются при первом звонке или ответе; служба звонка держит их, пока окно свёрнуто -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -38,6 +44,9 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
         android:name=".App"
@@ -52,6 +61,8 @@
         android:theme="@style/Theme.ADBphon">
         <activity
             android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher"
             android:banner="@drawable/banner"
             android:exported="true"
             android:launchMode="singleTop"
@@ -72,6 +83,26 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+        <receiver android:name=".VpnSessionReceiver" android:exported="false"><intent-filter><action android:name="app.adbphon.VPN_SESSION_END" /></intent-filter></receiver>
+        <service android:name=".VpnRecoverJobService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
+        <service android:name=".InviteJobService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
+        <!-- 7.0 видеозвонок: окно звонка, фоновый приём (служба переднего плана), кнопка «Отклонить» в уведомлении, стенд проверки -->
+        <activity
+            android:name=".CallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:screenOrientation="fullUser"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
+        <activity android:name=".CallTestActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
+        <service android:name=".CallListenService" android:exported="false" android:foregroundServiceType="connectedDevice|microphone|camera" />
+        <receiver android:name=".CallReceiver" android:exported="false" />
+        <service android:name=".TextIme" android:exported="true" android:label="@string/vw_ime_label" android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/text_ime" />
+        </service>
         <service android:name=".AutoPairService" android:exported="true" android:label="@string/app_name" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/autopair_service" />
@@ -83,6 +114,7 @@
             android:launchMode="singleTop" />
         <activity android:name=".BackupTestActivity" android:exported="true" />
         <activity android:name=".ArcTestActivity" android:exported="true" />
+        <activity android:name=".AndroidTestActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name=".NetTestActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name=".TextEditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
         <activity android:name=".PdfViewerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
@@ -107,6 +139,25 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <!-- 7.0: ADB-phon как «менеджер» Shizuku: сюда сервер присылает binder, а это окно спрашивает разрешение у приложений -->
+        <provider
+            android:name=".ShizukuManagerProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <activity
+            android:name=".ShizukuRequestActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="${applicationId}.intent.action.REQUEST_PERMISSION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <service android:name=".FmOpService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".CloudLoginService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".PadOverlayTile" android:exported="true" android:label="@string/pad_overlay_label" android:icon="@drawable/ic_pad_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
