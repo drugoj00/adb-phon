@@ -2,6 +2,8 @@
 
 🌐 All our programs: https://drugoj00.github.io/
 
+📖 Full user guide for every feature: [INSTRUCTION.md](INSTRUCTION.md)
+
 <img src="https://drugoj00.github.io/phone-in-window-with-sound/adb_icon.png" alt="" width="96" align="right">
 
 # ADB-phon
@@ -30,7 +32,7 @@ SHA-256: `cc8b827d9ddf6da042d2a7bcbfeb9ea41ce8da4c9f6d79106883a8fb9a28ac41`
 - Console: live terminal, history, Ctrl+C, Tab, My commands
 - Devices in Files: computers and Android devices in one group, each with Files and Video window folders
 - Video window: view and control the screen of a computer or another Android, auto-rotation, text input in any language
-- Video call between Android devices and computers: incoming call window, sound, speaker, camera
+- Video call between Android devices and computers: incoming call window, sound, speaker, camera ([guide](INSTRUCTION.md#how-to-call))
 - Invitations: join a Tailscale network by an invitation from a PC
 - Another VPN is turned off for the duration of a session and restored afterwards
 - A hint about ADB-phon Bridge in the Gamepad section

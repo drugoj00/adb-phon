@@ -2,6 +2,8 @@
 
 🌐 Усі наші програми: https://drugoj00.github.io/
 
+📖 Повна інструкція до всіх функцій: [INSTRUCTION.uk.md](INSTRUCTION.uk.md)
+
 <img src="https://drugoj00.github.io/phone-in-window-with-sound/adb_icon.png" alt="" width="96" align="right">
 
 # ADB-phon
