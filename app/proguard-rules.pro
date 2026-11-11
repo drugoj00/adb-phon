@@ -42,3 +42,7 @@
 
 # RAR5: родная часть UnRAR вызывается из JNI по именам
 -keep class app.adbphon.RarNative { *; }
+
+# Видеозвонок (7.0): мост JS ↔ Kotlin в окне звонка вызывается страницей по имени
+-keepclassmembers class app.adbphon.CallActivity$Bridge { @android.webkit.JavascriptInterface <methods>; }
+-keepattributes JavascriptInterface
