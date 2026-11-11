@@ -394,6 +394,14 @@ What it is: a video call between Android devices and computers (the Windows prog
 
 From Windows: in the “Video call” window choose a person (if needed “Add a person…”) and tap “Call”. The button “Check camera and microphone” tests them only on your side, sending nothing.
 
+### Squeal and echo in a call
+
+Causes: another program sends sound or the microphone (for example AnyDesk, TeamViewer, Zoom), so the sound doubles and loops; a speaker stands next to the microphone.
+
+1. Turn off sound and microphone sending in the other program (in AnyDesk: the audio input device).
+2. Put on headphones.
+3. In the call window tap “Sound” or “Speaker” to switch off what is extra.
+
 ### Receiving calls
 
 Receiving calls is on by default in ADB-phon 7.0: a small icon “Receiving video calls” sits in the notification shade. The switch “Receive calls in the background (a small icon stays in the notification shade)” is in the same card “Video calls”. If a call is not answered: “Call cancelled” or “Missed call”.
