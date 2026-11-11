@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vw_ime_label">ADB-phon: text input over ADB (service)</string>
+    <string name="vw_type_hint">Text (any layout: Cyrillic, Latin, emoji)</string>
+    <string name="vw_text_fail">The text was not typed: the device needs ADB-phon 7.0 or newer and a text field with a cursor.</string>
+    <string name="vw_err_ts_self">No connection to %1$s: this phone is not in the Tailscale network now (Tailscale is off, or another VPN such as OpenVPN holds Android\'s single VPN slot). Turn Tailscale on here, or use the device\'s address on the same network (192.168…).</string>
+    <string name="vw_err_ts_peer">No connection to %1$s over Tailscale: Tailscale works on this phone, but the device does not answer on that port. Check that Tailscale and network debugging (ADB, port 5555) are on at the device and that it is not asleep.</string>
+    <string name="vw_hint_andr">On the device turn on network debugging (ADB, port 5555) or Wireless debugging and enter the address with its port. On the first connection the device asks Allow debugging?: tick Always. A Tailscale address (100.x) works when Tailscale runs on the device and on this phone too (Android allows one VPN at a time: with always-on OpenVPN, Tailscale cannot run, so also enter the device\'s address on the same network, 192.168…, as the second address).</string>
+</resources>

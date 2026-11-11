@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="imgsrc_title">Choose a picture</string>
+    <string name="imgsrc_own">Folders on this device</string>
+    <string name="imgsrc_own_hint">Built-in browser, no system window needed</string>
+    <string name="imgsrc_apps">Or open the picture in a file manager:</string>
+    <string name="imgsrc_back">Back</string>
+    <string name="imgsrc_device">Device</string>
+    <string name="imgsrc_empty">No pictures here</string>
+    <string name="imgsrc_noaccess">No access to files. Allow access to all files for ADB-phon in Setup.</string>
+</resources>

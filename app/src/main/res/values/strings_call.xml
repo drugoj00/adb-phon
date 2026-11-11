@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_title">Video calls</string>
+    <string name="call_listen">Receive calls in the background (a small icon stays in the notification shade)</string>
+    <string name="call_myname">Name shown in calls</string>
+    <string name="call_empty">No people yet. Add a person by their program code.</string>
+    <string name="call_btn">Call</string>
+    <string name="call_add">Add a person…</string>
+    <string name="call_add_title">New person</string>
+    <string name="call_add_name">Name</string>
+    <string name="call_add_code">Program code (XXXX-XXXX-XXXX)</string>
+    <string name="call_add_bad">The code must have 12 letters and digits.</string>
+    <string name="call_add_save">Add</string>
+    <string name="call_cancel">Cancel</string>
+    <string name="call_remove">Remove</string>
+    <string name="call_hint">The code is in the other program: on Windows in “Connection over the internet”, on Android in this section. The call goes directly between the devices, no browser needed.</string>
+    <string name="call_in_title">Calling</string>
+    <string name="call_in_hint">Camera and microphone turn on only after “Answer”.</string>
+    <string name="call_answer">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_cancelled">Call cancelled</string>
+    <string name="call_missed">Missed call</string>
+    <string name="call_busy_now">A call is already in progress.</string>
+    <string name="call_notif_ring">%1$s is calling</string>
+    <string name="call_listen_notif">Receiving video calls</string>
+    <string name="call_listen_off">Turn off</string>
+    <string name="call_incall_notif">Video call: %1$s</string>
+    <string name="call_no_start">The call did not start.</string>
+</resources>
