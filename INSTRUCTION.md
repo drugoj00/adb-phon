@@ -1,6 +1,6 @@
 [English](INSTRUCTION.md) · [Русский](INSTRUCTION.ru.md) · [Українська](INSTRUCTION.uk.md) · [README](README.md)
 
-# ADB-phon 7.0: user guide
+# ADB-phon 7.5: user guide
 
 A guide to everything in the program. Button and section names are taken from the program itself. If a step does not work, see “Limits” at the end of the section.
 
@@ -10,6 +10,7 @@ A guide to everything in the program. Button and section names are taken from th
 - [First run and permissions](#first-run-and-permissions)
 - [Connecting over ADB](#connecting-over-adb)
 - [Installing apps](#installing-apps)
+- [The “Install” window and the install progress bar](#the-install-window-and-the-install-progress-bar)
 - [Apps](#apps)
 - [Junk cleaner](#junk-cleaner)
 - [Copies and versions](#copies-and-versions)
@@ -113,6 +114,26 @@ What it is: silent installation and updating of apps over ADB, without a compute
 Other sources: the built-in file manager (including flash drives), network folders, receiving files over Wi‑Fi from a browser, internet search (F-Droid, GitHub, a link). An APK can also be opened from the Files tab: you get a choice “Install with…” (“System installer” or “ADB-phon: via ADB/root”, with “Remember my choice for this type”).
 
 Limits: without ADB and root the installation goes through the system installer with confirmation windows.
+
+## The “Install” window and the install progress bar
+
+What it is: after ADB-phon is chosen as the installer, the program shows the “Install” window with version information and only then installs the app.
+
+1. **Step 1.** In Files tap an APK file: the “Install with…” window opens with a list of installers (ADB-phon, the system installer and others). In Software → “Installing apps” the “Install” window opens right away.
+2. **Step 2.** Choose ADB-phon. The “Install” window opens: icon, name, package and the kind: “New install”, “Update”, “Same version (reinstall)” or “Version downgrade”.
+3. **Step 3.** If the app is already installed, a “Now” / “New” table follows: “Version”, “Code”, “Signature”, “Size”, “Min API”. Differences are highlighted. Below are the lists “New permissions” and “Removed permissions”.
+4. **Step 4.** Tap “Install”. The install progress bar shows bytes (“123.6 of 300 MB”) and files (“1 of 3”), with the stages “Preparing the file…”, “Sending the file…”, “Installing…”. At the end: “Done: all packages installed” or “Not installed:” with the reason.
+
+A different signature: the window warns that the version will not install over the installed one; the installed app has to be uninstalled first (its data is lost). The install is not attempted, and the result shows the reason.
+
+Downgrade:
+
+- Without root on Android 14 and newer a downgrade cannot keep the data. The button “Downgrade, delete data”: the program saves a copy of the current version, removes the app and installs the older one. If that fails, the current version is put back from the copy (the data is not kept).
+- With root the button “Downgrade and keep data”: the program saves the app data to a copy, installs the older version and puts the data back. On failure it restores the current version and its data.
+- On Android below 14 a downgrade goes the previous way and keeps the data.
+- System apps cannot be downgraded.
+
+Limits: for APKS and XAPK packages there is no rollback on a downgrade. For files from USB drives and network folders the window shows only the name and size.
 
 ## Apps
 
@@ -240,6 +261,8 @@ What it is: a two-pane file manager. Phone storage, card, USB drives, archives, 
 5. **Step 5.** If a file already exists, the window “File already exists” opens: “Replace”, “Skip”, “Rename”, “Apply to all”.
 6. **Step 6.** Trash: what is deleted on the phone and the card first goes to a hidden folder .adbphon-trash. Settings: “File manager trash” (keep 7, 30, 90 days or no limit), “Delete confirmation”.
 7. **Step 7.** An APK is opened with “Install”. Photos, video and music open in the built-in viewer and players.
+8. **Step 8.** Side panel buttons: a long press on a button starts reordering, then tap another button and they swap places. On a remote: hold OK on a button, the arrows move it, OK confirms, Back cancels.
+9. **Step 9.** The list position and focus are remembered: after leaving and coming back the selected folder is visible at once.
 
 Limits: over ADB without root /system, Android/data and /data/local/tmp are available. The /data folder and the rights of other apps’ files are closed by Android itself. With root everything opens. A system folder cannot be changed (“System folder: operation not allowed”).
 
@@ -424,9 +447,11 @@ Limits: without an ADB connection you see “No ADB connection: connect on the C
 
 The Options tab.
 
-- **Theme and colors.** Theme: auto, light, dark. “Wallpaper colors (Material You)” (Android 12+) takes colors from the wallpaper. “Main color”: teal, blue, purple, pink, red, orange, green, gray.
+- **Theme and colors.** Theme: auto, light, dark. “Wallpaper colors (Material You)” (Android 12+) takes colors from the wallpaper. “Main color”: see “Color settings” below.
 - **Font size and element size.** Changed here too.
 - **“Full screen” mode.** Turned on here too.
+- **Color settings.** “Main color”: a color bar, and the button “Like the theme” to the right of the title returns the theme color. “Bar color”: one color bar for the used part on all bars (memory, card, root, clouds, progress of work and installation), with “Like the theme” to the right of the title. “Bar contrast”: a slider from “weak” (the previous look) to “strong” (the free part is fully transparent), with an outline around the whole contour of every bar. On a remote: left and right arrows move the color, the up arrow goes to “Like the theme”, OK resets the color.
+- **Scrolling of long names.** “On” (the name of the selected item scrolls) or “Off”.
 - **Language.** Russian, Ukrainian, English (“Language”).
 - **Custom icons.** For folders (“Custom folder icon…”), file types (“File type icons…”), drives, apps, tabs and side panel buttons. Tap an icon or “Change icon…”, then “From file…”. To undo: “Reset”. The side panel buttons of Files are removed and restored in “Side panel buttons…” (the button “Default” returns everything).
 - **Launch.** “Open this tab at launch” (the last one or any) and the folder in Files at launch.

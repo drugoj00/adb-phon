@@ -16,27 +16,20 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 7.0.** [ADB-phon-7.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 7.5.** [ADB-phon-7.5.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `cc8b827d9ddf6da042d2a7bcbfeb9ea41ce8da4c9f6d79106883a8fb9a28ac41`
+SHA-256: `0f4676c3f0df9387c80bf24d7a6ce2833cf4b5abcffa790989d692efd321d978`
 
-## What's new in 7.0
+## What's new in 7.5
 
-- Shizuku compatibility: apps that support Shizuku get shell permissions through ADB-phon
-- Dynamic colors from the wallpaper and a choice of the main color
-- Font size and element size
-- Full screen mode
-- Custom icons: folders, files, drives and places, apps, tabs, side panel buttons
-- Side panel buttons in Files: hide and restore
-- List and tree on the Files root screen, folder colors
-- Console: live terminal, history, Ctrl+C, Tab, My commands
-- Devices in Files: computers and Android devices in one group, each with Files and Video window folders
-- Video window: view and control the screen of a computer or another Android, auto-rotation, text input in any language
-- Video call between Android devices and computers: incoming call window, sound, speaker, camera ([guide](INSTRUCTION.md#how-to-call))
-- Invitations: join a Tailscale network by an invitation from a PC
-- Another VPN is turned off for the duration of a session and restored afterwards
-- A hint about ADB-phon Bridge in the Gamepad section
-- Fixed APK installation and file operations with Cyrillic and other non-Latin names
+- Color settings: “Main color” and “Bar color” as a color bar with the “Like the theme” button. “Bar contrast” from the previous look to a fully transparent free part
+- “Install” window after choosing ADB-phon: icon, name, package, kind (new, update, same version, downgrade), a “Now / New” table with highlighted differences, added and removed permissions
+- Different signature: a warning, the install is not attempted
+- Install progress bar by bytes and by files, a summary and failure reasons
+- Downgrade: without root on Android 14 and newer with data removal (a copy of the current version, rollback on failure), with root with data kept; system apps cannot be downgraded
+- Long name scrolling: “On” and “Off”
+- Files side panel buttons: larger icons, rearranging by long press, on a remote by holding OK and arrow keys
+- Files: list position and focus are remembered
 
 ## Features
 
@@ -63,7 +56,7 @@ SHA-256: `cc8b827d9ddf6da042d2a7bcbfeb9ea41ce8da4c9f6d79106883a8fb9a28ac41`
 - **Invitations.** Join a Tailscale network by an invitation from a PC. Another VPN is turned off for the duration of a session and restored afterwards.
 - **Shizuku compatibility.** Apps that support Shizuku get shell permissions through ADB-phon.
 - **Console.** Live terminal: any shell command, history, Ctrl+C, Tab, “My commands”.
-- **Settings.** Theme (auto, light, dark), dynamic colors from the wallpaper and the main color, font size and element size, full screen mode, custom icons for folders, files, drives, apps and side panel buttons, language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
+- **Settings.** Theme (auto, light, dark), dynamic colors from the wallpaper and the main color, font size and element size, full screen mode, color settings (main color, bar color, bar contrast), custom icons for folders, files, drives, apps and side panel buttons, language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
 - **Free.** No ads, open source.
 
 ## Screenshots
