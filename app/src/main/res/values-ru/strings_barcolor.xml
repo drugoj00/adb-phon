@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bar_color">Цвет полосок</string>
+    <string name="bar_color_theme">Как у темы</string>
+    <string name="bar_color_custom">Свой</string>
+    <string name="bar_color_hint">Цвет занятой части сразу на всех полосках: память, карта, root, облака, ход работы и установки. «Как у темы» оставляет цвет темы.</string>
+</resources>

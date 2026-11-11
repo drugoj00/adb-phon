@@ -1745,4 +1745,5 @@
     <string name="acon_clear">Очистить</string>
     <string name="acon_hint">Команда</string>
     <string name="adbd_err_read">Не удалось прочитать файл %1$s на устройстве</string>
+    <string name="asc_off">Экран устройства выключен</string>
 </resources>

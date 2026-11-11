@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="call_title">Видеозвонки</string>
-    <string name="call_listen">Принимать звонки в фоне (в шторке остаётся маленький значок)</string>
+    <string name="call_listen">Принимать звонки в фоне</string>
     <string name="call_myname">Имя в звонках</string>
     <string name="call_empty">Людей пока нет. Добавь человека по коду его программы.</string>
     <string name="call_btn">Позвонить</string>
@@ -13,7 +13,7 @@
     <string name="call_add_save">Добавить</string>
     <string name="call_cancel">Отмена</string>
     <string name="call_remove">Убрать</string>
-    <string name="call_hint">Код есть в другой программе: на Windows в «Связи по интернету», на Android в этом разделе. Звонок идёт напрямую между устройствами, браузер не нужен.</string>
+    <string name="call_hint">В шторке остаётся маленький значок. Код есть в другой программе: на Windows в «Связи по интернету», на Android в этом разделе. Звонок идёт напрямую между устройствами, браузер не нужен.</string>
     <string name="call_in_title">Звонит</string>
     <string name="call_in_hint">Камера и микрофон включатся, только когда нажмёшь «Ответить».</string>
     <string name="call_answer">Ответить</string>
