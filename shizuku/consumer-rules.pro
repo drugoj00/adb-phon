@@ -1,0 +1,11 @@
+# Сервер Shizuku запускается через app_process прямо из APK ADB-phon: классы не должны переименовываться или удаляться
+-keep class rikka.shizuku.** { *; }
+-keep class moe.shizuku.** { *; }
+-keep class rikka.rish.** { *; }
+-keep class rikka.sui.** { *; }
+-keep class rikka.hidden.** { *; }
+-keep class rikka.parcelablelist.** { *; }
+-keepclassmembers class moe.shizuku.api.BinderContainer { public static final android.os.Parcelable$Creator CREATOR; }
+-dontwarn android.**
+-dontwarn com.android.**
+-dontwarn rikka.**
