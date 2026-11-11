@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_title">Видеозвонки</string>
+    <string name="call_listen">Принимать звонки в фоне (в шторке остаётся маленький значок)</string>
+    <string name="call_myname">Имя в звонках</string>
+    <string name="call_empty">Людей пока нет. Добавь человека по коду его программы.</string>
+    <string name="call_btn">Позвонить</string>
+    <string name="call_add">Добавить человека…</string>
+    <string name="call_add_title">Новый человек</string>
+    <string name="call_add_name">Имя</string>
+    <string name="call_add_code">Код программы (XXXX-XXXX-XXXX)</string>
+    <string name="call_add_bad">В коде должно быть 12 букв и цифр.</string>
+    <string name="call_add_save">Добавить</string>
+    <string name="call_cancel">Отмена</string>
+    <string name="call_remove">Убрать</string>
+    <string name="call_hint">Код есть в другой программе: на Windows в «Связи по интернету», на Android в этом разделе. Звонок идёт напрямую между устройствами, браузер не нужен.</string>
+    <string name="call_in_title">Звонит</string>
+    <string name="call_in_hint">Камера и микрофон включатся, только когда нажмёшь «Ответить».</string>
+    <string name="call_answer">Ответить</string>
+    <string name="call_decline">Отклонить</string>
+    <string name="call_cancelled">Звонок отменён</string>
+    <string name="call_missed">Пропущенный звонок</string>
+    <string name="call_busy_now">Звонок уже идёт.</string>
+    <string name="call_notif_ring">Звонит %1$s</string>
+    <string name="call_listen_notif">Приём видеозвонков</string>
+    <string name="call_listen_off">Выключить</string>
+    <string name="call_incall_notif">Видеозвонок: %1$s</string>
+    <string name="call_no_start">Звонок не начался.</string>
+</resources>
