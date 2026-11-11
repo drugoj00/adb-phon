@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Видеозвонок</title>
+<style>
+:root {
+  --teal: #0D9488; --teal-dark: #0b7a70; --bg: #0b1514; --panel: #12201f; --text: #e8f5f3; --muted: #9fb8b4; --red: #dc2626;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, Arial, sans-serif; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+header { background: var(--teal); color: #fff; text-align: center; padding: 9px 12px 8px; flex: 0 0 auto; }
+#title { font-size: 17px; font-weight: 600; line-height: 1.25; }
+#sub { font-size: 13px; opacity: .92; margin-top: 2px; min-height: 17px; }
+main { position: relative; flex: 1 1 auto; min-height: 0; background: #000; display: flex; align-items: center; justify-content: center; }
+#rv { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 40%, #16302d 0%, #0b1514 70%); text-align: center; padding: 20px; }
+#av { width: 112px; height: 112px; border-radius: 50%; background: var(--teal); color: #fff; font-size: 52px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+#phn { font-size: 20px; font-weight: 600; }
+#pht { font-size: 14px; color: var(--muted); max-width: 520px; line-height: 1.4; }
+#lv { position: absolute; right: 12px; bottom: 12px; width: 168px; height: 95px; object-fit: cover; background: #111; border: 2px solid var(--teal); border-radius: 8px; transform: scaleX(-1); }
+#lv.off { display: none; }
+footer { flex: 0 0 auto; background: var(--panel); padding: 10px 12px; display: flex; gap: 10px; justify-content: center; }
+button { flex: 1 1 0; max-width: 210px; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 600; text-align: center; color: var(--text); background: transparent; border: 2px solid var(--teal); border-radius: 8px; cursor: pointer; }
+button:hover { background: rgba(13,148,136,.22); }
+button:focus-visible { outline: 3px solid #5eead4; outline-offset: 2px; }
+button.off { border-color: #6b7f7c; color: var(--muted); text-decoration: line-through; }
+button.end { border-color: var(--red); color: #fecaca; }
+button.end:hover { background: rgba(220,38,38,.25); }
+button:disabled { opacity: .5; cursor: default; }
+/* узкий экран телефона: четыре кнопки в два ряда */
+@media (max-width: 560px) { footer { flex-wrap: wrap; } button { flex: 1 1 42%; max-width: none; } }
+</style>
+</head>
+<body>
+<header><div id="title"></div><div id="sub"></div></header>
+<main>
+  <video id="rv" autoplay playsinline></video>
+  <div id="ph"><div id="av"></div><div id="phn"></div><div id="pht"></div></div>
+  <video id="lv" class="off" autoplay playsinline muted></video>
+</main>
+<footer>
+  <button id="bMic"></button>
+  <button id="bSpk"></button>
+  <button id="bCam"></button>
+  <button id="bEnd" class="end"></button>
+</footer>
+<script>
+'use strict';
+const L = {
+  ru: {
+    title: 'Видеозвонок', calling: 'Звоним: ', waitAnswer: 'Ждём, пока ответят…', incoming: 'Разговор: ', connecting: 'Соединяем…',
+    connected: 'На связи', lost: 'Связь пропала, пробуем восстановить…', failed: 'Связь не получилась', ended: 'Звонок завершён',
+    mic: 'Звук: вкл', micOff: 'Звук: выкл', spk: 'Динамик: вкл', spkOff: 'Динамик: выкл', cam: 'Камера: вкл', camOff: 'Камера: выкл', end: 'Завершить',
+    noCam: 'Камеры нет или она занята. Звонок идёт только со звуком.', noMic: 'Микрофона нет или он занят. Ты слышишь собеседника, он тебя нет.',
+    noMedia: 'Нет ни камеры, ни микрофона: звонок только на приём.', testTitle: 'Проверка камеры и микрофона', testSub: 'Говори: полоска ниже показывает уровень микрофона', testNote: 'Это только проверка: картинка и звук никуда не передаются.', peerCamOff: 'Камера у собеседника выключена',
+    failHint: 'Обычно причина в том, что устройства не в одной сети: нужен Tailscale на обоих.', declined: 'Собеседник отклонил звонок', busy: 'Собеседник уже говорит', noAnswer: 'Нет ответа', gone: 'Собеседник завершил звонок'
+  },
+  uk: {
+    title: 'Відеодзвінок', calling: 'Дзвонимо: ', waitAnswer: 'Чекаємо, поки відповідять…', incoming: 'Розмова: ', connecting: 'Зʼєднуємо…',
+    connected: 'На звʼязку', lost: 'Звʼязок зник, пробуємо відновити…', failed: 'Звʼязок не вдався', ended: 'Дзвінок завершено',
+    mic: 'Звук: увімк', micOff: 'Звук: вимк', spk: 'Динамік: увімк', spkOff: 'Динамік: вимк', cam: 'Камера: увімк', camOff: 'Камера: вимк', end: 'Завершити',
+    noCam: 'Камери немає або вона зайнята. Дзвінок іде лише зі звуком.', noMic: 'Мікрофона немає або він зайнятий. Ти чуєш співрозмовника, він тебе ні.',
+    noMedia: 'Немає ні камери, ні мікрофона: дзвінок лише на прийом.', testTitle: 'Перевірка камери й мікрофона', testSub: 'Говори: смужка нижче показує рівень мікрофона', testNote: 'Це лише перевірка: картинка й звук нікуди не передаються.', peerCamOff: 'Камеру співрозмовника вимкнено',
+    failHint: 'Зазвичай причина в тому, що пристрої не в одній мережі: потрібен Tailscale на обох.', declined: 'Співрозмовник відхилив дзвінок', busy: 'Співрозмовник уже говорить', noAnswer: 'Немає відповіді', gone: 'Співрозмовник завершив дзвінок'
+  },
+  en: {
+    title: 'Video call', calling: 'Calling: ', waitAnswer: 'Waiting for an answer…', incoming: 'Talking with ', connecting: 'Connecting…',
+    connected: 'Connected', lost: 'Connection lost, trying to restore…', failed: 'Could not connect', ended: 'Call ended',
+    mic: 'Sound: on', micOff: 'Sound: off', spk: 'Speaker: on', spkOff: 'Speaker: off', cam: 'Camera: on', camOff: 'Camera: off', end: 'End call',
+    noCam: 'No camera or it is busy. The call goes with sound only.', noMic: 'No microphone or it is busy. You hear the other person, they do not hear you.',
+    noMedia: 'No camera and no microphone: receive-only call.', testTitle: 'Camera and microphone check', testSub: 'Speak: the bar below shows the microphone level', testNote: 'This is only a check: no picture or sound is sent anywhere.', peerCamOff: 'The other camera is off',
+    failHint: 'Usually the devices are not on one network: Tailscale is needed on both.', declined: 'The other person declined', busy: 'The other person is already on a call', noAnswer: 'No answer', gone: 'The other person ended the call'
+  }
+};
+let lang = 'ru', S = L.ru, cfg = {}, pc = null, dc = null, localStream = null, camSender = null, micSender = null, camOn = true, micOn = true, spkOn = true;
+let ended = false, connectedAt = 0, timer = null, statsTimer = null, lostTimer = null, failTimer = null;
+const $ = id => document.getElementById(id);
+// Android (ADB-phon): сообщения хосту идут через мост TvoAndroid.post; в WebView2 на Windows работает window.chrome.webview
+const post = o => { try { const j = JSON.stringify(o); if (window.TvoAndroid) window.TvoAndroid.post(j); else window.chrome.webview.postMessage(j); } catch (e) { } };
+const log = m => post({ type: 'log', m: String(m) });
+
+function setStatus(sub, big, hint) { $('sub').textContent = sub || ''; if (big !== undefined) $('pht').textContent = hint || ''; }
+function showPh(on) { $('ph').style.display = on ? 'flex' : 'none'; }
+
+// ---- сжатие описания соединения (SDP): deflate + base64url ----
+function b64u(buf) { let s = ''; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const r = atob(s), b = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) b[i] = r.charCodeAt(i); return b; }
+async function pack(text) { const cs = new Blob([new TextEncoder().encode(text)]).stream().pipeThrough(new CompressionStream('deflate-raw')); return b64u(await new Response(cs).arrayBuffer()); }
+async function unpack(s) { const ds = new Blob([unb64u(s)]).stream().pipeThrough(new DecompressionStream('deflate-raw')); return new TextDecoder().decode(await new Response(ds).arrayBuffer()); }
+
+// из SDP убираем лишнее (IPv6 link-local и пустые кандидаты), чтобы описание влезало в одно сообщение
+function slim(sdp) { return sdp.split(/\r?\n/).filter(l => !(l.startsWith('a=candidate:') && /\sfe80:/i.test(l)) && l.length).join('\r\n') + '\r\n'; }
+
+function gatherDone(p, ms) {
+  return new Promise(res => {
+    if (p.iceGatheringState === 'complete') return res();
+    const t = setTimeout(done, ms);
+    function done() { clearTimeout(t); p.removeEventListener('icegatheringstatechange', ch); res(); }
+    function ch() { if (p.iceGatheringState === 'complete') done(); }
+    p.addEventListener('icegatheringstatechange', ch);
+  });
+}
+
+function preferCodecs(tr) {
+  try {
+    const kind = tr.receiver.track.kind, caps = RTCRtpReceiver.getCapabilities(kind).codecs;
+    const want = kind === 'video' ? /^video\/(VP8|rtx)$/i : /^audio\/opus$/i;
+    const pick = caps.filter(c => want.test(c.mimeType));
+    if (pick.length) tr.setCodecPreferences(pick);
+  } catch (e) { log('codecs: ' + e); }
+}
+
+// проверки на Android: вместо настоящих камеры и микрофона синтетический поток (цветной кадр со счётчиком и тон); включается только ключом fake, в обычном звонке не используется
+let fakeCtx = null, fakeCanvas = null;
+function fakeVideoTrack() {
+  if (!fakeCanvas) { fakeCanvas = document.createElement('canvas'); fakeCanvas.width = 640; fakeCanvas.height = 360; const x = fakeCanvas.getContext('2d'); let n = 0; setInterval(() => { x.fillStyle = '#0F766E'; x.fillRect(0, 0, 640, 360); x.fillStyle = '#fff'; x.font = '56px sans-serif'; x.fillText('TEST ' + (n++), 60, 200); }, 66); }
+  return fakeCanvas.captureStream(15).getVideoTracks()[0];
+}
+function fakeAudioTrack() {
+  fakeCtx = fakeCtx || new (window.AudioContext || window.webkitAudioContext)(); try { fakeCtx.resume(); } catch (e) { }
+  const o = fakeCtx.createOscillator(), g = fakeCtx.createGain(), d = fakeCtx.createMediaStreamDestination(); g.gain.value = 0.2; o.frequency.value = 440; o.connect(g); g.connect(d); o.start();
+  return d.stream.getAudioTracks()[0];
+}
+async function getVideoTrack() {
+  if (cfg.fake) { if (cfg.fake === 'av') return fakeVideoTrack(); throw new Error('nocam'); }
+  const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 30 } } }); return s.getVideoTracks()[0];
+}
+async function getMedia() {
+  const out = { audio: null, video: null };
+  if (cfg.fake) { out.audio = fakeAudioTrack(); if (cfg.fake === 'av') out.video = fakeVideoTrack(); return out; }
+  const t = !!cfg.test;
+  try { const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); out.audio = s.getAudioTracks()[0]; } catch (e) { log('mic: ' + e.name); }
+  try { const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 30 } } }); out.video = s.getVideoTracks()[0]; } catch (e) { log('cam: ' + e.name); }
+  return out;
+}
+
+function newPc() {
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], bundlePolicy: 'max-bundle' });
+  pc.ontrack = ev => {
+    const rv = $('rv');
+    if (!rv.srcObject) rv.srcObject = new MediaStream();
+    rv.srcObject.addTrack(ev.track);
+    if (ev.track.kind === 'video') {
+      const upd = () => { const live = !ev.track.muted && ev.track.readyState === 'live'; showPh(!live); $('pht').textContent = live ? '' : (connectedAt ? S.peerCamOff : ''); };
+      ev.track.onmute = upd; ev.track.onunmute = upd; ev.track.onended = upd; upd();
+    }
+  };
+  pc.onconnectionstatechange = () => {
+    const st = pc.connectionState; log('conn ' + st);
+    if (ended) return;
+    if (st === 'connected') {
+      clearTimeout(lostTimer); clearTimeout(failTimer);
+      if (!connectedAt) { connectedAt = Date.now(); startTimer(); }
+      post({ type: 'state', v: 'connected' }); $('title').textContent = S.incoming + (cfg.peer || '');
+    } else if (st === 'disconnected') {
+      $('sub').textContent = S.lost; clearTimeout(lostTimer); lostTimer = setTimeout(() => { if (pc && pc.connectionState !== 'connected') finish('failed'); }, 12000);
+    } else if (st === 'failed') { finish('failed'); }
+    else if (st === 'closed') { finish('gone'); }
+  };
+  pc.ondatachannel = ev => setDc(ev.channel);
+}
+function setDc(ch) {
+  dc = ch; ch.onmessage = ev => { if (ev.data === 'bye') finish('gone'); };
+}
+
+function startTimer() {
+  const tick = () => { const s = Math.floor((Date.now() - connectedAt) / 1000), m = Math.floor(s / 60); $('sub').textContent = S.connected + ' — ' + String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+  tick(); timer = setInterval(tick, 1000);
+  if (cfg.test) statsTimer = setInterval(sendStats, 1500);
+}
+async function sendStats() {
+  if (!pc) return;
+  try {
+    const rep = await pc.getStats(); const o = { type: 'stats', vBytes: 0, aBytes: 0, vFrames: 0, w: 0, h: 0, vOut: 0, aOut: 0 };
+    rep.forEach(r => {
+      if (r.type === 'inbound-rtp' && r.kind === 'video') { o.vBytes = r.bytesReceived; o.vFrames = r.framesDecoded || 0; o.w = r.frameWidth || 0; o.h = r.frameHeight || 0; }
+      if (r.type === 'inbound-rtp' && r.kind === 'audio') o.aBytes = r.bytesReceived;
+      if (r.type === 'outbound-rtp' && r.kind === 'video') o.vOut = r.bytesSent;
+      if (r.type === 'outbound-rtp' && r.kind === 'audio') o.aOut = r.bytesSent;
+    });
+    post(o);
+  } catch (e) { }
+}
+
+function attachLocal(media) {
+  const lv = $('lv');
+  if (media.video) { lv.srcObject = new MediaStream([media.video]); lv.classList.remove('off'); } else { camOn = false; }
+  if (!media.audio) micOn = false;
+  if (!media.audio && !media.video) $('pht').textContent = S.noMedia; else if (!media.video) $('pht').textContent = S.noCam; else if (!media.audio) $('pht').textContent = S.noMic;
+  updBtns();
+}
+function updBtns() {
+  $('bMic').textContent = micOn ? S.mic : S.micOff; $('bMic').classList.toggle('off', !micOn);
+  $('bSpk').textContent = spkOn ? S.spk : S.spkOff; $('bSpk').classList.toggle('off', !spkOn);
+  $('bCam').textContent = camOn ? S.cam : S.camOff; $('bCam').classList.toggle('off', !camOn);
+}
+
+async function setBitrate(sender, kbps) { try { const p = sender.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = kbps * 1000; await sender.setParameters(p); } catch (e) { } }
+
+async function tvoStart(c) {
+  cfg = c || {}; lang = L[cfg.lang] ? cfg.lang : 'ru'; S = L[lang];
+  document.documentElement.lang = lang; document.title = S.title; $('bEnd').textContent = S.end;
+  const peer = cfg.peer || '';
+  $('av').textContent = (peer.trim()[0] || '?').toUpperCase(); $('phn').textContent = peer;
+  $('title').textContent = cfg.role === 'caller' ? S.calling + peer : S.connecting;
+  $('sub').textContent = S.connecting; updBtns();
+  if (cfg.test) $('rv').muted = true;
+  if (cfg.role === 'preview') $('bSpk').style.display = 'none';
+  if (cfg.role === 'preview') return preview();
+  newPc();
+  const media = await getMedia(); localStream = media; attachLocal(media);
+  try {
+    if (cfg.role === 'caller') {
+      setDc(pc.createDataChannel('ctl'));
+      if (media.audio) { micSender = pc.addTrack(media.audio, new MediaStream([media.audio])); } else pc.addTransceiver('audio', { direction: 'recvonly' });
+      if (media.video) { camSender = pc.addTrack(media.video, new MediaStream([media.video])); } else pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.getTransceivers().forEach(preferCodecs);
+      await pc.setLocalDescription(await pc.createOffer());
+      await gatherDone(pc, 3500);
+      const sdp = slim(pc.localDescription.sdp);
+      $('sub').textContent = S.waitAnswer;
+      post({ type: 'offer', sdp: await pack(sdp), raw: sdp.length });
+    } else {
+      await pc.setRemoteDescription({ type: 'offer', sdp: await unpack(cfg.offer) });
+      pc.getTransceivers().forEach(tr => {
+        if (tr.receiver.track.kind === 'audio' && media.audio) { tr.sender.replaceTrack(media.audio); tr.direction = 'sendrecv'; micSender = tr.sender; }
+        if (tr.receiver.track.kind === 'video' && media.video) { tr.sender.replaceTrack(media.video); tr.direction = 'sendrecv'; camSender = tr.sender; }
+      });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await gatherDone(pc, 3500);
+      const sdp = slim(pc.localDescription.sdp);
+      post({ type: 'answer', sdp: await pack(sdp), raw: sdp.length });
+      failTimer = setTimeout(() => { if (!connectedAt && !ended) finish('failed'); }, 30000);
+    }
+    if (camSender) setBitrate(camSender, 700);
+  } catch (e) { log('start: ' + e); finish('failed'); }
+}
+
+// «Проверить камеру и микрофон»: только у себя, в сеть ничего не уходит
+async function preview() {
+  $('title').textContent = S.testTitle; $('sub').textContent = S.testSub; $('av').textContent = '🎥'; $('phn').textContent = ''; $('pht').textContent = S.testNote;
+  const media = await getMedia(); localStream = media; attachLocal(media); $('lv').classList.add('off');
+  const rv = $('rv'); rv.muted = true; rv.style.transform = 'scaleX(-1)';
+  if (media.video) { rv.srcObject = new MediaStream([media.video]); showPh(false); }
+  if (media.audio) {
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)(), an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(new MediaStream([media.audio])).connect(an);
+      const buf = new Uint8Array(an.fftSize);
+      timer = setInterval(() => { an.getByteTimeDomainData(buf); let m = 0; for (const v of buf) m = Math.max(m, Math.abs(v - 128)); const n = Math.min(20, Math.round(m / 128 * 40)); $('sub').textContent = S.testSub.split(':')[0] + ':  ' + '█'.repeat(n) + '░'.repeat(20 - n); }, 120);
+    } catch (e) { log('meter: ' + e); }
+  }
+  post({ type: 'state', v: 'preview', audio: !!media.audio, video: !!media.video });
+}
+async function tvoAnswer(packed) {
+  try {
+    await pc.setRemoteDescription({ type: 'answer', sdp: await unpack(packed) });
+    $('sub').textContent = S.connecting;
+    clearTimeout(failTimer); failTimer = setTimeout(() => { if (!connectedAt && !ended) finish('failed'); }, 30000);
+  } catch (e) { log('answer: ' + e); finish('failed'); }
+}
+function tvoPeerSays(kind) {   // от хоста: declined / busy / noAnswer / hangup
+  if (kind === 'declined') finish('declined'); else if (kind === 'busy') finish('busy'); else if (kind === 'noAnswer') finish('noAnswer'); else finish('gone');
+}
+
+function stopAll() {
+  clearInterval(timer); clearInterval(statsTimer); clearTimeout(lostTimer); clearTimeout(failTimer);
+  try { if (localStream) { if (localStream.audio) localStream.audio.stop(); if (localStream.video) localStream.video.stop(); } } catch (e) { }
+  try { if (dc && dc.readyState === 'open') dc.close(); } catch (e) { }
+  try { if (pc) pc.close(); } catch (e) { }
+}
+function finish(why) {
+  if (ended) return; ended = true; stopAll();
+  const msg = { gone: S.gone, ended: S.ended, declined: S.declined, busy: S.busy, noAnswer: S.noAnswer, failed: S.failed }[why] || S.ended;
+  $('title').textContent = S.title; $('sub').textContent = msg; showPh(true); $('pht').textContent = why === 'failed' ? S.failHint : ''; $('lv').classList.add('off');
+  $('rv').srcObject = null;
+  ['bMic', 'bSpk', 'bCam'].forEach(i => $(i).disabled = true);
+  post({ type: 'ended', why });
+}
+function userHangup() {
+  if (ended) return;
+  try { if (dc && dc.readyState === 'open') dc.send('bye'); } catch (e) { }
+  post({ type: 'hangup' });
+  setTimeout(() => finish('ended'), 120);
+}
+
+$('bMic').onclick = () => { micOn = !micOn; if (localStream && localStream.audio) localStream.audio.enabled = micOn; updBtns(); post({ type: 'ui', mic: micOn }); };
+$('bSpk').onclick = () => { spkOn = !spkOn; if (!cfg.test && cfg.role !== 'preview') $('rv').muted = !spkOn; updBtns(); post({ type: 'ui', spk: spkOn }); };
+$('bCam').onclick = async () => {
+  if (cfg.role === 'preview') { if (!localStream || !localStream.video) return; camOn = !camOn; localStream.video.enabled = camOn; updBtns(); return; }
+  if (camOn) {
+    camOn = false;
+    try { if (localStream && localStream.video) { localStream.video.stop(); } if (camSender) await camSender.replaceTrack(null); } catch (e) { }
+    $('lv').classList.add('off');
+  } else {
+    try {
+      const t = await getVideoTrack(); if (!localStream) localStream = { audio: null, video: null }; localStream.video = t;
+      if (camSender) await camSender.replaceTrack(t);
+      else { const tr = pc.getTransceivers().find(x => x.receiver.track.kind === 'video'); if (tr) { await tr.sender.replaceTrack(t); camSender = tr.sender; } }
+      $('lv').srcObject = new MediaStream([t]); $('lv').classList.remove('off'); camOn = true;
+      if (camSender) setBitrate(camSender, 700);
+    } catch (e) { log('cam2: ' + e.name); $('pht').textContent = S.noCam; }
+  }
+  updBtns(); post({ type: 'ui', cam: camOn });
+};
+$('bEnd').onclick = userHangup;
+window.addEventListener('beforeunload', () => { if (!ended) { try { if (dc && dc.readyState === 'open') dc.send('bye'); } catch (e) { } } });
+
+// снимок удалённой картинки (для проверок): PNG в сообщении хосту
+window.tvoSnap = function () {
+  try {
+    const v = $('rv'); const c = document.createElement('canvas'); c.width = v.videoWidth || 2; c.height = v.videoHeight || 2; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    post({ type: 'snap', w: c.width, h: c.height, png: c.toDataURL('image/png').split(',')[1] });
+  } catch (e) { log('snap: ' + e); }
+};
+window.tvoStart = tvoStart; window.tvoAnswer = tvoAnswer; window.tvoPeerSays = tvoPeerSays; window.tvoHangup = userHangup;
+post({ type: 'ready' });
+</script>
+</body>
+</html>
