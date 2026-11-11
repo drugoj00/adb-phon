@@ -140,7 +140,8 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this) }
+    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
+    override fun onPause() { super.onPause(); Invites.stopUi() }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -150,6 +151,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PadKeeper.start(this)
+        AutoPairService.ensureEnabled(this)
         AppBackup.autoIfDue(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -184,20 +186,94 @@ private val Light = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE4EEEC),
 )
 
+/** Режим «во весь экран» (7.0): строка состояния и кнопки навигации Android скрыты, возвращаются свайпом от края. */
+object AppFull {
+    var on by mutableStateOf(false)
+    private var loaded = false
+    private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+    fun load(ctx: Context) { if (loaded) return; loaded = true; on = sp(ctx).getBoolean("fullscreen", false) }
+    fun set(ctx: Context, v: Boolean) { on = v; sp(ctx).edit().putBoolean("fullscreen", v).apply() }
+}
+
+/** Размер шрифта и размер элементов (7.0): множители, применяются ко всему интерфейсу программы. */
+object AppScale {
+    val steps = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+    var font by mutableStateOf(1.0f)
+    var ui by mutableStateOf(1.0f)
+    private var loaded = false
+    private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+    fun load(ctx: Context) {
+        if (loaded) return
+        loaded = true
+        font = sp(ctx).getFloat("scale_font", 1.0f)
+        ui = sp(ctx).getFloat("scale_ui", 1.0f)
+    }
+    fun setFont(ctx: Context, v: Float) { font = v; sp(ctx).edit().putFloat("scale_font", v).apply() }
+    fun setUi(ctx: Context, v: Float) { ui = v; sp(ctx).edit().putFloat("scale_ui", v).apply() }
+}
+
+/** Цвета интерфейса (7.0): по умолчанию прежняя бирюзовая схема; можно выбрать другой основной цвет или «цвета из обоев» (Material You, Android 12+). */
+object AppColors {
+    class Accent(val key: String, val light: Color, val dark: Color)
+    val accents = listOf(
+        Accent("teal", Color(0xFF0F766E), Color(0xFF5EEAD4)),
+        Accent("blue", Color(0xFF1D4ED8), Color(0xFF93C5FD)),
+        Accent("purple", Color(0xFF6D28D9), Color(0xFFC4B5FD)),
+        Accent("pink", Color(0xFFBE185D), Color(0xFFF9A8D4)),
+        Accent("red", Color(0xFFB91C1C), Color(0xFFFCA5A5)),
+        Accent("orange", Color(0xFFC2410C), Color(0xFFFDBA74)),
+        Accent("green", Color(0xFF15803D), Color(0xFF86EFAC)),
+        Accent("gray", Color(0xFF475569), Color(0xFFCBD5E1)),
+    )
+    var dynamic by mutableStateOf(false)
+    var accent by mutableStateOf(0)
+    private var loaded = false
+
+    private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+
+    fun load(ctx: Context) {
+        if (loaded) return
+        loaded = true
+        dynamic = sp(ctx).getBoolean("col_dynamic", false) && Build.VERSION.SDK_INT >= 31
+        accent = sp(ctx).getInt("col_accent", 0).coerceIn(0, accents.size - 1)
+    }
+
+    fun setDynamic(ctx: Context, v: Boolean) { dynamic = v && Build.VERSION.SDK_INT >= 31; sp(ctx).edit().putBoolean("col_dynamic", dynamic).apply() }
+    fun setAccent(ctx: Context, i: Int) { accent = i.coerceIn(0, accents.size - 1); sp(ctx).edit().putInt("col_accent", accent).apply() }
+
+    fun scheme(dark: Boolean, ctx: Context): androidx.compose.material3.ColorScheme {
+        if (dynamic && Build.VERSION.SDK_INT >= 31) {
+            return if (dark) androidx.compose.material3.dynamicDarkColorScheme(ctx) else androidx.compose.material3.dynamicLightColorScheme(ctx)
+        }
+        val base = if (dark) Dark else Light
+        if (accent == 0) return base
+        val ac = accents[accent]
+        val c = if (dark) ac.light else ac.light   // контейнеры выбранного цвета одинаковы в обеих темах, основной цвет светлее в тёмной
+        return base.copy(primary = if (dark) ac.dark else ac.light, secondaryContainer = c, primaryContainer = c)
+    }
+}
+
 @Composable
 fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     val baseCtx = LocalContext.current
     val uiCtx = remember(vm.lang, baseCtx) { Lang.wrap(baseCtx, vm.lang) }
+    remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); 0 }
     val dark = when (vm.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
+    val fullNow = AppFull.on
     SideEffect {
         (baseCtx as? ComponentActivity)?.window?.let { w ->
-            WindowCompat.getInsetsController(w, w.decorView).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
+            WindowCompat.getInsetsController(w, w.decorView).apply {
+                isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (fullNow) hide(androidx.core.view.WindowInsetsCompat.Type.systemBars()) else show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
     Feedback.host = (baseCtx as? ComponentActivity)?.window?.decorView
-    CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang) {
+    val dens0 = androidx.compose.ui.platform.LocalDensity.current
+    CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(dens0.density * AppScale.ui, dens0.fontScale * AppScale.font)) {
     ImeGateHost {
-    MaterialTheme(colorScheme = if (dark) Dark else Light) {
+    MaterialTheme(colorScheme = AppColors.scheme(dark, baseCtx)) {
         Surface(Modifier.fillMaxSize().imeGateKeys().pointerInput(Unit) {
             // пока палец на экране (в том числе прокрутка списков), бегущие строки стоят: нагрузки нет
             awaitPointerEventScope { while (true) { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial); Marq.touching = e.changes.any { it.pressed } } }
@@ -261,6 +337,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     runCatching { baseCtx.stopService(android.content.Intent(baseCtx, FmOpService::class.java)) }
                     runCatching { BtHid.cleanDisconnect("выход", 800) }
                     PadKeeper.stopForExit(baseCtx)
+                    runCatching { kotlinx.coroutines.withTimeoutOrNull(20000) { VpnSession.end(baseCtx, "выход из программы") } }   // другой VPN возвращается как был
                     kotlinx.coroutines.delay(1200)
                     vm.shutdown()
                     act?.finishAndRemoveTask()
@@ -289,13 +366,14 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     else -> act?.moveTaskToBack(true)
                 }
             }
+            InviteDialogHost()
             vm.updateRelease?.let { r ->
                 LAlertDialog(
-                    onDismissRequest = { vm.updateRelease = null },
+                    onDismissRequest = { vm.dismissUpdate() },
                     title = { Text(stringResource(R.string.upd_title)) },
                     text = { Text(stringResource(R.string.upd_text, r.tag, vm.appVersion)) },
                     confirmButton = { TextButton({ vm.installUpdate() }) { Text(stringResource(R.string.upd_yes)) } },
-                    dismissButton = { TextButton({ vm.updateRelease = null }) { Text(stringResource(R.string.upd_later)) } },
+                    dismissButton = { TextButton({ vm.dismissUpdate() }) { Text(stringResource(R.string.upd_later)) } },
                 )
             }
             // В альбоме при открытой клавиатуре нижняя панель вкладок прячется: иначе поле ввода остаётся без места и не видно
@@ -320,6 +398,9 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                         val phoneBar = !Marq.tv
                         val landscapeBar = phoneBar && cfg.screenWidthDp > cfg.screenHeightDp
                         val tctx = androidx.compose.ui.platform.LocalContext.current
+                        var tabMenuFor by remember { mutableStateOf(-1) }
+                        var tabIconFor by remember { mutableStateOf(-1) }
+                        if (tabIconFor >= 0) CustomIconPicker(stringResource(items[tabIconFor].first), "t:" + tabIconFor) { tabIconFor = -1 }
                         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(if (landscapeBar) 46.dp else if (phoneBar) 56.dp else 52.dp)) {
                             items.forEachIndexed { i, (label, icon) ->
                                 val selected = if (i == items.lastIndex) showSettings else (!showSettings && tab == i)
@@ -328,10 +409,14 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                 if (phoneBar) {
                                     val name = stringResource(label)
                                     Box(
-                                        Modifier.weight(1f).fillMaxHeight()
-                                            .combinedClickable(onClick = go, onLongClick = { android.widget.Toast.makeText(tctx, name, android.widget.Toast.LENGTH_SHORT).show() }),
+                                        Modifier.weight(if (landscapeBar) (if (i == items.lastIndex) 0.6f else if (i == 3) 1.3f else 1f) else 1f).fillMaxHeight()
+                                            .combinedClickable(onClick = go, onLongClick = { tabMenuFor = i }),
                                         contentAlignment = Alignment.Center,
                                     ) {
+                                        LDropdownMenu(expanded = tabMenuFor == i, onDismissRequest = { tabMenuFor = -1 }) {
+                                            androidx.compose.material3.DropdownMenuItem(text = { Text(name) }, onClick = { tabMenuFor = -1; android.widget.Toast.makeText(tctx, name, android.widget.Toast.LENGTH_SHORT).show() })
+                                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.ic_change)) }, onClick = { tabMenuFor = -1; tabIconFor = i })
+                                        }
                                         if (landscapeBar) {
                                             // ландшафт телефона: значок слева, подпись справа в одну строку; выбранная вкладка залита акцентом
                                             Row(
@@ -340,8 +425,8 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                                     .padding(horizontal = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
-                                                Icon(icon, if (i == items.lastIndex) name else null, tint = col, modifier = Modifier.size(if (i == items.lastIndex) 30.dp else 24.dp))
-                                                if (i != items.lastIndex) Text(name, Modifier.padding(start = 6.dp), fontSize = 13.sp, maxLines = 1, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                                BarIcon(i, icon, if (i == items.lastIndex) name else null, col, if (i == items.lastIndex) 30.dp else 24.dp)
+                                                if (i != items.lastIndex) Text(name, Modifier.padding(start = 6.dp), fontSize = (13f / (AppScale.font * AppScale.ui)).sp, maxLines = 1, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                                             }
                                         } else {
                                             // портрет телефона: значок и подпись у всех вкладок (и у «Опций») на одной линии; выбранная вкладка — акцентная таблетка вокруг значка и подписи, без полоски у края панели
@@ -360,7 +445,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                                         Modifier.size(width = 52.dp, height = 40.dp).clip(RoundedCornerShape(14.dp))
                                                             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else androidx.compose.ui.graphics.Color.Transparent),
                                                         contentAlignment = Alignment.Center,
-                                                    ) { Icon(icon, name, tint = col, modifier = Modifier.size(28.dp)) }
+                                                    ) { BarIcon(i, icon, name, col, 28.dp) }
                                                 }
                                             } else Column(
                                                 Modifier.clip(RoundedCornerShape(14.dp))
@@ -368,8 +453,8 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                                     .padding(horizontal = 5.dp, vertical = 3.dp),
                                                 horizontalAlignment = Alignment.CenterHorizontally,
                                             ) {
-                                                Icon(icon, null, tint = col, modifier = Modifier.size(22.dp))
-                                                Text(name, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1, color = col, fontFamily = CondFont, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                                BarIcon(i, icon, null, col, 22.dp)
+                                                Text(name, fontSize = (10f / (AppScale.font * AppScale.ui)).sp, lineHeight = (12f / (AppScale.font * AppScale.ui)).sp, maxLines = 1, color = col, fontFamily = CondFont, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                                             }
                                         }
                                     }
@@ -384,7 +469,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                         .clickable { go() },
                                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(icon, if (i == items.lastIndex) stringResource(label) else null, tint = col, modifier = Modifier.size(if (i == items.lastIndex) 35.dp else 28.dp))
+                                    BarIcon(i, icon, if (i == items.lastIndex) stringResource(label) else null, col, if (i == items.lastIndex) 35.dp else 28.dp)
                                     if (i != items.lastIndex) Text(stringResource(label), Modifier.padding(start = 8.dp), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                                 }
                                 }
@@ -393,7 +478,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                     val exitName = stringResource(R.string.exit_label)
                                     var exFocus by remember { mutableStateOf(false) }
                                     Box(
-                                        Modifier.weight(1f).fillMaxHeight().defaultMinSize(minWidth = 48.dp)
+                                        Modifier.weight(if (landscapeBar) 0.7f else 1f).fillMaxHeight().defaultMinSize(minWidth = 48.dp)
                                             .onFocusChanged { exFocus = it.isFocused }
                                             // как у соседних вкладок: при наведении, выборе пультом и нажатии ячейка слегка темнеет (стандартная подсветка), на приставке ещё и рамка фокуса; сам значок не меняется
                                             .then(if (Marq.tv && exFocus) Modifier.padding(2.dp).border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)) else Modifier)
@@ -494,6 +579,7 @@ fun ConnectScreen(vm: MainViewModel) {
         LaunchedEffect(Unit) { if (!vm.connected && !vm.scanned) vm.scanDevices() }
         Text(stringResource(R.string.conn_hold_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         AutoConnectCard(vm)
+        InvitesSection()
         if (vm.favs.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -506,7 +592,8 @@ fun ConnectScreen(vm: MainViewModel) {
                         Row(Modifier.fillMaxWidth().then(if (cur) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
                             .combinedClickable(onClick = { vm.connectFav(f) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true })
                             .padding(vertical = 4.dp, horizontal = if (cur) 6.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Star, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
+                            val favSpec = CustomIcons.spec("v:" + f.host)
+                            if (favSpec != null) CustomIconView(favSpec, 24.dp) else Icon(Icons.Filled.Star, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                                 Text(f.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified)
                                 Text(f.host + if (f.kind == "wifi") ":" + f.port else "", fontSize = 12.sp, color = if (cur) MaterialTheme.colorScheme.onPrimary.copy(alpha = .85f) else MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
@@ -656,7 +743,11 @@ private fun Modifier.connectedRowStyle(dark: Boolean): Modifier = this
 /** Меню долгого нажатия на устройство: «Отключить», если оно подключено, иначе «Подключить». */
 @Composable
 fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, onDismiss: () -> Unit) {
+    var pickDevIcon by remember { mutableStateOf(false) }
+    if (pickDevIcon) CustomIconPicker(f.host, "v:" + f.host) { pickDevIcon = false }
     LDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.ic_change)) }, onClick = { onDismiss(); pickDevIcon = true })
         if (vm.isCurrent(f)) androidx.compose.material3.DropdownMenuItem(
             text = { Text(stringResource(R.string.menu_disconnect)) }, onClick = { onDismiss(); vm.disconnect() })
         else androidx.compose.material3.DropdownMenuItem(
@@ -672,9 +763,18 @@ private object IconCache {
     val map = HashMap<String, ImageBitmap>()
 }
 
+/** Значок вкладки нижней панели с учётом своего («Изменить значок…» по долгому нажатию). */
+@Composable
+fun BarIcon(i: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String?, tint: Color, size: androidx.compose.ui.unit.Dp) {
+    val cs = CustomIcons.spec("t:$i")
+    if (cs != null) CustomIconView(cs, size) else Icon(icon, desc, tint = tint, modifier = Modifier.size(size))
+}
+
 @Composable
 fun AppIcon(pkg: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
     val ctx = LocalContext.current
+    val customApp = CustomIcons.spec("a:" + pkg)
+    if (customApp != null) { CustomIconView(customApp, size); return }
     val bmp by produceState<ImageBitmap?>(IconCache.map[pkg], pkg) {
         if (value == null) {
             value = withContext(Dispatchers.Default) {
@@ -745,6 +845,7 @@ fun AppsScreen(vm: MainViewModel) {
     var installHub by remember { mutableStateOf(false) }
     var versionsFor by remember { mutableStateOf<AppEntry?>(null) }
     var showBackups by remember { mutableStateOf(false) }
+    var showSettingsBk by remember { mutableStateOf(false) }
     // панель действий открывается круглой кнопкой с галочкой, а не сама при выборе приложения
     var showActions by remember { mutableStateOf(false) }
     // долгий тап по приложению: окно с полными сведениями, которые не поместились в строке
@@ -937,7 +1038,13 @@ fun AppsScreen(vm: MainViewModel) {
                 dismissButton = { TextButton({ vm.dismissGuard() }) { Text(stringResource(R.string.btn_cancel)) } },
             )
         }
-        if (showBackups) FullBackupsDialog { showBackups = false; vm.loadApps() }
+        if (showBackups) FullBackupsDialog({ showBackups = false; vm.loadApps() }, { showBackups = false; showSettingsBk = true })
+        if (showSettingsBk) LAlertDialog(
+            onDismissRequest = { showSettingsBk = false },
+            title = { Text(stringResource(R.string.bk2_title)) },
+            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { BackupSectionV2(vm) } },
+            confirmButton = { TextButton({ showSettingsBk = false }) { Text(stringResource(R.string.btn_close)) } },
+        )
         infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }
     val actionsUi: @Composable () -> Unit = {
         // в ландшафте кнопки действий видны всегда, когда что-то выбрано; в портрете их открывает кнопка с галочкой
@@ -1140,6 +1247,8 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
     val cfg = androidx.compose.ui.platform.LocalConfiguration.current
     val land = cfg.screenWidthDp > cfg.screenHeightDp
     val extra = rememberAppExtra(a)
+    var pickIcon by remember { mutableStateOf(false) }
+    if (pickIcon) CustomIconPicker(a.label, "a:" + a.pkg) { pickIcon = false }
     LAlertDialog(
         onDismissRequest = onClose,
         wide = land,
@@ -1150,11 +1259,14 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
         text = { Column(Modifier.then(Modifier.androidxHeightIn((cfg.screenHeightDp * 0.55f).dp)).barScroll()) { AppInfoBlocks(a, extra, twoCols = false, big = true, header = false, full = true, stack = !land) } },
         confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
         dismissButton = {
-            TextButton({
-                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("package", a.pkg))
-                Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
-            }) { Text(stringResource(R.string.info_copy)) }
+            Row {
+                TextButton({ pickIcon = true }) { Text(stringResource(R.string.ic_change)) }
+                TextButton({
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("package", a.pkg))
+                    Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
+                }) { Text(stringResource(R.string.info_copy)) }
+            }
         },
     )
 }
@@ -1163,45 +1275,8 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
 
 @Composable
 fun ConsoleScreen(vm: MainViewModel) {
-    var cmd by remember { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    LaunchedEffect(vm.consoleLines.size) {
-        if (vm.consoleLines.isNotEmpty()) listState.animateScrollToItem(vm.consoleLines.size - 1)
-    }
-    val cfgOuter = androidx.compose.ui.platform.LocalConfiguration.current
-    val landC = cfgOuter.screenWidthDp > cfgOuter.screenHeightDp
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = if (landC) 2.dp else 12.dp), verticalArrangement = Arrangement.spacedBy(if (landC) 4.dp else 8.dp)) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            items(vm.consoleLines.size) { i ->
-                val line = vm.consoleLines[i]
-                Text(
-                    line, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                    color = if (line.startsWith("$ ")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-                )
-            }
-        }
-        val cfgC = androidx.compose.ui.platform.LocalConfiguration.current
-        if (cfgC.screenWidthDp > cfgC.screenHeightDp) {
-            // альбом: поле и кнопки в одной строке, чтобы всё помещалось над клавиатурой
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    cmd, { cmd = it }, Modifier.weight(2f), singleLine = true,
-                    placeholder = { Text(stringResource(R.string.console_hint)) },
-                )
-                Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
-                OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
-            }
-        } else {
-            OutlinedTextField(
-                cmd, { cmd = it }, Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text(stringResource(R.string.console_hint)) },
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { vm.runConsole(cmd); cmd = "" }, modifier = Modifier.weight(1f), enabled = !vm.busy && cmd.isNotBlank()) { Text(stringResource(R.string.btn_run)) }
-                OutlinedButton(onClick = { vm.clearConsole() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.btn_clear)) }
-            }
-        }
-    }
+    // 7.0: консоль как у Pulsar (живой сеанс), см. ConsoleUi.kt и Term.kt
+    ConsolePage()
 }
 
 // ---------------------------------------------------------------- устройство

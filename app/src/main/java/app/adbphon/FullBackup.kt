@@ -275,7 +275,7 @@ private fun mb(kb: Long): String = if (kb >= 1024) "%.1f".format(Locale.US, kb /
 
 /** Окно «Копии с данными»: список по приложениям и датам, восстановление и удаление. */
 @Composable
-fun FullBackupsDialog(onClose: () -> Unit) {
+fun FullBackupsDialog(onClose: () -> Unit, onSettings: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val t = LocalTh.current
     val scope = rememberCoroutineScope()
@@ -322,6 +322,7 @@ fun FullBackupsDialog(onClose: () -> Unit) {
             if (busy || status.isNotEmpty()) Text(status.ifEmpty { stringResource(R.string.ver_working) }, color = t.accent, fontSize = 14.sp)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(stringResource(R.string.close), true) { onClose() }
+                if (onSettings != null) Chip(stringResource(R.string.fbk_settings), false) { onSettings() }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (loaded && items.isEmpty()) item { Text(stringResource(R.string.fbk_none), color = t.hint, fontSize = 13.sp) }

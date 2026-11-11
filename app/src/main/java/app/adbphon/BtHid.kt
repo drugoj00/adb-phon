@@ -331,7 +331,15 @@ object BtHid {
 
     /** Устройства, к которым HID действительно подключался: только их автоподключение пробует снова. */
     fun hidOk(ctx: Context, address: String) = prefs(ctx).getLong("hid_ok_$address", 0L) > 0L
-    fun markHidOk(address: String) { appCtx?.let { prefs(it).edit().putLong("hid_ok_$address", System.currentTimeMillis()).apply() } }
+    /** Подключался ли геймпад хоть к одному устройству: без этого фоновая служба ничего не делает и её запись в шторке не нужна (7.0). */
+    fun anyHidOk(ctx: Context): Boolean = prefs(ctx).all.any { (k, v) -> k.startsWith("hid_ok_") && (v as? Long ?: 0L) > 0L }
+    fun markHidOk(address: String) {
+        appCtx?.let { c ->
+            val first = !anyHidOk(c)
+            prefs(c).edit().putLong("hid_ok_$address", System.currentTimeMillis()).apply()
+            if (first) PadKeeper.start(c)    // первый успешный запуск геймпада: теперь службе есть что держать
+        }
+    }
 
     // --- порядок списка подключений: последнее использованное (подключённое или выбранное) первым ---
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("bt_last", Context.MODE_PRIVATE)

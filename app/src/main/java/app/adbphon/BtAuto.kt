@@ -33,7 +33,7 @@ class RemoteShell(private val ctx: Context, val host: String, val port: Int) {
     }
 
     suspend fun sh(cmd: String, timeoutMs: Long = 20_000): String = withContext(Dispatchers.IO) {
-        val s = conn.openStream("shell:$cmd")
+        val s = conn.openStream(AdbText.safe("shell:$cmd"))
         val out = java.io.ByteArrayOutputStream()
         val t = Thread { runCatching { val i = s.openInputStream(); val b = ByteArray(8192); while (true) { val n = i.read(b); if (n < 0) break; synchronized(out) { out.write(b, 0, n) } } } }
         t.start(); t.join(timeoutMs)

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.SwapVert
@@ -83,6 +84,7 @@ object CloudIcons {
     fun kindIcon(kind: String): ImageVector = when (kind) {
         "sftp" -> Icons.Filled.Terminal
         "ftp", "ftps" -> Icons.Filled.SwapVert
+        "andr" -> Icons.Filled.Android
         "dav", "cloud" -> Icons.Filled.Cloud
         else -> Icons.Filled.Dns
     }

@@ -56,8 +56,9 @@ object Feedback {
 
     fun init(ctx: Context) {
         val p = sp(ctx)
-        vibro = p.getBoolean("fb_vibro", true)
-        beep = p.getBoolean("fb_beep", false)
+        // 7.0: отдельных настроек вибро и звука нет, отклик берётся из системных настроек телефона (вибро через штатный отклик окна, свой звук выключен)
+        vibro = true
+        beep = false
         Thread { runCatching { prepare(ctx) } }.start()
     }
 
@@ -168,28 +169,18 @@ object Feedback {
         return t
     }
 
+    /**
+     * 7.0: отклик нажатий только системный. Окно приложения само выдаёт штатную вибрацию и звук касания по системным настройкам
+     * телефона («Вибрация при касании», «Звук при касании»); своих вибро и звука больше нет, старые значения из настроек не читаются.
+     */
     fun tick(ctx: Context) {
-        if (!vibro && !beep) return
         val now = System.currentTimeMillis()
         if (now - last < 35) return
         last = now
-        prepare(ctx)
-        // вибро от игры имеет приоритет: короткий тик не обрывает его (звук щелчка остаётся)
-        if (vibro && !PadRumble.active()) runCatching {
-            val v = vib
-            if (v != null && v.hasVibrator()) {
-                // моторам телефона нужно 30-40 мс, чтобы раскачаться: короче толчок не чувствуется; 45 мс на полной силе мотора ощущаются как короткий упругий толчок
-                val e = VibrationEffect.createOneShot(60, 200)
-                try {
-                    @Suppress("DEPRECATION") v.vibrate(e, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
-                } catch (t: Throwable) {
-                    AppLog.i("ADBphon", "вибро с атрибутами не вышло: " + t)
-                    v.vibrate(e)
-                }
-            }
-        }
-        if (beep) runCatching {
-            click?.let { it.stop(); it.setVolume(0.1f); it.reloadStaticData(); it.play() }
+        val h = host ?: return
+        runCatching {
+            h.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            h.playSoundEffect(android.view.SoundEffectConstants.CLICK)
         }
     }
 }

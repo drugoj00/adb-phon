@@ -119,43 +119,21 @@ fun BackupSectionV2(vm: MainViewModel) {
     when (val s = st) {
         BkState.Idle -> {}
         BkState.Create -> {
-            var p1 by remember { mutableStateOf("") }
-            var p2 by remember { mutableStateOf("") }
-            var err by remember { mutableStateOf<String?>(null) }
-            LAlertDialog(
-                onDismissRequest = { st = BkState.Idle }, title = { Text(stringResource(R.string.bk2_create_title)) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(p1, { p1 = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.bk2_pass1), maxLines = 1) }, visualTransformation = PasswordVisualTransformation())
-                        OutlinedTextField(p2, { p2 = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.bk2_pass2), maxLines = 1) }, visualTransformation = PasswordVisualTransformation())
-                        Text(stringResource(if (p1.isEmpty()) R.string.bk2_nopass_note else R.string.bk2_pass_note), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-                        err?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+            // 7.0: без вопросов и фраз: сразу полная копия (настройки, подключения, облачные диски, пароли, ключ ADB)
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                st = BkState.Idle
+                val r = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val (data, sum) = AppBackup.create(ctx, null)
+                        val (name, file) = AppBackup.saveAnywhere(ctx, data)
+                        Triple(name, file, sum)
                     }
-                },
-                confirmButton = {
-                    TextButton({
-                        if (p1 != p2) { err = ctx.getString(R.string.bk2_pass_mismatch); return@TextButton }
-                        if (p1.isNotEmpty() && p1.length < 6) { err = ctx.getString(R.string.bk2_pass_short); return@TextButton }
-                        val pass = if (p1.isEmpty()) null else p1.toCharArray()
-                        st = BkState.Idle
-                        scope.launch {
-                            val r = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    val (data, sum) = AppBackup.create(ctx, pass)
-                                    val (name, file) = AppBackup.saveAnywhere(ctx, data)
-                                    Triple(name, file, sum)
-                                }
-                            }
-                            r.onSuccess { (name, file, sum) ->
-                                lastFile = file
-                                st = BkState.Created(sumText(ctx, R.string.bk2_created, sum) + "\n" + ctx.getString(R.string.bk2_saved_to, name) + "\n" +
-                                    ctx.getString(if (sum.secrets) R.string.bk2_secrets_yes else R.string.bk2_secrets_no), file)
-                            }.onFailure { AppLog.e("ADBphon", "backup", it); st = BkState.Error(ctx.getString(R.string.bk_failed, it.message ?: "error")) }
-                        }
-                    }) { Text(stringResource(R.string.bk2_make)) }
-                },
-                dismissButton = { TextButton({ st = BkState.Idle }) { Text(stringResource(R.string.btn_cancel)) } },
-            )
+                }
+                r.onSuccess { (name, file, sum) ->
+                    lastFile = file
+                    st = BkState.Created(sumText(ctx, R.string.bk2_created, sum) + "\n" + ctx.getString(R.string.bk2_saved_to, name), file)
+                }.onFailure { AppLog.e("ADBphon", "backup", it); st = BkState.Error(ctx.getString(R.string.bk_failed, it.message ?: "error")) }
+            }
         }
         is BkState.Created -> LAlertDialog(
             onDismissRequest = { st = BkState.Idle }, title = { Text(stringResource(R.string.bk2_title)) }, text = { Text(s.text, fontSize = 14.sp) },

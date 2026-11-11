@@ -308,7 +308,7 @@ private fun SshFiles(ctx: Context) {
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(if (f.isDir) Icons.Filled.Folder else Icons.Filled.InsertDriveFile, null, tint = MaterialTheme.colorScheme.primary)
+                        if (f.isDir) FolderIcon(UiPrefs.folderDefault, false, 26.dp) else FileTypeIcon(f.name, f.name.substringAfterLast('.', "").lowercase(), null, 26.dp)
                         Column(Modifier.padding(start = 10.dp).weight(1f)) {
                             Text(f.name, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (!f.isDir) Text(sizeText(f.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))

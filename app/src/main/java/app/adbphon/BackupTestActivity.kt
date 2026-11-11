@@ -53,6 +53,61 @@ class BackupTestActivity : Activity() {
                         getSharedPreferences("adbphon", MODE_PRIVATE).edit().remove("start_tab").remove("favs").apply()
                         log("unseed ok")
                     }
+                    "icons" -> {
+                        val d = File(filesDir, "icons")
+                        log("icons: файлов ${d.listFiles()?.size ?: 0}, prefs ${getSharedPreferences("icons", MODE_PRIVATE).all.size}, fm.hidden=${getSharedPreferences("fm", MODE_PRIVATE).getStringSet("hidden_btns", null)}, scale_font=${getSharedPreferences("adbphon", MODE_PRIVATE).all["scale_font"]}")
+                    }
+                    "seedicon" -> {
+                        val d = File(filesDir, "icons").also { it.mkdirs() }
+                        File(d, "ictest.png").writeBytes(ByteArray(300) { (it * 7).toByte() })
+                        getSharedPreferences("icons", MODE_PRIVATE).edit().putString("e:zzz", "i:ictest.png").commit()
+                        log("seedicon ok")
+                    }
+                    "seedcloud" -> {
+                        File(filesDir, "clouds.conf").writeText("[testdisk]\ntype = webdav\nurl = http://127.0.0.1/\n")
+                        log("seedcloud ok")
+                    }
+                    "wipecloud" -> { File(filesDir, "clouds.conf").delete(); log("wipecloud ok") }
+                    "cloudconf" -> log("cloudconf: " + (if (File(filesDir, "clouds.conf").isFile) File(filesDir, "clouds.conf").readText().replace("\n", " | ") else "нет файла"))
+                    "hidebtn" -> {
+                        val keys = (intent.getStringExtra("keys") ?: "").split(",").filter { it.isNotBlank() }.toSet()
+                        getSharedPreferences("fm", MODE_PRIVATE).edit().putStringSet("hidden_btns", keys).commit()
+                        log("hidebtn ok " + keys)
+                    }
+                    "seticon" -> {
+                        val k = intent.getStringExtra("k") ?: ""; val v = intent.getStringExtra("v")
+                        getSharedPreferences("icons", MODE_PRIVATE).edit().apply { if (v.isNullOrEmpty()) remove(k) else putString(k, v) }.commit()
+                        log("seticon " + k + "=" + v)
+                    }
+                    "fakeupd" -> {
+                        val v = intent.getStringExtra("v").orEmpty()
+                        getSharedPreferences("adbphon", MODE_PRIVATE).edit().apply { if (v.isEmpty()) remove("test_fake_release") else putString("test_fake_release", v); if (intent.getStringExtra("k") != "1") remove("upd_dismissed"); remove("upd_last") }.commit()
+                        log("fakeupd " + v)
+                    }
+                    "termline" -> {
+                        log("str note=[" + getString(R.string.tc_helper_note) + "] nointr=[" + getString(R.string.tc_helper_nointr) + "]")
+                        Term.ensure(this); Thread.sleep(2500)
+                        val lines = (intent.getStringExtra("l") ?: "").split("||")
+                        for (ln in lines) { Term.sendLine(ln); Thread.sleep(((intent.getStringExtra("w") ?: "2500").toLongOrNull() ?: 2500L)) }
+                        if (intent.getBooleanExtra("ctrlc", false)) { Term.interrupt(this); Thread.sleep(1500) }
+                        Thread.sleep(500); Term.text.value.takeLast(900).split("\n").forEach { log("T| " + it) }
+                        log("termmode=" + Term.mode.value + " running=" + Term.running.value + " last=[" + Term.lastOutput().takeLast(200).replace("\n", " ⏎ ") + "]")
+                    }
+                    "scrtest" -> {
+                        val c = ScreenPcClient(applicationContext)
+                        c.connect(intent.getStringExtra("host") ?: "127.0.0.1", intent.getStringExtra("code") ?: "", "A7-test")
+                        var n = 0
+                        while (n < 80) { Thread.sleep(500); n++; if (c.state == 2 && c.frame != null) break; if (c.state == 0 && n > 3) break }
+                        log("scrtest: state=${c.state} frame=${c.frame?.width}x${c.frame?.height} host=${c.hostW}x${c.hostH} status=${c.status}")
+                        if (c.state == 2) { c.mouse(0.5f, 0.5f, 0); c.send('g'); Thread.sleep(1500); log("scrtest: clip=${c.clipFromPc != null} monitors=${c.monitors.size}") }
+                        c.disconnect()
+                    }
+                    "wipeicons" -> {
+                        File(filesDir, "icons").listFiles()?.forEach { it.delete() }
+                        getSharedPreferences("icons", MODE_PRIVATE).edit().clear().commit()
+                        getSharedPreferences("fm", MODE_PRIVATE).edit().remove("hidden_btns").commit()
+                        log("wipeicons ok")
+                    }
                     "wrongpass" -> {
                         val r = runCatching { AppBackup.parse(File(file).readBytes(), pass) }.exceptionOrNull()
                         log("wrongpass: ${r?.javaClass?.simpleName}")

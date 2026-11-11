@@ -193,7 +193,7 @@ fun FmDndOverlay() {
             shape = RoundedCornerShape(12.dp), tonalElevation = 8.dp, shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = .8f),
         ) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (f != null) { if (f.isDir) FolderIcon(UiPrefs.folderDefault, false, 40.dp) else FileTypeIcon(f.name, f.ext, null, 40.dp) }
+                if (f != null) { val sp0 = FmDnd.src; val full0 = if (sp0 != null) FmIo.join(sp0.path, f.name) else ""; if (f.isDir) FolderIcon(UiPrefs.folderColors[if (sp0 != null) folderKey(sp0, full0) else ""] ?: UiPrefs.folderDefault, false, 40.dp, customKey = if (sp0 != null) "f:" + folderKey(sp0, full0) else null) else FileTypeIcon(f.name, f.ext, if (sp0 != null && sp0.src == "local") full0 else null, 40.dp) }
                 Text(f?.name.orEmpty(), maxLines = 1, fontSize = 14.sp, modifier = Modifier.widthIn(max = 200.dp))
                 if (n > 1) Text("×$n", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }

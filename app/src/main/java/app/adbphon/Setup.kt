@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +47,8 @@ class SetupStep(val key: String, val title: Int, val why: Int, val visible: (Con
  */
 object Setup {
     var open by mutableStateOf(false)
+    /** Растёт, когда разрешение выдано без ухода из программы (через ADB): окно мастера перепроверяет шаги. */
+    var bump by mutableIntStateOf(0)
     /** Первое автоподключение ADB: один раз коротко объясняем, что сейчас откроются настройки Android; дальше без вопросов. */
     var adbAsk by mutableStateOf(false)
     /** Окно «нужно разрешение» в момент запуска функции: показывается, когда пользователь пропустил первый запуск, а функции разрешение нужно. */
@@ -69,10 +72,32 @@ object Setup {
     fun done(ctx: Context) = sp(ctx).getBoolean("setup_done_v1", false)
     fun markDone(ctx: Context) { sp(ctx).edit().putBoolean("setup_done_v1", true).apply() }
 
-    private fun page(a: Activity, action: String, withPkg: Boolean = true) {
-        val i = Intent(action).apply { if (withPkg) data = Uri.parse("package:" + a.packageName); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        if (runCatching { a.startActivity(i) }.isFailure) runCatching { a.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    /** Есть ли в системе экран, который откроет это действие (на ТВ-приставках многих страниц настроек нет: кнопка «Включить» молчала). */
+    private fun canOpen(a: Activity, i: Intent): Boolean {
+        val ri = a.packageManager.resolveActivity(i, 0) ?: return false
+        return ri.activityInfo != null && ri.activityInfo.packageName != "android"   // «android» = ResolverActivity, то есть обработчика нет
     }
+
+    /** Открывает страницу системы; если её нет на этом устройстве, выдаёт разрешение через ADB (если он подключён) или говорит, что делать. */
+    private fun page(a: Activity, action: String, withPkg: Boolean = true, adbCmd: String? = null) {
+        val i = Intent(action).apply { if (withPkg) data = Uri.parse("package:" + a.packageName); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        if (canOpen(a, i) && runCatching { a.startActivity(i) }.isSuccess) return
+        val det = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (adbCmd == null && canOpen(a, det) && runCatching { a.startActivity(det) }.isSuccess) return
+        if (adbCmd != null) {
+            fallbackScope.launch {
+                val ok = Adb.isConnected && runCatching { Adb.shell(adbCmd.replace("%pkg", a.packageName), 10_000L) }.isSuccess
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (ok) bump++
+                    // ADB не подключён: на приставках есть общий список «Экономия заряда батареи», открываем его
+                    val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (!ok && action == Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS && canOpen(a, list) && runCatching { a.startActivity(list) }.isSuccess) return@withContext
+                    android.widget.Toast.makeText(a, a.getString(if (ok) R.string.su_via_adb else R.string.su_no_page), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        } else android.widget.Toast.makeText(a, a.getString(R.string.su_no_page), android.widget.Toast.LENGTH_LONG).show()
+    }
+    private val fallbackScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
     val steps: List<SetupStep> = listOf(
         SetupStep("files", R.string.su_files_t, R.string.su_files_w, { true },
@@ -82,14 +107,14 @@ object Setup {
             { c -> c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED },
             { a -> a.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7703) }),
         SetupStep("acc", R.string.su_acc_t, R.string.su_acc_w, { Build.VERSION.SDK_INT >= 30 },
-            { c -> AutoPairService.isEnabled(c) },
-            { a -> page(a, Settings.ACTION_ACCESSIBILITY_SETTINGS, withPkg = false) }),
+            { c -> AutoPairService.ensureEnabled(c) },
+            { a -> a.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("acc_wanted", true).apply(); page(a, Settings.ACTION_ACCESSIBILITY_SETTINGS, withPkg = false) }),
         SetupStep("overlay", R.string.su_overlay_t, R.string.su_overlay_w, { true },
             { c -> runCatching { Settings.canDrawOverlays(c) }.getOrDefault(false) },
-            { a -> page(a, Settings.ACTION_MANAGE_OVERLAY_PERMISSION) }),
+            { a -> page(a, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, adbCmd = "appops set %pkg SYSTEM_ALERT_WINDOW allow") }),
         SetupStep("battery", R.string.su_batt_t, R.string.su_batt_w, { true },
             { c -> runCatching { (c.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(c.packageName) }.getOrDefault(false) },
-            { a -> page(a, Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) }),
+            { a -> page(a, Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, adbCmd = "dumpsys deviceidle whitelist +%pkg") }),
         SetupStep("install", R.string.su_install_t, R.string.su_install_w, { true },
             { c -> c.packageManager.canRequestPackageInstalls() },
             { a -> page(a, Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES) }),
@@ -117,6 +142,7 @@ fun FirstRunSetup() {
         onDispose { owner.lifecycle.removeObserver(ob) }
     }
     @Suppress("UNUSED_EXPRESSION") tick
+    @Suppress("UNUSED_EXPRESSION") Setup.bump
     val all = Setup.steps.filter { it.visible(act) && (Setup.only == null || it.key == Setup.only) }
     val todo = all.filter { !it.ok(act) }
     val cur = todo.firstOrNull { it.key !in skipped }
@@ -135,7 +161,7 @@ fun FirstRunSetup() {
                 Text(stringResource(cur.why), fontSize = 14.sp)
                 if (cur.key in tried) {
                     Text(stringResource(R.string.su_retry), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-                    TextButton({ runCatching { act.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + act.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }) { Text(stringResource(R.string.su_open_app)) }
+                    TextButton({ val di = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + act.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); val ri = act.packageManager.resolveActivity(di, 0); if (ri?.activityInfo != null && ri.activityInfo.packageName != "android") runCatching { act.startActivity(di) } else android.widget.Toast.makeText(act, act.getString(R.string.su_no_page), android.widget.Toast.LENGTH_LONG).show() }) { Text(stringResource(R.string.su_open_app)) }
                 }
             }
         },

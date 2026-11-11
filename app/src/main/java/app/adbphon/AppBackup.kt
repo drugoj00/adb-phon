@@ -137,6 +137,7 @@ object AppBackup {
             net.put(JSONObject().put("k", c.kind).put("h", c.host).put("p", c.port).put("u", c.user).put("d", c.path).put("v", c.smb).put("n", c.name).apply { if (secrets) put("w", c.pass) })
         }
         root.put("net", net)
+        root.put("icons", iconsToJson(ctx))
         if (secrets) {
             val files = JSONObject()
             SECRET_FILES.forEach { n -> File(ctx.filesDir, n).takeIf { it.isFile }?.let { files.put(n, Base64.encodeToString(it.readBytes(), Base64.NO_WRAP)) } }
@@ -169,7 +170,7 @@ object AppBackup {
 
     /** Готовые байты файла копии и краткие сведения. */
     fun create(ctx: Context, pass: CharArray?): Pair<ByteArray, Summary> {
-        val withSecrets = pass != null && pass.isNotEmpty()
+        val withSecrets = true    // 7.0: пароли, токены облаков и ключ ADB входят всегда, чтобы после восстановления диски сразу открывались; фраза их шифрует
         val j = collect(ctx, withSecrets)
         return seal(j.toString().toByteArray(Charsets.UTF_8), pass) to summarize(j)
     }
@@ -196,7 +197,7 @@ object AppBackup {
         return f.absolutePath to f
     }
 
-    /** Автокопия раз в сутки или неделю (настройка, по умолчанию выключена): всегда без паролей и токенов. */
+    /** Автокопия раз в сутки или неделю (настройка, по умолчанию выключена): полная, с паролями и токенами, без шифрования (фразы нет). */
     fun autoIfDue(ctx: Context) {
         val sp = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
         val mode = sp.getInt("backup_auto", 0)
@@ -226,6 +227,7 @@ object AppBackup {
         root.put("prefs", prefs)
         val files = JSONObject()
         SECRET_FILES.forEach { n -> File(ctx.filesDir, n).takeIf { it.isFile }?.let { files.put(n, Base64.encodeToString(it.readBytes(), Base64.NO_WRAP)) } }
+        root.put("icons", iconsToJson(ctx))
         return root.put("files", files)
     }
 
@@ -246,6 +248,22 @@ object AppBackup {
             }
         }
         if (!ed.commit()) throw IllegalStateException("cannot write $name")
+    }
+
+    /** Свои иконки (files/icons): маленькие PNG, входят в копию всегда (это не секрет). */
+    private fun iconsToJson(ctx: Context): JSONObject {
+        val o = JSONObject()
+        File(ctx.filesDir, "icons").listFiles()?.filter { it.isFile && it.length() < 400_000 }?.forEach { o.put(it.name, Base64.encodeToString(it.readBytes(), Base64.NO_WRAP)) }
+        return o
+    }
+
+    private fun iconsApply(ctx: Context, o: JSONObject?) {
+        if (o == null) return
+        val dir = File(ctx.filesDir, "icons")
+        dir.mkdirs()
+        dir.listFiles()?.forEach { if (!o.has(it.name)) it.delete() }
+        o.keys().forEach { n -> if (!n.contains('/') && !n.contains('\\')) writeFileAtomic(File(dir, n), Base64.decode(o.getString(n), Base64.NO_WRAP)) }
+        CustomIcons.reload()
     }
 
     private fun writeFileAtomic(f: File, bytes: ByteArray) {
@@ -285,6 +303,7 @@ object AppBackup {
             if (net != null) {
                 NetStore.replaceAll(ctx, (0 until net.length()).map { i -> net.getJSONObject(i).let { o -> NetConn(o.getString("k"), o.getString("h"), o.optInt("p", 0), o.optString("u"), o.optString("w"), o.optString("d"), o.optString("v"), o.optString("n")) } })
             }
+            iconsApply(ctx, j.optJSONObject("icons"))
             val files = j.optJSONObject("files")
             files?.keys()?.forEach { n -> if (n in SECRET_FILES) writeFileAtomic(File(ctx.filesDir, n), Base64.decode(files.getString(n), Base64.NO_WRAP)) }
         } catch (e: Throwable) {
@@ -297,6 +316,7 @@ object AppBackup {
     private fun applyRaw(ctx: Context, snap: JSONObject) {
         val prefs = snap.getJSONObject("prefs")
         prefs.keys().forEach { n -> applyPrefs(ctx, n, prefs.getJSONObject(n), wipe = true) }
+        iconsApply(ctx, snap.optJSONObject("icons"))
         val files = snap.optJSONObject("files")
         files?.keys()?.forEach { n -> writeFileAtomic(File(ctx.filesDir, n), Base64.decode(files.getString(n), Base64.NO_WRAP)) }
     }

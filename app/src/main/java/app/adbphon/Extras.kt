@@ -227,7 +227,7 @@ fun FilesScreen(vm: MainViewModel) {
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(if (f.isDir) Icons.Filled.Folder else Icons.Filled.InsertDriveFile, null, tint = MaterialTheme.colorScheme.primary)
+                        if (f.isDir) FolderIcon(UiPrefs.folderDefault, false, 28.dp) else FileTypeIcon(f.name, f.name.substringAfterLast('.', "").lowercase(), null, 28.dp)
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(if (f.isDir) fmDate(f.date) else humanSize(f.size) + " · " + fmDate(f.date), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
@@ -870,7 +870,7 @@ fun MoreScreen(vm: MainViewModel) {
     val land = isLandscapeBox(maxWidth, maxHeight)
     Column(Modifier.fillMaxSize()) {
         // верхние кнопки в два ряда, каждый ряд на всю ширину экрана
-        val subs = listOf(R.string.sub_console, R.string.sub_device, R.string.sub_ssh, R.string.sub_bt, R.string.sub_pad)
+        val subs = listOf(R.string.sub_console, R.string.sub_device, R.string.sub_ssh, R.string.sub_bt, R.string.sub_pad, R.string.sub_screen)
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // в ландшафте четыре кнопки в один ряд: освобождается высота под содержимое вкладки
             subs.withIndex().toList().chunked(if (land) 5 else 3).forEach { row ->
@@ -896,6 +896,7 @@ fun MoreScreen(vm: MainViewModel) {
             1 -> NeedConnection(vm) { DeviceScreen(vm) }
             2 -> SshScreen()
             3 -> BtScreen(vm)
+            5 -> ScreenPcScreen()
             else -> BtScreen(vm, pad = true)
         }
     }
@@ -1022,19 +1023,41 @@ fun SettingsScreen(vm: MainViewModel) {
             EqChoice(stringResource(R.string.marq_focus), Marq.mode == 1) { Marq.setMode(mctx, 1) },
             EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(mctx, 2) },
         ))
+        Text(stringResource(R.string.sc_font), fontWeight = FontWeight.Medium)
+        val scNames = listOf(R.string.sc_small, R.string.sc_normal, R.string.sc_large, R.string.sc_xlarge)
+        val scCtx = LocalContext.current
+        EqChoices(AppScale.steps.mapIndexed { i, v -> EqChoice(stringResource(scNames[i]), AppScale.font == v) { AppScale.setFont(scCtx, v) } }, perRow = 4)
+        Text(stringResource(R.string.sc_ui), fontWeight = FontWeight.Medium)
+        EqChoices(AppScale.steps.mapIndexed { i, v -> EqChoice(stringResource(scNames[i]), AppScale.ui == v) { AppScale.setUi(scCtx, v) } }, perRow = 4)
+        SettingSwitch(AppFull.on, { AppFull.set(scCtx, it) }, stringResource(R.string.fs_title), stringResource(R.string.fs_hint))
+        val btnDlg = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        androidx.compose.material3.OutlinedButton({ btnDlg.value = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.sb_title)) }
+        if (btnDlg.value) FmButtonsDialog { btnDlg.value = false }
+        val ccx = LocalContext.current
+        if (android.os.Build.VERSION.SDK_INT >= 31) SettingSwitch(AppColors.dynamic, { AppColors.setDynamic(ccx, it) }, stringResource(R.string.col_dynamic), stringResource(R.string.col_dynamic_hint))
+        if (!AppColors.dynamic) {
+            Text(stringResource(R.string.col_accent), fontWeight = FontWeight.Medium)
+            val colNames = listOf(R.string.col_teal, R.string.col_blue, R.string.col_purple, R.string.col_pink, R.string.col_red, R.string.col_orange, R.string.col_green, R.string.col_gray)
+            EqChoices(colNames.mapIndexed { i, r -> EqChoice(stringResource(r), AppColors.accent == i) { AppColors.setAccent(ccx, i) } }, perRow = 4)
+        }
         SettingSwitch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) }, stringResource(R.string.set_keep_on), stringResource(R.string.set_keep_hint))
         SettingSwitch(vm.exitOnBack, { vm.changeExitOnBack(it) }, stringResource(R.string.set_exit_back), stringResource(R.string.set_exit_hint))
         SettingSwitch(vm.logOn, { vm.changeLog(it) }, stringResource(R.string.log_switch), stringResource(R.string.log_hint))
+        val srvAuto = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AdbServer.auto) }
+        val srvOff = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AdbServer.offAfter) }
+        SettingSwitch(srvAuto.value, { srvAuto.value = it; AdbServer.auto = it }, stringResource(R.string.srv_auto), stringResource(R.string.srv_auto_hint))
+        SettingSwitch(srvOff.value, { srvOff.value = it; AdbServer.offAfter = it }, stringResource(R.string.srv_off), stringResource(R.string.srv_off_hint))
+        androidx.compose.material3.OutlinedButton({ Thread { AdbServer.stop() }.start() }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.srv_stop)) }
+        ShizukuSection()
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)
-        SettingSwitch(Feedback.vibro, { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_vibro), stringResource(R.string.fb_vibro_hint))
-        SettingSwitch(Feedback.beep, { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) }, stringResource(R.string.fb_beep), stringResource(R.string.fb_beep_hint))
         androidx.compose.material3.OutlinedButton({ Setup.only = null; Setup.open = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.su_open)) }
         Text(stringResource(R.string.su_open_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         StartupSection(ctx)
         FilesLookSection()
         FilesDeleteSection()
         HandednessSection()
+        Collapsible(stringResource(R.string.tc_set_title)) { TermSettings() }
         BackupSectionV2(vm)
         CopiesSection()
         Collapsible(stringResource(R.string.set_version, vm.appVersion)) {

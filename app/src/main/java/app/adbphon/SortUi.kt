@@ -176,11 +176,11 @@ fun sgName(g: SGroup, header: Boolean = false): String = stringResource(when (g)
 fun SortGroupIcon(g: SGroup, size: androidx.compose.ui.unit.Dp) {
     when (g) {
         SGroup.DIR -> FolderIcon(UiPrefs.folderDefault, false, size)
-        SGroup.PHOTO -> FileGlyph(FCat.PHOTO, "jpg", size)
-        SGroup.VIDEO -> FileGlyph(FCat.VIDEO, "mp4", size)
-        SGroup.MUSIC -> FileGlyph(FCat.AUDIO, "mp3", size)
-        SGroup.DOC -> FileGlyph(FCat.TEXT, "txt", size)
-        SGroup.FILE -> FileGlyph(FCat.OTHER, "bin", size)
+        SGroup.PHOTO -> CategoryIcon(FCat.PHOTO, "jpg", size)
+        SGroup.VIDEO -> CategoryIcon(FCat.VIDEO, "mp4", size)
+        SGroup.MUSIC -> CategoryIcon(FCat.AUDIO, "mp3", size)
+        SGroup.DOC -> CategoryIcon(FCat.TEXT, "txt", size)
+        SGroup.FILE -> CategoryIcon(FCat.OTHER, "bin", size)
     }
 }
 

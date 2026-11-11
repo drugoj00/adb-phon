@@ -220,6 +220,7 @@ class FmPane(val id: Int, start: String) {
 /** Диалоги менеджера. */
 sealed class FmDlg {
     class FolderColor(val key: String, val name: String) : FmDlg()
+    class FileIcon(val key: String, val name: String) : FmDlg()
     class NewFolder(val dir: String? = null) : FmDlg()
     class NewFile(val dir: String? = null) : FmDlg()
     class NewZip(val dir: String? = null) : FmDlg()
@@ -248,6 +249,13 @@ sealed class FmDlg {
     class Storage : FmDlg()
     class WifiServer(val dir: String) : FmDlg()
     class WifiDev(val conn: NetConn?, val host: String, val name: String) : FmDlg()
+    /** «Компьютеры» (10.11.2026): добавить или изменить ПК; экран ПК во весь экран. */
+    class PcAdd(val host: PcHost?) : FmDlg()
+    class PcScreen(val host: PcHost) : FmDlg()
+    /** Группа «Устройства»: добавить или изменить (ПК или Android), экран и консоль Android-устройства. */
+    class DevAdd(val pc: PcHost?, val adb: AdbDev?) : FmDlg()
+    class AndroidScreen(val dev: AdbDev) : FmDlg()
+    class AndroidConsole(val dev: AdbDev) : FmDlg()
     class Source(val prefill: NetHost? = null) : FmDlg()
     class CloudAdd : FmDlg()
     /** Нужен модуль «ADB-phon Облака»: скачать и установить; после установки выполняется [then]. */
@@ -1601,7 +1609,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                     FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                     // кнопки квадратные; размер подбирается по высоте экрана так, чтобы колонка заполняла её без пустоты снизу
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxHeight()) {
-                        val rows = (actions.count { it.label in fmMainLabels } + 1 + 1) / 2
+                        val rows = (rememberFmActionsAll().count { it.label in fmMainLabels } + 1 + 1) / 2   // размер кнопок считается по полному набору: скрытые кнопки не растягивают остальные
                         val cap = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.07f).dp
                         val sz = ((maxHeight - 30.dp - 4.dp * (rows - 1)) / rows).coerceIn(44.dp, 78.dp).let { if (it > cap) cap else it }
                         FmNarrow(actions, Modifier.width(sz * 2 + 4.dp).fillMaxHeight(), sz)
@@ -1638,8 +1646,65 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
 
 class FmAction(val icon: ImageVector, val label: Int, val enabled: Boolean = true, val tint: Color? = null, val run: () -> Unit)
 
+/** Какие кнопки боковой панели скрыты (7.0): настройка пользователя «Кнопки боковой панели...»; ключ кнопки: имя строки её названия. */
+object FmButtons {
+    var hidden by mutableStateOf(setOf<String>())
+    private var loaded = false
+    private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
+    fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet() }
+    fun key(ctx: Context, label: Int): String {
+        val n = runCatching { ctx.resources.getResourceEntryName(label) }.getOrDefault(label.toString())
+        return if (n == "fm_mode_tree" || n == "fm_mode_list") "fm_mode" else n
+    }
+    fun toggle(ctx: Context, key: String) { hidden = if (key in hidden) hidden - key else hidden + key; sp(ctx).edit().putStringSet("hidden_btns", hidden.toSet()).apply() }
+    fun reset(ctx: Context) { hidden = emptySet(); sp(ctx).edit().remove("hidden_btns").apply() }
+}
+
+/** Окно выбора кнопок боковой панели: убрать лишние и вернуть нужные. */
+@Composable
+fun FmButtonsDialog(onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    remember { FmButtons.load(ctx); 0 }
+    val all = rememberFmActionsAll().distinctBy { FmButtons.key(ctx, it.label) }
+    var pickBtn by remember { mutableStateOf<Pair<String, String>?>(null) }
+    pickBtn?.let { (k, t) -> CustomIconPicker(t, "s:" + k) { pickBtn = null } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.sb_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                all.forEach { a ->
+                    val k = FmButtons.key(ctx, a.label)
+                    Row(Modifier.fillMaxWidth().clickable { FmButtons.toggle(ctx, k) }, verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(k !in FmButtons.hidden, { FmButtons.toggle(ctx, k) })
+                        val csB = CustomIcons.spec("s:" + k)
+                        val lbl = stringResource(if (k == "fm_mode") R.string.fm_mode_list else a.label)
+                        Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = .12f)).clickable { pickBtn = k to lbl }, contentAlignment = Alignment.Center) {
+                            if (csB != null) CustomIconGlyph(csB, 24.dp, MaterialTheme.colorScheme.primary) else Icon(a.icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(lbl, fontSize = 15.sp)
+                    }
+                }
+                Text(stringResource(R.string.sb_icon_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(top = 6.dp))
+                androidx.compose.material3.TextButton({ CustomIcons.clearPrefix(ctx, "s:") }) { Text(stringResource(R.string.sb_reset_icons)) }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
+        dismissButton = { androidx.compose.material3.TextButton({ FmButtons.reset(ctx) }) { Text(stringResource(R.string.sb_reset)) } },
+    )
+}
+
 @Composable
 private fun rememberFmActions(): List<FmAction> {
+    val c = LocalContext.current
+    remember { FmButtons.load(c); 0 }
+    val hid = FmButtons.hidden
+    return rememberFmActionsAll().filter { FmButtons.key(c, it.label) !in hid }
+}
+
+@Composable
+fun rememberFmActionsAll(): List<FmAction> {
     val p = Fm.cur; val o = Fm.other
     val sel = p.selected.isNotEmpty()
     val sctx = LocalContext.current
@@ -1663,7 +1728,7 @@ private fun rememberFmActions(): List<FmAction> {
         FmAction(Icons.Filled.Search, R.string.fm_search) { Fm.dlg = FmDlg.Search() },
         FmAction(Icons.Filled.Bookmarks, R.string.fm_bookmarks) { Fm.dlg = FmDlg.Bookmarks() },
         FmAction(Icons.Filled.History, R.string.fm_history) { Fm.dlg = FmDlg.History() },
-        FmAction(if (Fm.treeMode) Icons.Filled.ViewList else Icons.Filled.AccountTree, if (Fm.treeMode) R.string.fm_mode_list else R.string.fm_mode_tree) { Fm.setTree(!Fm.treeMode) },
+        FmAction(if (Fm.treeMode) Icons.Filled.ViewList else Icons.Filled.AccountTree, if (Fm.treeMode) R.string.fm_mode_list else R.string.fm_mode_tree) { val v = !Fm.treeMode; Fm.setTree(v); FmRootCfg.set(Fm.sctx, "tree", v) },   // кнопка «Список/Дерево» переключает и обычные папки, и корень «Устройства» (пост wad72 №14, 10.11.2026)
         FmAction(Icons.Filled.Info, R.string.fm_props, true) { Fm.props(p, if (sel) Fm.targets(p) else listOf("")) },
         FmAction(Icons.Filled.Lock, R.string.perm_title, sel && (p.src == "local" || p.src == "adb")) { Fm.dlg = FmDlg.Perms(p, Fm.targets(p)) },
         FmAction(Icons.Filled.FolderZip, R.string.fm_make_archive, sel) { Fm.dlg = FmDlg.MakeArchive(p, Fm.targets(p)) },
@@ -1783,13 +1848,21 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
             .hoverable(hover).clickable(enabled = a.enabled) { a.run() }.padding(2.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
-        Icon(a.icon, null, Modifier.size(icon), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha))
+        val cs = CustomIcons.spec("s:" + FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label))
+        val tintC = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha)
+        if (cs != null) CustomIconGlyph(cs, icon, tintC) else Icon(a.icon, null, Modifier.size(icon), tint = tintC)
         // 10.11.2026: длинное слово («Сортировка», «Инверсия») не должно рваться посреди слова: шрифт слегка уменьшается так, чтобы слово влезло (9 букв при 7,5 sp в кнопке 44 dp влезают)
         val txt = stringResource(a.label)
-        val longest = txt.split(' ', '-').maxOfOrNull { it.length } ?: 0
-        val maxChars = 9f * ((size.value - 4f) / 40f) * (7.5f / label.value)
-        val lblSize = if (longest > maxChars && longest > 0) (label.value * (maxChars / longest)).coerceAtLeast(label.value * 0.8f).sp else label
-        Text(txt, fontSize = lblSize, lineHeight = lblSize * 1.12f, maxLines = 2, overflow = TextOverflow.Ellipsis, fontFamily = CondFont,
+        // подпись всегда по центру и без разрыва слова: шрифт подбирается по самому длинному слову (измерение, а не оценка по числу букв)
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val dens = androidx.compose.ui.platform.LocalDensity.current
+        val availPx = with(dens) { (size - 8.dp).toPx() }
+        val words = txt.split(' ').filter { it.isNotEmpty() }
+        var fs = label.value
+        val minFs = label.value * 0.5f
+        while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), androidx.compose.material3.LocalTextStyle.current.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx }) fs -= 0.25f
+        val lblSize = fs.sp
+        Text(txt, Modifier.fillMaxWidth(), fontSize = lblSize, lineHeight = lblSize * 1.12f, maxLines = 2, overflow = TextOverflow.Clip, fontFamily = CondFont,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
     }
 }
@@ -1804,7 +1877,11 @@ private fun FmActionIcon(a: FmAction, modifier: Modifier = Modifier) {
             .combinedClickable(enabled = true, onClick = { if (a.enabled) a.run() }, onLongClick = { Fm.say(name) })
             .semantics { contentDescription = name },
         contentAlignment = Alignment.Center,
-    ) { Icon(a.icon, null, Modifier.size(22.dp), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha)) }
+    ) {
+        val cs = CustomIcons.spec("s:" + FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label))
+        val tintC = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha)
+        if (cs != null) CustomIconGlyph(cs, 22.dp, tintC) else Icon(a.icon, null, Modifier.size(22.dp), tint = tintC)
+    }
 }
 
 /** Узкая колонка действий в ландшафте: тянется на всю высоту, крупные кнопки в три столбца поровну по высоте, остальное в «Ещё». */
@@ -2158,7 +2235,9 @@ private fun FmDriveRow(p: FmPane) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(Icons.Filled.ChevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-        FolderIcon(UiPrefs.folderDefault, false, 32.dp)
+        val drvKey = p.net?.let { c0 -> val tid0 = "N|" + c0.kind + "|" + c0.host + "|" + c0.user + "|"; "d:t:" + (if (c0.kind == "cloud") tid0 + "/" else tid0 + NetTrash.ROOT_MARK) + ":drv" }
+        val drvSpec = if (drvKey != null) CustomIcons.spec(drvKey) else null
+        if (drvSpec != null) CustomIconView(drvSpec, 32.dp) else FolderIcon(UiPrefs.folderDefault, false, 32.dp)
         Text(stringResource(if (p.net?.kind == "cloud") R.string.tr_drive else R.string.nt_drive), Modifier.weight(1f), fontSize = 18.sp, fontFamily = UiPrefs.listFont, maxLines = 1)
     }
 }
@@ -2178,7 +2257,7 @@ private fun FmTrashItemRow(p: FmPane, ti: CloudTrash.TItem) {
         Modifier.fillMaxWidth().background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else androidx.compose.ui.graphics.Color.Transparent).heightIn(min = if (tv) 54.dp else 46.dp).clickable { toggle() }.padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (ti.isDir) FolderIcon(UiPrefs.folderDefault, false, 30.dp) else FileTypeIcon(ti.name, ti.name.substringAfterLast('.', "").lowercase(), null, 30.dp)
+        if (ti.isDir) FolderIcon(UiPrefs.folderDefault, false, 30.dp, customKey = "f:" + ti.origPath) else FileTypeIcon(ti.name, ti.name.substringAfterLast('.', "").lowercase(), null, 30.dp)
         Column(Modifier.weight(1f)) {
             Text(ti.name, fontSize = 15.sp, fontFamily = UiPrefs.listFont, maxLines = 1)
             Text(listOf(dirTxt, dateTxt).filter { it.isNotEmpty() }.joinToString("  ·  "), fontSize = 11.sp, fontFamily = UiPrefs.listFont, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
@@ -2325,7 +2404,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
             if (f.isDir) {
                 val key = folderKey(p, full)
                 FolderIcon(UiPrefs.folderColors[key] ?: UiPrefs.folderDefault, isOpen, 32.dp,
-                    Modifier)
+                    Modifier, customKey = "f:" + key)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
                 MqText(f.name, active = hovered || pressed || focused || sel, wrap = true, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
@@ -2391,6 +2470,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
         }
         if (!nested && p.src == "local") item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(p, names) }
         item(if (rel in p.selected) R.string.fm_unselect else R.string.fm_select) { Fm.toggleSel(p, rel) }
+        if (!multi && !f.isDir && p.src == "local") item(R.string.ic_item) { Fm.dlg = FmDlg.FileIcon("p:" + full, f.name) }
         if (!multi && f.isDir) {
             item(R.string.fm_play_folder) { Fm.playFolder(p, rel) }
             item(R.string.fc_title) { Fm.dlg = FmDlg.FolderColor(folderKey(p, full), f.name) }
@@ -2440,7 +2520,8 @@ private fun FmDialogs() {
     val dctx = LocalContext.current.applicationContext
     val close = { Fm.dlg = null }
     when (d) {
-        is FmDlg.FolderColor -> FolderColorDialog(d.name, UiPrefs.folderColors[d.key], true, { i -> UiPrefs.setFolderColor(dctx, d.key, i); close() }, close)
+        is FmDlg.FileIcon -> CustomIconPicker(d.name, d.key, close)
+        is FmDlg.FolderColor -> FolderColorDialog(d.name, UiPrefs.folderColors[d.key], true, { i -> UiPrefs.setFolderColor(dctx, d.key, i); close() }, close, "f:" + d.key)
         is FmDlg.NewFolder -> TextDlg(R.string.fm_new_folder, "", R.string.fm_name, close) { Fm.mkdirIn(Fm.cur, d.dir ?: Fm.cur.path, it) }
         is FmDlg.NewFile -> NewTextFileDialog(d.dir, close)
         is FmDlg.NewZip -> NewZipDialog(d.dir, close)
@@ -2499,6 +2580,11 @@ private fun FmDialogs() {
         is FmDlg.Storage -> StorageDlg(close)
         is FmDlg.WifiServer -> WifiServerDialog(d.dir, close)
         is FmDlg.WifiDev -> WifiDeviceDialog(d.conn, d.host, d.name, close)
+        is FmDlg.PcAdd -> PcAddDialog(d.host, close)
+        is FmDlg.PcScreen -> PcScreenDialog(d.host, close)
+        is FmDlg.DevAdd -> DevAddDialog(d.pc, d.adb, close)
+        is FmDlg.AndroidScreen -> AndroidScreenDialog(d.dev, close)
+        is FmDlg.AndroidConsole -> AndroidConsoleDialog(d.dev, close)
         is FmDlg.SearchResult -> PathListDlg(R.string.fm_search, d.list, R.string.fm_nothing, close, subtitle = stringResource(R.string.fm_found, d.list.size)) {
             Fm.goTo(Fm.cur, it, false)
         }
@@ -2530,7 +2616,9 @@ private fun FmDialogs() {
                 BarLazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(d.items) { a ->
                         Row(Modifier.fillMaxWidth().clickable(enabled = a.enabled) { close(); a.run() }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(a.icon, null, Modifier.size(24.dp), tint = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = if (a.enabled) 1f else .38f))
+                            val csM = CustomIcons.spec("s:" + FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label))
+                            val tintM = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = if (a.enabled) 1f else .38f)
+                            if (csM != null) CustomIconGlyph(csM, 24.dp, tintM) else Icon(a.icon, null, Modifier.size(24.dp), tint = tintM)
                             Text(stringResource(a.label), Modifier.padding(start = 14.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (a.enabled) 1f else .38f))
                         }
                     }
@@ -2657,9 +2745,10 @@ private fun StorageDlg(close: () -> Unit) {
         onDismissRequest = close, title = { Text(stringResource(R.string.fm_storage)) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                @Composable fun place(icon: ImageVector, title: String, sub: String?, path: String, eject: FmVol? = null) {
+                @Composable fun place(icon: ImageVector, title: String, sub: String?, path: String, eject: FmVol? = null, ckey: String? = null) {
                     Row(Modifier.fillMaxWidth().clickable { close(); Fm.load(Fm.cur, path) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, null, Modifier.size(26.dp), tint = MaterialTheme.colorScheme.primary)
+                        val cs = if (ckey != null) CustomIcons.spec(ckey) else null
+                        if (cs != null) CustomIconView(cs, 26.dp) else Icon(icon, null, Modifier.size(26.dp), tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.padding(start = 10.dp).weight(1f)) {
                             Text(title, fontSize = 14.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (sub != null) Text(sub, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
@@ -2667,17 +2756,17 @@ private fun StorageDlg(close: () -> Unit) {
                         if (eject != null) TextButton({ Fm.eject(eject) }) { Text(stringResource(R.string.fm_eject), fontSize = 12.sp) }
                     }
                 }
-                place(Icons.Filled.SdStorage, stringResource(R.string.fm_internal), "/sdcard", "/sdcard")
+                place(Icons.Filled.SdStorage, stringResource(R.string.fm_internal), "/sdcard", "/sdcard", ckey = "d:dev")
                 Fm.vols.filter { it.ok }.forEach { v ->
                     val sub = (if (v.total > 0) stringResource(R.string.fm_free_of, fmSize(v.free), fmSize(v.total)) + "\n" else "") + v.path
-                    place(if (v.usb) Icons.Filled.Usb else Icons.Filled.SdCard, v.label, sub, v.path, v)
+                    place(if (v.usb) Icons.Filled.Usb else Icons.Filled.SdCard, v.label, sub, v.path, v, ckey = "d:vol:" + v.path)
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Fm.quick.drop(1).forEach { q ->
                     val lock = FmIo.restricted(q)
-                    place(if (lock) Icons.Filled.Lock else Icons.Filled.Folder, q.substringAfterLast('/'), if (lock) q + "  ·  ADB" else q, q)
+                    place(if (lock) Icons.Filled.Lock else Icons.Filled.Folder, q.substringAfterLast('/'), if (lock) q + "  ·  ADB" else q, q, ckey = "f:" + q)
                 }
-                place(Icons.Filled.Folder, "/", null, "/")
+                place(Icons.Filled.Folder, "/", null, "/", ckey = "d:root")
             }
         },
         confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } },

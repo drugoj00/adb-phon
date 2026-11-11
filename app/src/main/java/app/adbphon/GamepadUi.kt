@@ -957,9 +957,6 @@ fun PadSettings() {
     // отклик нажатий: общий для программы (вибро и звук щелчка), здесь выключатель окна игры и те же переключатели
     check(R.string.pad_haptic, Pad.haptic) { Pad.haptic = it }
     if (Pad.haptic) {
-        check(R.string.fb_vibro, Feedback.vibro) { Feedback.setVibro(ctx, it); if (it) Feedback.tick(ctx) }
-        check(R.string.fb_beep, Feedback.beep) { Feedback.setBeep(ctx, it); if (it) Feedback.tick(ctx) }
-        if (!Feedback.vibro && !Feedback.beep) Text(stringResource(R.string.pad_fb_off), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
     }
     check(R.string.pad_float, Pad.floating) { Pad.floating = it }
 

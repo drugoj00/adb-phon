@@ -31,11 +31,13 @@ class AutoPairService : AccessibilityService() {
         override fun run() {
             // страницы настроек статичны: без новых событий проверяем окно раз в секунду, пока идёт автоподключение
             if (Pairing.autoWanted) evaluate() else { wasWanted = false; connectTryAt = 0L }
+            if (TsLogin.wanted) TsLogin.step(rootInActiveWindow)
+            SysVpn.step(this@AutoPairService, rootInActiveWindow)
             handler.postDelayed(this, 1000)
         }
     }
 
-    override fun onServiceConnected() { Log.i("TVApps", "AutoPairService подключена"); handler.removeCallbacks(tick); handler.post(tick) }
+    override fun onServiceConnected() { TsLogin.back = { performGlobalAction(GLOBAL_ACTION_BACK) }; Log.i("TVApps", "AutoPairService подключена"); handler.removeCallbacks(tick); handler.post(tick) }
     override fun onDestroy() { handler.removeCallbacks(tick); super.onDestroy() }
     override fun onInterrupt() {}
 
@@ -58,7 +60,7 @@ class AutoPairService : AccessibilityService() {
         return false
     }
 
-    override fun onAccessibilityEvent(e: AccessibilityEvent) { if (Pairing.autoWanted) evaluate() }
+    override fun onAccessibilityEvent(e: AccessibilityEvent) { if (Pairing.autoWanted) evaluate(); if (TsLogin.wanted) TsLogin.step(rootInActiveWindow); SysVpn.step(this, rootInActiveWindow) }
 
     private fun evaluateOff() {
         val root = rootInActiveWindow ?: return
@@ -212,6 +214,26 @@ class AutoPairService : AccessibilityService() {
             val wifi = listOf("wi-fi", "wi‑fi", "wifi", "wlan", "wireless", "беспровод", "бездрот", "вай", "по сети", "по мережі", "network").any { it in l }
             val dbg = listOf("debug", "отладк", "налагод", "налад").any { it in l }
             return wifi && dbg
+        }
+
+        /**
+         * 7.0: после обновления APK Android выключает службу спецвозможностей программы, и мастер просил включить её заново. Если у программы есть право
+         * WRITE_SECURE_SETTINGS (выдаётся по ADB) и служба раньше была включена (флаг acc_wanted), программа включает её сама.
+         */
+        fun ensureEnabled(ctx: Context): Boolean {
+            val sp = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+            if (isEnabled(ctx)) { if (!sp.getBoolean("acc_wanted", false)) sp.edit().putBoolean("acc_wanted", true).apply(); return true }
+            if (!sp.getBoolean("acc_wanted", false)) return false
+            if (ctx.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+            return runCatching {
+                val cr = ctx.contentResolver
+                val me = ComponentName(ctx, AutoPairService::class.java).flattenToString()
+                val cur = Settings.Secure.getString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+                Settings.Secure.putString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, if (cur.isBlank()) me else "$cur:$me")
+                Settings.Secure.putInt(cr, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+                Log.i("ADBphon", "служба спецвозможностей включена программой сама")
+                true
+            }.getOrDefault(false)
         }
 
         fun isEnabled(ctx: Context): Boolean {

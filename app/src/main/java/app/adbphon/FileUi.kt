@@ -126,7 +126,8 @@ val FOLDER_COLOR_NAMES = listOf(R.string.fc_yellow, R.string.fc_orange, R.string
 
 /** Нарисованная папка: градиент, лёгкая тень, закладка; открытая показывает отогнутую переднюю стенку. */
 @Composable
-fun FolderIcon(colorIdx: Int, open: Boolean, size: Dp, modifier: Modifier = Modifier) {
+fun FolderIcon(colorIdx: Int, open: Boolean, size: Dp, modifier: Modifier = Modifier, customKey: String? = null) {
+    if (customKey != null) { val cs = CustomIcons.spec(customKey); if (cs != null) { CustomIconView(cs, size, modifier); return } }
     val (top, bot) = FOLDER_COLORS[colorIdx.coerceIn(0, FOLDER_COLORS.size - 1)]
     Canvas(modifier.size(size)) {
         val w = this.size.width; val h = this.size.height
@@ -250,6 +251,8 @@ fun fmDate(s: String): String = Regex("""^(\d{4})-(\d{2})-(\d{2})(.*)$""").repla
  */
 @Composable
 fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifier: Modifier = Modifier) {
+    val customSpec = CustomIcons.specFor(ext, localPath, fileCat(ext))
+    if (customSpec != null) { CustomIconView(customSpec, size, modifier); return }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val cat = fileCat(ext)
     // запомненный выбор программы для расширения: значок файла = значок этой программы (у фото и видео бейджем в углу поверх миниатюры)
@@ -361,11 +364,21 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.withTransformRot(de
 
 /** Диалог выбора цвета папки: 12 цветов; «по умолчанию» возвращает цвет, выбранный в настройках. */
 @Composable
-fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: (Int?) -> Unit, onClose: () -> Unit) {
+fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: (Int?) -> Unit, onClose: () -> Unit, iconKey: String? = null) {
+    val ctxFc = androidx.compose.ui.platform.LocalContext.current
+    var iconPick by remember { mutableStateOf(false) }
+    if (iconPick && iconKey != null) CustomIconPicker(title, iconKey) { iconPick = false }
     LAlertDialog(
         onDismissRequest = onClose, title = { Text(androidx.compose.ui.res.stringResource(R.string.fc_title) + ": " + title, fontSize = 16.sp, maxLines = 1) },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (iconKey != null) {
+                    Row(Modifier.fillMaxWidth().clickable { iconPick = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        val cs = CustomIcons.spec(iconKey)
+                        if (cs != null) CustomIconView(cs, 36.dp) else FolderIcon(current ?: UiPrefs.folderDefault, false, 36.dp)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ic_choose), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                    }
+                }
                 FOLDER_COLORS.chunked(4).forEachIndexed { r, row ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         row.forEachIndexed { c, _ ->
@@ -379,7 +392,7 @@ fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: 
                 }
             }
         },
-        confirmButton = { if (showReset) androidx.compose.material3.TextButton({ onPick(null) }) { Text(androidx.compose.ui.res.stringResource(R.string.fc_reset)) } else androidx.compose.material3.TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
+        confirmButton = { if (showReset) androidx.compose.material3.TextButton({ if (iconKey != null) CustomIcons.set(ctxFc, iconKey, null); onPick(null) }) { Text(androidx.compose.ui.res.stringResource(R.string.fc_reset)) } else androidx.compose.material3.TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
         dismissButton = { if (showReset) androidx.compose.material3.TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
     )
 }
@@ -426,6 +439,12 @@ fun FilesLookSection() {
         FolderIcon(UiPrefs.folderDefault, false, 32.dp)
         Text(androidx.compose.ui.res.stringResource(R.string.set_folder_color), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
+    var typeIcons by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().clickable { typeIcons = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(Icons.Filled.Image, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(androidx.compose.ui.res.stringResource(R.string.ic_types), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+    }
+    if (typeIcons) FileTypeIconsDialog { typeIcons = false }
     if (colorDlg) FolderColorDialog(androidx.compose.ui.res.stringResource(R.string.set_folder_color), UiPrefs.folderDefault, false, { i -> if (i != null) UiPrefs.setFolderDefault(ctx, i); colorDlg = false }, { colorDlg = false })
 }
 

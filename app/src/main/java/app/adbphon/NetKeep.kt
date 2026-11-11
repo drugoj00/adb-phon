@@ -223,7 +223,7 @@ class KeepFs(private val make: () -> RemoteFs) : RemoteFs {
     override suspend fun ping(path: String) = call(path, what = "проверка") { it.ping(path) }
 
     /** Подключение при открытии источника (SFTP и FTP проверяют вход сразу). */
-    suspend fun connect() = call(null, what = "подключение") { f -> when (f) { is SftpFs -> f.connect(); is FtpFs -> f.connect(); else -> {} } }
+    suspend fun connect() = call(null, big = inner is PcFs, what = "подключение") { f -> when (f) { is SftpFs -> f.connect(); is FtpFs -> f.connect(); is PcFs -> f.connect(); else -> {} } }   // ПК: первое подключение ждёт ответа владельца ПК (до ~60 с), без общего ограничения 8 с
 
     /** Лёгкий запрос по расписанию [NetKeep]: держит сессию живой и обновляет значок. */
     suspend fun keepalive() {

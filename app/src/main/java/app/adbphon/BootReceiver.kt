@@ -10,8 +10,14 @@ import android.util.Log
 /** После загрузки заново включает закреплённые службы спецвозможностей (Android 14 часто выключает их при перезапуске). */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ServerBoot.ACTION_RETRY) { ServerBoot.go(context, intent.getIntExtra("n", 1), goAsync()); return }
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        // 7.0: помощник и сервер Shizuku: после загрузки и после обновления программы (при обновлении APK сервер Shizuku сам завершается)
+        ServerBoot.go(context, 0, goAsync())
+        AutoPairService.ensureEnabled(context)    // после обновления APK Android выключает службу: включаем сами, если есть право и она была включена
         PadKeeper.start(context)    // фоновое подключение геймпада к последнему хосту
+        VpnSession.onBoot(context)    // сеанс связи по интернету остался записанным: вернуть чужой VPN как был
+        CallListen.start(context)    // 7.0: приём видеозвонков в фоне (служба переднего плана, если не выключена)
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) apply(context)
     }
 

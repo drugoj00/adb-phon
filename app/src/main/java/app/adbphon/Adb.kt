@@ -1,5 +1,8 @@
 package app.adbphon
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +21,11 @@ object Adb {
         appCtx = context.applicationContext
         mgr = AdbConn(context.applicationContext)
         autoOff = appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("auto_off", false)   // отключение помнится и после перезапуска
+        AdbServer.init(appCtx)
+        srvScope.launch { AdbServer.ping() }   // сервер мог остаться с прошлого запуска (7.0)
     }
+
+    private val srvScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
     /** Команды этого телефона идут через root (Magisk), а не через ADB: компьютер и отладка по Wi-Fi не нужны. */
     @Volatile private var rootOn = false
@@ -47,7 +54,10 @@ object Adb {
     /** Идёт подключение или отключение: библиотека держит блокировку, и опрос состояния из интерфейса вешал его на десятки секунд (приставка, 08.11.2026). */
     @Volatile private var busyConn = 0
     @Volatile private var lastConn = false
-    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected.also { lastConn = it }))
+    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected.also { lastConn = it })) || (currentHost.isEmpty() && AdbServer.up)
+
+    /** Команды этого телефона идут через «ADB-phon Server»: ни root, ни ADB нет, зато сервер жив (7.0). */
+    private fun useServer(): Boolean = !rootOn && currentHost.isEmpty() && AdbServer.up && !(::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected))
     private inline fun <T> guarded(block: () -> T): T { busyConn++; try { return block() } finally { busyConn-- } }
 
     /**
@@ -133,6 +143,7 @@ object Adb {
             }
             if (!done) throw last ?: IllegalStateException("connect failed")
             currentHost = if (host == "127.0.0.1") "" else host
+            if (currentHost.isEmpty() && AdbServer.auto && !rootOn) srvScope.launch { kotlinx.coroutines.delay(4000); if (!rootOn) serverStart(appCtx) }   // пауза: на устройстве с root режим root включается чуть позже и помощник не нужен
         }.onFailure { AppLog.e("ADBphon", "connect error", it) }
     }
 
@@ -155,7 +166,67 @@ object Adb {
             lastConn = ok
             if (!ok) error("connect failed")
             currentHost = if (host == "127.0.0.1") "" else host
+            if (currentHost.isEmpty() && AdbServer.auto && !rootOn) srvScope.launch { kotlinx.coroutines.delay(4000); if (!rootOn) serverStart(context.applicationContext) }
         }.onFailure { AppLog.e("ADBphon", "wireless connect error", it) }
+    }
+
+    /**
+     * Запускает «ADB-phon Server» на этом телефоне через ADB (нужна живая связь ADB). После этого приложение работает и без отладки по Wi-Fi.
+     * Если сервер уже отвечает, ничего не делает.
+     */
+    private val srvMutex = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun serverStart(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
+        srvMutex.withLock { runCatching {
+            if (AdbServer.ping() || rootOn) return@runCatching   // с root помощник не нужен: команды и так идут от root
+            if (rootOn || currentHost.isNotEmpty() || !(::mgr.isInitialized && mgr.isConnected)) error("нужна связь ADB с этим телефоном")
+            val bytes = context.assets.open("server.jar").use { it.readBytes() }
+            runCatching { shell("pkill -f 'app_process / Server' 2>/dev/null; true") }   // сервер со старым токеном (данные приложения очищались)
+            val up = mgr.openStream("exec:cat > /data/local/tmp/adbphon-server.jar")
+            up.openOutputStream().apply { write(bytes); flush() }
+            runCatching { up.close() }
+            kotlinx.coroutines.delay(500)
+            // Android 9 (приставки): служба «exec:» может не создать файл. Проверяем размер и при расхождении кладём файл кусками через base64 в оболочке
+            val have = runCatching { shell("wc -c < /data/local/tmp/adbphon-server.jar 2>/dev/null", 8_000L, fast = true).trim().toLongOrNull() }.getOrNull()
+            if (have != bytes.size.toLong()) {
+                AppLog.w("ADBphon", "сервер: файл через exec не лёг (${have ?: -1} из ${bytes.size}), кладу кусками")
+                shell("rm -f /data/local/tmp/adbphon-server.jar; true")
+                bytes.toList().chunked(1200).forEach { part ->
+                    val b64 = android.util.Base64.encodeToString(part.toByteArray(), android.util.Base64.NO_WRAP)
+                    shell("echo '" + b64 + "' | base64 -d >> /data/local/tmp/adbphon-server.jar")
+                }
+                val after = runCatching { shell("wc -c < /data/local/tmp/adbphon-server.jar 2>/dev/null", 8_000L, fast = true).trim().toLongOrNull() }.getOrNull()
+                if (after != bytes.size.toLong()) error("не удалось записать файл помощника (${after ?: -1} из ${bytes.size})")
+            }
+            shell("CLASSPATH=/data/local/tmp/adbphon-server.jar nohup setsid app_process / Server " + AdbServer.PORT + " " + AdbServer.token() + " >/dev/null 2>&1 </dev/null & sleep 2", 12000)   // пауза: пока shell жив, дочерний процесс успевает отделиться (setsid), иначе его убьёт закрытие потока ADB
+            repeat(24) { if (AdbServer.ping()) { AppLog.i("ADBphon", "сервер запущен"); return@runCatching }; kotlinx.coroutines.delay(250) }
+            error("сервер не ответил")
+        }.recoverCatching { if (rootOn) Unit else throw it }.onFailure { AppLog.e("ADBphon", "serverStart", it) } }
+    }
+
+    // ---- живой сеанс оболочки для «Консоли» (7.0) ----
+    /** Настоящая связь ADB (libadb) с этим телефоном или с другим устройством по сети; помощник и root не считаются. */
+    val hasLink: Boolean get() = ::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected)
+
+    class ShellSession(private val s: io.github.muntashirakon.adb.AdbStream) {
+        private val out = s.openOutputStream()
+        fun write(b: ByteArray) { out.write(b); out.flush() }
+        fun close() { runCatching { s.close() } }
+    }
+
+    /** Открывает интерактивную оболочку («shell:» без команды: с терминалом, работают Ctrl+C и Tab). Вывод приходит кусками в UTF-8. */
+    fun openShell(onData: (String) -> Unit, onEnd: () -> Unit): ShellSession? {
+        if (!hasLink) return null
+        val st = runCatching { mgr.openStream("shell:") }.getOrNull() ?: return null
+        val ses = ShellSession(st)
+        Thread {
+            try {
+                val r = java.io.InputStreamReader(st.openInputStream(), Charsets.UTF_8); val cb = CharArray(2048)
+                while (true) { val n = r.read(cb); if (n < 0) break; onData(String(cb, 0, n)) }
+            } catch (_: Throwable) { }
+            onEnd()
+        }.apply { isDaemon = true }.start()
+        return ses
     }
 
     suspend fun disconnect() = withContext(Dispatchers.IO) { if (rootOn) rootSuppressed = true; rootOn = false; currentHost = ""; lastConn = false; runCatching { guarded { mgr.disconnect() } } }
@@ -170,7 +241,7 @@ object Adb {
     suspend fun shell(cmd: String, timeoutMs: Long = 25_000, fast: Boolean = false): String = withContext(Dispatchers.IO) {
         AppLog.i("ADBphon", "shell> ${cmd.take(300)}")
         val t0 = System.currentTimeMillis()
-        val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else if (fast) readAll(mgr.openStream("shell:$cmd; echo $END_MARK"), timeoutMs, cmd, END_MARK) else readAll(mgr.openStream("shell:$cmd"), timeoutMs, cmd) }
+        val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else if (useServer()) AdbServer.run(cmd, null, 0, timeoutMs) else if (fast) readAll(mgr.openStream(AdbText.safe("shell:$cmd; echo $END_MARK")), timeoutMs, cmd, END_MARK) else readAll(mgr.openStream(AdbText.safe("shell:$cmd")), timeoutMs, cmd) }
         AppLog.i("ADBphon", "shell< ${System.currentTimeMillis() - t0} мс, ${res.getOrNull()?.length ?: -1} симв: ${(res.getOrNull() ?: res.exceptionOrNull()?.message).orEmpty().take(300).replace("\n", " ⏎ ")}")
         res.getOrThrow()
     }
@@ -230,7 +301,8 @@ object Adb {
                 return@withContext rootRun("cmd package install ${withUser(flags)} -S ${tmp.length()} < " + q(tmp.absolutePath), null, 600_000)
             } finally { tmp.delete() }
         }
-        val s = mgr.openStream("exec:cmd package install ${withUser(flags)} -S $size")
+        if (useServer()) return@withContext AdbServer.run("cmd package install ${withUser(flags)} -S $size", input, size, 120_000)
+        val s = mgr.openStream(AdbText.safe("exec:cmd package install ${withUser(flags)} -S $size"))
         val out = s.openOutputStream()
         input.copyTo(out)
         out.flush()
@@ -250,7 +322,8 @@ object Adb {
             p.waitFor()
             return@withContext
         }
-        val s = mgr.openStream("exec:cat '" + path.replace("'", "'\\''") + "'")
+        if (useServer()) { AdbServer.pullTo("cat " + q(path), dest); return@withContext }
+        val s = mgr.openStream(AdbText.safe("exec:cat '" + path.replace("'", "'\\''") + "'"))
         try {
             s.openInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
         } finally { runCatching { s.close() } }
@@ -265,7 +338,8 @@ object Adb {
             if (m != null) runCatching { rootRun("chown -R \$(stat -c %u:%g " + q(m.groupValues[1]) + ") " + q(m.groupValues[1] + "/" + m.groupValues[2]), null, 60_000) }
             return@withContext Unit
         }
-        val s = mgr.openStream("exec:head -c $size > " + q(dest))
+        if (useServer()) { AdbServer.run("head -c $size > " + q(dest), input, size, 1_800_000); return@withContext Unit }
+        val s = mgr.openStream(AdbText.safe("exec:head -c $size > " + q(dest)))
         val out = s.openOutputStream()
         input.copyTo(out)
         out.flush()
@@ -282,7 +356,7 @@ object Adb {
         for (f in files) {
             val res = withContext(Dispatchers.IO) {
                 if (rootOn) return@withContext f.inputStream().use { rootRun("cmd package install-write -S ${f.length()} $id ${q(f.name)} - < " + q(f.absolutePath), null, 600_000) }
-                val s = mgr.openStream("exec:cmd package install-write -S ${f.length()} $id ${f.name} -")
+                val s = mgr.openStream(AdbText.safe("exec:cmd package install-write -S ${f.length()} $id ${f.name} -"))
                 val out = s.openOutputStream()
                 f.inputStream().use { it.copyTo(out) }
                 out.flush()

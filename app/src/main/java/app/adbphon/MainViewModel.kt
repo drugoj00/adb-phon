@@ -325,7 +325,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         keepScreenOn = prefs.getBoolean("keep_on", false)
         exitOnBack = prefs.getBoolean("exit_back", true)
         ramSound = prefs.getBoolean("ram_sound", true)
-        autoUpdate = prefs.getBoolean("auto_update", false)
+        autoUpdate = prefs.getBoolean("auto_update", true)   // 7.0: по умолчанию включено; окно «Вышла новая версия» показывается один раз для каждой версии
         viewModelScope.launch {
             kotlinx.coroutines.delay(8000)
             if (autoUpdate && System.currentTimeMillis() - prefs.getLong("upd_last", 0L) > 24 * 3600_000L) checkUpdate(false)
@@ -670,6 +670,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- обновление самой программы (GitHub, drugoj00/adb-phon)
     var updateRelease by mutableStateOf<Updater.Release?>(null)
+    /** Окно закрыто без обновления: эта версия больше не предлагается само (кнопка «Проверить обновления» покажет её снова). */
+    fun dismissUpdate() { updateRelease?.let { prefs.edit().putString("upd_dismissed", it.tag).apply() }; updateRelease = null }
 
     fun changeAutoUpdate(on: Boolean) { autoUpdate = on; prefs.edit().putBoolean("auto_update", on).apply() }
 
@@ -688,11 +690,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun checkUpdate(manual: Boolean) {
         viewModelScope.launch {
             if (manual) message = t(R.string.upd_checking)
-            val res = runCatching { withContext(Dispatchers.IO) { Updater.fetch() } }
+            // тестовый ход (BackupTestActivity cmd fakeupd): подмена найденного выпуска, в обычной работе не используется
+            val fake = prefs.getString("test_fake_release", null)?.takeIf { it.isNotBlank() }
+            val res = runCatching { withContext(Dispatchers.IO) { if (fake != null) listOf(Updater.Release(fake, "ADB-phon $fake", "2026-11-10", "http://127.0.0.1:8099/ADB-phon-fake.apk", 1000L)) else Updater.fetch() } }
             prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
             res.onSuccess { list ->
                 val best = list.maxWithOrNull { a, b -> cmpVer(a.tag, b.tag) }
-                if (best != null && cmpVer(best.tag, appVersion) > 0) updateRelease = best
+                if (best != null && cmpVer(best.tag, appVersion) > 0) { if (manual || prefs.getString("upd_dismissed", "") != best.tag) updateRelease = best }
                 else if (manual) message = t(R.string.upd_none)
             }.onFailure { AppLog.e("ADBphon", "update check", it); if (manual) message = t(R.string.upd_failed) }
         }

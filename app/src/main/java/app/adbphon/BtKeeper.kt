@@ -67,6 +67,7 @@ object PadKeeper {
     fun start(ctx: Context) {
         val app = ctx.applicationContext
         if (!enabled(app) || paused(app)) return
+        if (!BtHid.anyHidOk(app)) { stopForExit(app); return }    // геймпад ещё ни разу не подключался: службы и уведомления в шторке нет
         if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(app, android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         runCatching { ContextCompat.startForegroundService(app, Intent(app, PadKeeperService::class.java)) }
             .onFailure { AppLog.e("ADBphon", "keeper start", it) }

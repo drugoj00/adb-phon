@@ -441,6 +441,8 @@ data class NetConn(val kind: String, val host: String, val port: Int, val user: 
         "ftps" -> FtpFs(host, if (port > 0) port else 21, user, pass, true)
         "dav" -> DavFs(host, user, pass)
         "cloud" -> CloudFs(host, user)
+        "andr" -> AndroidFs(host, if (port > 0) port else 5555, user)   // Android-устройство по ADB (10.11.2026); в user — запасной адрес
+        "pc" -> PcFs(host, if (port > 0) port else 47322, user.ifBlank { "Android" }, pass)   // Windows-ПК по Tailscale (10.11.2026)
         else -> SmbFs(host, user, pass, version = smb)
     }
 }
