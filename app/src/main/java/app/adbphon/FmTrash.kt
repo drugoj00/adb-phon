@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -359,19 +360,25 @@ fun FilesDeleteSection() {
     val off = FmDel.confirm == FmDel.OFF
     Text(stringResource(if (off) R.string.ds_off_warn else R.string.ds_hint), fontSize = 12.sp, color = if (off) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
     SettingSwitch(FmDel.trashOn, { FmDel.setTrashOn(ctx, it) }, stringResource(R.string.ft_switch), stringResource(R.string.ft_switch_hint))
-    if (FmDel.trashOn) {
-        Text(stringResource(R.string.ft_keep), fontWeight = fw)
+    // 7.5: параметры корзины остаются на месте и при выключенной корзине (приглушены, не работают), чтобы страница не прыгала и нажатие по соседнему
+    // пункту не попадало на «Окно терминала» и «Резервную копию», сдвинувшиеся вверх
+    val tOn = FmDel.trashOn
+    val tA = if (tOn) 1f else .38f
+    androidx.compose.foundation.layout.Box(Modifier.alpha(tA)) { Text(stringResource(R.string.ft_keep), fontWeight = fw) }
+    androidx.compose.foundation.layout.Box(Modifier.alpha(tA)) {
         EqChoices(listOf(
-            EqChoice(stringResource(R.string.ft_d7), FmDel.keepDays == 7) { FmDel.setKeepDays(ctx, 7) },
-            EqChoice(stringResource(R.string.ft_d30), FmDel.keepDays == 30) { FmDel.setKeepDays(ctx, 30) },
-            EqChoice(stringResource(R.string.ft_d90), FmDel.keepDays == 90) { FmDel.setKeepDays(ctx, 90) },
-            EqChoice(stringResource(R.string.ft_inf), FmDel.keepDays == 0) { FmDel.setKeepDays(ctx, 0) },
+            EqChoice(stringResource(R.string.ft_d7), FmDel.keepDays == 7) { if (tOn) FmDel.setKeepDays(ctx, 7) },
+            EqChoice(stringResource(R.string.ft_d30), FmDel.keepDays == 30) { if (tOn) FmDel.setKeepDays(ctx, 30) },
+            EqChoice(stringResource(R.string.ft_d90), FmDel.keepDays == 90) { if (tOn) FmDel.setKeepDays(ctx, 90) },
+            EqChoice(stringResource(R.string.ft_inf), FmDel.keepDays == 0) { if (tOn) FmDel.setKeepDays(ctx, 0) },
         ), perRow = 2)
-        HintTitle(stringResource(R.string.ft_max), stringResource(R.string.ft_space_hint), titleWeight = fw)
+    }
+    androidx.compose.foundation.layout.Box(Modifier.alpha(tA)) { HintTitle(stringResource(R.string.ft_max), stringResource(R.string.ft_space_hint), titleWeight = fw) }
+    androidx.compose.foundation.layout.Box(Modifier.alpha(tA)) {
         EqChoices(listOf(
-            EqChoice(stringResource(R.string.ft_inf), FmDel.maxMb == 0) { FmDel.setMaxMb(ctx, 0) },
-            EqChoice(stringResource(R.string.ft_m500), FmDel.maxMb == 500) { FmDel.setMaxMb(ctx, 500) },
-            EqChoice(stringResource(R.string.ft_m2g), FmDel.maxMb == 2048) { FmDel.setMaxMb(ctx, 2048) },
+            EqChoice(stringResource(R.string.ft_inf), FmDel.maxMb == 0) { if (tOn) FmDel.setMaxMb(ctx, 0) },
+            EqChoice(stringResource(R.string.ft_m500), FmDel.maxMb == 500) { if (tOn) FmDel.setMaxMb(ctx, 500) },
+            EqChoice(stringResource(R.string.ft_m2g), FmDel.maxMb == 2048) { if (tOn) FmDel.setMaxMb(ctx, 2048) },
         ), perRow = 3)
     }
 }

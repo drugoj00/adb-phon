@@ -741,6 +741,7 @@ private fun AirControls(vm: MainViewModel, cursor: androidx.compose.runtime.Muta
 
 @Composable
 private fun TouchPad(vm: MainViewModel, mouse: Boolean, cursor: androidx.compose.runtime.MutableState<Offset>, arrows: Boolean = false) {
+    TapGuardOff()
     var w by remember { mutableStateOf(1) }
     var h by remember { mutableStateOf(1) }
     var last by remember { mutableStateOf<Offset?>(null) }
@@ -1021,6 +1022,7 @@ fun SettingsScreen(vm: MainViewModel) {
             EqChoice(stringResource(R.string.marq_on), Marq.mode != 2) { Marq.setMode(mctx, 1) },
             EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(mctx, 2) },
         ))
+        SettingSwitch(TapGuard.on, { TapGuard.set(mctx, it) }, stringResource(R.string.tg_title), stringResource(R.string.tg_hint))
         Text(stringResource(R.string.sc_font), fontWeight = FontWeight.Medium)
         val scNames = listOf(R.string.sc_small, R.string.sc_normal, R.string.sc_large, R.string.sc_xlarge)
         val scCtx = LocalContext.current

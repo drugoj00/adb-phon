@@ -264,6 +264,7 @@ private fun BtPairing(ctx: Context, land: Boolean = false, pad: Boolean = false,
 
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.BtControls(host: String, land: Boolean = false) {
+    TapGuardOff()
     var text by remember { mutableStateOf("") }
     val padCtx = androidx.compose.ui.platform.LocalContext.current
     val hostRow: @Composable () -> Unit = {

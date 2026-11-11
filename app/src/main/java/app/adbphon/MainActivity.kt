@@ -136,8 +136,15 @@ const val TELEGRAM_URL = "https://t.me/PhoneInWindowSound"
 class MainActivity : ComponentActivity() {
     /** 7.5: если пользуются стрелками/ОК пульта, программа запоминает это и после перезапуска возвращает фокус пульта на выбранную строку дерева «Файлов». */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (TapGuard.key(event)) return true
         if (event.action == android.view.KeyEvent.ACTION_DOWN && FocusRestore.isDpad(event.keyCode)) FocusRestore.markKeys(this)
         return super.dispatchKeyEvent(event)
+    }
+
+    /** 7.5: защита от двойного нажатия (два касания в одну точку подряд от мыши/пульта приставки), см. TapGuard. */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (TapGuard.touch(ev)) return true
+        return super.dispatchTouchEvent(ev)
     }
 
     /** Закрытие приложения: Bluetooth выключается, если его включили мы (раздел «Мышь ПК»). */
@@ -156,6 +163,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TapGuard.init(applicationContext)
         PadKeeper.start(this)
         AutoPairService.ensureEnabled(this)
         AppBackup.autoIfDue(this)
