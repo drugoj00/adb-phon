@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="call_title">Video calls</string>
-    <string name="call_listen">Receive calls in the background (a small icon stays in the notification shade)</string>
+    <string name="call_listen">Receive calls in the background</string>
     <string name="call_myname">Name shown in calls</string>
     <string name="call_empty">No people yet. Add a person by their program code.</string>
     <string name="call_btn">Call</string>
@@ -13,7 +13,7 @@
     <string name="call_add_save">Add</string>
     <string name="call_cancel">Cancel</string>
     <string name="call_remove">Remove</string>
-    <string name="call_hint">The code is in the other program: on Windows in “Connection over the internet”, on Android in this section. The call goes directly between the devices, no browser needed.</string>
+    <string name="call_hint">A small icon stays in the notification shade. The code is in the other program: on Windows in “Connection over the internet”, on Android in this section. The call goes directly between the devices, no browser needed.</string>
     <string name="call_in_title">Calling</string>
     <string name="call_in_hint">Camera and microphone turn on only after “Answer”.</string>
     <string name="call_answer">Answer</string>

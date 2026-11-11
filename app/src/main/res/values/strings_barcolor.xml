@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bar_color">Bar color</string>
+    <string name="bar_color_theme">Like the theme</string>
+    <string name="bar_color_custom">Custom</string>
+    <string name="bar_color_hint">The color of the filled part on all bars at once: memory, card, root, clouds, progress of work and installation. “Like the theme” keeps the theme color.</string>
+</resources>

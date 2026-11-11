@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sb_reorder_hint">Reorder: tap another button to swap places. On a remote: arrows move the button, OK confirms, Back cancels.</string>
+    <string name="sb_reorder_note">Long press a side panel button to start reordering: then tap another button to swap them. On a remote: hold OK on a button, move it with the arrow keys, OK confirms, Back cancels.</string>
+</resources>

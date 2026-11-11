@@ -1757,4 +1757,5 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="acon_clear">Clear</string>
     <string name="acon_hint">Command</string>
     <string name="adbd_err_read">Could not read the file %1$s from the device</string>
+    <string name="asc_off">Device screen is off</string>
 </resources>
