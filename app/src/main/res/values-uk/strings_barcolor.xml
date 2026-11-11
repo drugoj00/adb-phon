@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bar_color">Колір смужок</string>
+    <string name="bar_color_theme">Як у теми</string>
+    <string name="bar_color_custom">Свій</string>
+    <string name="bar_color_hint">Колір зайнятої частини одразу на всіх смужках: памʼять, картка, root, хмари, хід роботи та встановлення. «Як у теми» залишає колір теми.</string>
+</resources>

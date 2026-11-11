@@ -1745,4 +1745,5 @@
     <string name="acon_clear">Очистити</string>
     <string name="acon_hint">Команда</string>
     <string name="adbd_err_read">Не вдалося прочитати файл %1$s на пристрої</string>
+    <string name="asc_off">Екран пристрою вимкнено</string>
 </resources>

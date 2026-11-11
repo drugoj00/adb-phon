@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="call_title">Відеодзвінки</string>
-    <string name="call_listen">Приймати дзвінки у фоні (у шторці лишається маленький значок)</string>
+    <string name="call_listen">Приймати дзвінки у фоні</string>
     <string name="call_myname">Імʼя в дзвінках</string>
     <string name="call_empty">Людей поки немає. Додай людину за кодом її програми.</string>
     <string name="call_btn">Подзвонити</string>
@@ -13,7 +13,7 @@
     <string name="call_add_save">Додати</string>
     <string name="call_cancel">Скасувати</string>
     <string name="call_remove">Прибрати</string>
-    <string name="call_hint">Код є в іншій програмі: на Windows у «Звʼязку через інтернет», на Android у цьому розділі. Дзвінок іде напряму між пристроями, браузер не потрібен.</string>
+    <string name="call_hint">У шторці лишається маленький значок. Код є в іншій програмі: на Windows у «Звʼязку через інтернет», на Android у цьому розділі. Дзвінок іде напряму між пристроями, браузер не потрібен.</string>
     <string name="call_in_title">Дзвонить</string>
     <string name="call_in_hint">Камера й мікрофон увімкнуться, лише коли натиснеш «Відповісти».</string>
     <string name="call_answer">Відповісти</string>
