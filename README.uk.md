@@ -18,7 +18,7 @@ ADB-phon підключається до ADB цього ж телефона (а�
 
 **Версія 7.5.** [ADB-phon-7.5.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `0f4676c3f0df9387c80bf24d7a6ce2833cf4b5abcffa790989d692efd321d978`
+SHA-256: `4793bf0d9c543b0c279e06c725391269fb4f7883c7060a03fd22ff95dffd989e`
 
 ## Що нового в 7.5
 
