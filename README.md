@@ -24,7 +24,7 @@ SHA-256: `cc8b827d9ddf6da042d2a7bcbfeb9ea41ce8da4c9f6d79106883a8fb9a28ac41`
 - Dynamic colors from the wallpaper and a choice of the main color
 - Font size and element size
 - Full screen mode
-- Custom icons: folders, files, drives and places, apps, tabs, side panel buttons; the picture is chosen in a built-in browser or in any file manager
+- Custom icons: folders, files, drives and places, apps, tabs, side panel buttons
 - Side panel buttons in Files: hide and restore
 - List and tree on the Files root screen, folder colors
 - Console: live terminal, history, Ctrl+C, Tab, My commands
