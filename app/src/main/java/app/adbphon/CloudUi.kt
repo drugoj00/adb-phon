@@ -172,7 +172,7 @@ fun MegaAddDlg(close: () -> Unit) {
         onDismissRequest = { pass = ""; if (!MegaAuth.busy) MegaAuth.reset(); close() },
         title = { Row(verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_cl_mega), null, Modifier.size(28.dp))
-            Text(stringResource(R.string.cl_mega), Modifier.padding(start = 10.dp))
+            HintTitle(stringResource(R.string.cl_mega), stringResource(R.string.cl_mega_note), Modifier.padding(start = 10.dp))
         } },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -185,7 +185,6 @@ fun MegaAddDlg(close: () -> Unit) {
                         Text(stringResource(R.string.cl_mega_checking), fontSize = 14.sp)
                     }
                     if (MegaAuth.error.isNotEmpty()) Text(MegaAuth.error, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-                    Text(stringResource(R.string.cl_mega_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                 }
             }
         },

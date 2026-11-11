@@ -235,10 +235,9 @@ fun WifiDebugCard(vm: MainViewModel) {
     androidx.compose.material3.Card(Modifier.fillMaxWidth().clickable { Pairing.openWifiPage(ctx) }) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(stringResource(R.string.wd_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.weight(1f))
+                HintTitle(stringResource(R.string.wd_title), stringResource(R.string.wd_hint_direct), Modifier.weight(1f), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 androidx.compose.material3.Switch(on, { v -> if (!busy) { busy = true; scope.launch { WifiDebug.set(ctx, v); on = WifiDebug.isOn(ctx); busy = false } } })
             }
-            Text(stringResource(R.string.wd_hint_direct), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
         }
     }
 }

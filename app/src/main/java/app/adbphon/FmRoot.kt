@@ -343,7 +343,7 @@ private class RR(
     val vol: FmVol? = null, val net: NetConn? = null, val level: Int = 0, val expandKey: String? = null, val header: Int = 0, val act: () -> Unit = {},
     val treeId: String? = null, val busy: Boolean = false, val appName: String? = null, val err: Boolean = false, val file: FmItem? = null, val side: String? = null,
     val pc: PcHost? = null, val adev: AdbDev? = null, val tnet: NetConn? = null, val titem: CloudTrash.TItem? = null, val subText: String? = null, val drive: Boolean = false, val selE: FmRootCfg.SelE? = null,
-    val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null, val wifi: Boolean = false, val tog: Boolean? = null, val lpath: String? = null,
+    val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null, val wifi: Boolean = false, val tog: Boolean? = null, val lpath: String? = null, val gname: String? = null,
 ) {
     /** Ветви дерева: для уровней 1..level true, если ниже есть ещё элемент того же уровня; lx: позиция вертикали уровня (dp). */
     var more: BooleanArray = BooleanArray(0)
@@ -429,7 +429,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 val ti = CloudTrash.tkItems[k.id]
                 val dirTxt = ti?.let { "/" + it.origPath.trim('/').substringBeforeLast('/', "") }
                 val whenTxt = ti?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
-                rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, tnet = c, titem = ti,
+                rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, tnet = c, titem = ti, gname = if (k.isDir) null else k.name,
                     side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(dirTxt, whenTxt).joinToString("  ·  "),
                     selE = ti?.let { FmRootCfg.SelE(k.id, c, id, "", k.name, k.path, k.isDir, it) })
                 return@forEach
@@ -437,7 +437,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             if (k.id.startsWith("Ki|")) {
                 val fi = FmTrash.tk[k.id]
                 val whenTxt = fi?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
-                rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, fitem = fi,
+                rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, fitem = fi, gname = if (k.isDir) null else k.name,
                     side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(fi?.folder?.let { shortMiddle(it, 24) }, whenTxt, fi?.volLabel).joinToString("  ·  "),
                     selE = fi?.let { FmRootCfg.SelE(k.id, null, id, "", k.name, k.path, k.isDir, null, it) })
                 return@forEach
@@ -551,7 +551,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 addKids(tid, 2, c)
             }
             WifiExplorer.found.toList().forEach { devRow(it, false) }
-            if (WifiExplorer.noneFound && !WifiExplorer.scanning && WifiExplorer.found.isEmpty()) rows += RR("wifi:none", stringResource(R.string.wf_none), Icons.Filled.Search, Color(0xFF9E9E9E), level = 1, subText = stringResource(R.string.wf_none_hint), act = { WifiExplorer.scan(ctx) })
+            if (WifiExplorer.noneFound && !WifiExplorer.scanning && WifiExplorer.found.isEmpty()) rows += RR("wifi:none", stringResource(R.string.wf_none), Icons.Filled.Search, Color(0xFF9E9E9E), level = 1, act = { WifiExplorer.scan(ctx) })
             rows += RR("wifi:srv", stringResource(R.string.wf_server_row), Icons.Filled.Wifi, Color(0xFF29B6F6), level = 1, tog = WifiShare.running, subText = if (WifiShare.running) srvOn else srvOff, act = { WifiExplorer.toggleServer(ctx) })
             wifiSaved.forEach { devRow(it, true) }
             rows += RR("wifi+", stringResource(R.string.wf_add), Icons.Filled.Add, prim, level = 1, act = { WifiExplorer.scan(ctx) })
@@ -675,11 +675,13 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             (8 + TREE_IND * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 10)).toFloat()
         }
     }
+    val rootCtx = LocalContext.current
     Column(modifier.then(Modifier.fillMaxWidth()).onPreviewKeyEvent { e ->
+        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FocusRestore.isDpad(e.nativeKeyEvent.keyCode)) FocusRestore.markKeys(rootCtx)
         // пульт: «Меню» или «Info» при отмеченном переводит фокус на нижнюю панель значков
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FmRootCfg.sel.isNotEmpty() && (e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU || e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_INFO)) { runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess } else false
     }) {
-        val rootState = rememberSavedLazyList("files.root." + p.id)
+        val rootState = rememberSavedTreeList("files.root." + p.id, rows.map { it.key }, p.rootSel)
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxWidth().fillMaxHeight().verticalScrollbar(rootState)
             // пульт: «вниз» с последней строки списка уходит на нижнюю панель значков (если есть отмеченное), а не на нижнюю навигацию
@@ -982,6 +984,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val ctx = LocalContext.current
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
+    val rowFr = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if (focused) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
     var menu by remember { mutableStateOf(false) }
     var iconPick by remember { mutableStateOf(false) }
     // перетаскивание строк дерева корневого экрана (локальные файлы и папки): источник и цель-папка
@@ -1077,7 +1081,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     }
                 }
             } else Modifier)
-            .hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
+            .focusRequester(rowFr).hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
                 onClick = { Fm.active = p.id; p.rootSel = r.key; if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) treeToggle(r.treeId) else r.act() },
                 onLongClick = { Fm.active = p.id; p.rootSel = r.key; menu = true })
             .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
@@ -1088,11 +1092,11 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
-            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderIcon(UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null && r.lpath != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
+            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderIcon(UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
-                    else MqText(r.title, active = rowActive, wrap = true, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
+                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
                     r.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } }?.let { NetDot(it) } }
                 }
                 // у томов первым свободное место (то, что нужно видеть), затем файловая система, счётчики папок и файлов в конце
@@ -1289,8 +1293,8 @@ fun fmGb(b: Long): String {
 fun FmSpaceBar(used: Float, modifier: Modifier = Modifier) {
     val u = used.coerceIn(0f, 1f)
     val h = if (Marq.tv) 6.dp else 4.dp
-    val usedColor = if (u > .9f) Color(0xFFDC2626) else Color(0xFF0F766E)
-    Row(modifier.height(h).background(Color(0xFF5EEAD4).copy(alpha = .4f), RoundedCornerShape(1.dp))) {
+    val usedColor = if (u > .9f) Color(0xFFDC2626) else BarStyle.used()
+    Row(modifier.height(h).background(BarStyle.freeSpace(), RoundedCornerShape(1.dp)).barFrame(BarStyle.used(), RoundedCornerShape(1.dp), 0.6.dp)) {
         androidx.compose.foundation.layout.Box(Modifier.weight(u.coerceAtLeast(0.01f)).fillMaxHeight().background(usedColor, RoundedCornerShape(1.dp)))
         if (u < 1f) Spacer(Modifier.weight(1f - u))
     }

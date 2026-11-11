@@ -132,14 +132,13 @@ fun ConsolePage() {
     TabColumn("tab.console", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.sub_console), style = MaterialTheme.typography.titleSmall)
-                Text(stringResource(when {
+                HintTitle(stringResource(R.string.sub_console), stringResource(when {
                     !running && Term.wanted().isEmpty() -> R.string.tc_no_access
                     !running -> R.string.tc_stopped
                     mode == "root" -> R.string.tc_via_root
                     mode == "helper" -> R.string.tc_via_helper
                     else -> R.string.tc_via_adb
-                }), style = MaterialTheme.typography.labelMedium)
+                }) + "\n\n" + stringResource(R.string.tc_select_hint), titleStyle = MaterialTheme.typography.titleSmall, hintStyle = MaterialTheme.typography.labelMedium)
                 // окно вывода: фон и текст по настройкам, контур цвета темы; выделение своё: фон выделения = цвет текста, текст в нём = цвет фона
                 val shape = RoundedCornerShape(6.dp)
                 Box(Modifier.fillMaxWidth().height(if (wide) 420.dp else 300.dp).background(bgC, shape)
@@ -166,7 +165,7 @@ fun ConsolePage() {
                 if (selA >= 0 && selB > selA) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Button(onClick = { val part = text.substring(selA.coerceAtMost(text.length), selB.coerceAtMost(text.length)); clip.setText(AnnotatedString(part)); copiedNote = ctx.getString(R.string.tc_copied_pv, part.take(40)); selA = -1; selB = -1 }) { Text(stringResource(R.string.tc_copy_sel)) }
                     OutlinedButton(onClick = { selA = -1; selB = -1 }) { Text(stringResource(R.string.tc_unsel)) }
-                } else Text(stringResource(R.string.tc_select_hint), style = MaterialTheme.typography.bodySmall)
+                }
                 if (copiedNote.isNotEmpty()) Text(copiedNote, style = MaterialTheme.typography.labelMedium)
                 val kbOpts = KeyboardOptions(imeAction = ImeAction.Send, autoCorrect = false)
                 val kbActs = KeyboardActions(onSend = { send() })
@@ -201,8 +200,7 @@ fun ConsolePage() {
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.tc_save_title), style = MaterialTheme.typography.titleSmall)
-                Text(stringResource(R.string.tc_save_hint), style = MaterialTheme.typography.bodySmall)
+                HintTitle(stringResource(R.string.tc_save_title), stringResource(R.string.tc_save_hint), titleStyle = MaterialTheme.typography.titleSmall, hintStyle = MaterialTheme.typography.bodySmall)
                 if (toSave.isNotBlank()) Text(toSave, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                 FieldBtnRow(field = { fm ->
                     OutlinedTextField(value = saveName, onValueChange = { saveName = it }, label = { Text(stringResource(R.string.tc_my_name)) }, singleLine = true, modifier = fm)
@@ -218,7 +216,6 @@ fun ConsolePage() {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.tc_my_title), style = MaterialTheme.typography.titleSmall)
-                if (mine.isEmpty()) Text(stringResource(R.string.tc_my_empty), style = MaterialTheme.typography.bodySmall)
                 for (m in mine) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(m.name, style = MaterialTheme.typography.bodyMedium)

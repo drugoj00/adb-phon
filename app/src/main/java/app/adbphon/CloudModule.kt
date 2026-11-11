@@ -282,7 +282,7 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
                             CircularProgressIndicator(Modifier.size(20.dp).padding(end = 0.dp), strokeWidth = 2.dp)
                             Text(stringResource(when (phase) { 1 -> R.string.cm_downloading; 2 -> R.string.cm_verifying; else -> R.string.cm_installing }) + if (phase == 1 && CloudModule.progress > 0) " ${CloudModule.progress} %" else "", Modifier.padding(start = 12.dp), fontSize = 14.sp)
                         }
-                        if (phase == 1) LinearProgressIndicator(progress = { CloudModule.progress / 100f }, modifier = Modifier.padding(top = 4.dp))
+                        if (phase == 1) ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp))
                     }
                     4 -> {
                         Text(stringResource(R.string.cm_failed), fontSize = 14.sp)

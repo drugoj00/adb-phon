@@ -292,8 +292,24 @@ object Adb {
         return "$flags --user $u"
     }
 
+    /** Для полосы установки: сколько байт APK уже передано в текущем вызове установки (null — не считается). */
+    @Volatile var onInstallBytes: ((Long) -> Unit)? = null
+
+    private class CountIn(val src: InputStream, val acc: java.util.concurrent.atomic.AtomicLong, val cb: (Long) -> Unit) : InputStream() {
+        override fun read(): Int { val r = src.read(); if (r >= 0) cb(acc.incrementAndGet()); return r }
+        override fun read(b: ByteArray, off: Int, len: Int): Int { val n = src.read(b, off, len); if (n > 0) cb(acc.addAndGet(n.toLong())); return n }
+        override fun close() = src.close()
+        override fun available() = src.available()
+    }
+
+    private fun counted(i: InputStream, acc: java.util.concurrent.atomic.AtomicLong): InputStream {
+        val cb = onInstallBytes ?: return i
+        return CountIn(i, acc, cb)
+    }
+
     /** Установить APK потоком (cmd package install -S). flags: например "-r" или "-r -d" (понижение версии). */
-    suspend fun installApk(input: InputStream, size: Long, flags: String = "-r"): String = withContext(Dispatchers.IO) {
+    suspend fun installApk(input0: InputStream, size: Long, flags: String = "-r"): String = withContext(Dispatchers.IO) {
+        val input = counted(input0, java.util.concurrent.atomic.AtomicLong())
         if (rootOn) {
             val tmp = java.io.File(appCtx.cacheDir, "root-install-" + System.nanoTime() + ".apk")
             try {
@@ -353,12 +369,13 @@ object Adb {
         if (files.size == 1) return files[0].inputStream().use { installApk(it, files[0].length(), flags) }
         val made = shell("cmd package install-create ${withUser(flags)} -S ${files.sumOf { it.length() }}")
         val id = Regex("\\[(\\d+)\\]").find(made)?.groupValues?.get(1) ?: return made
+        val acc = java.util.concurrent.atomic.AtomicLong()
         for (f in files) {
             val res = withContext(Dispatchers.IO) {
-                if (rootOn) return@withContext f.inputStream().use { rootRun("cmd package install-write -S ${f.length()} $id ${q(f.name)} - < " + q(f.absolutePath), null, 600_000) }
+                if (rootOn) return@withContext f.inputStream().use { rootRun("cmd package install-write -S ${f.length()} $id ${q(f.name)} - < " + q(f.absolutePath), null, 600_000) }.also { onInstallBytes?.invoke(acc.addAndGet(f.length())) }
                 val s = mgr.openStream(AdbText.safe("exec:cmd package install-write -S ${f.length()} $id ${f.name} -"))
                 val out = s.openOutputStream()
-                f.inputStream().use { it.copyTo(out) }
+                f.inputStream().use { counted(it, acc).copyTo(out) }
                 out.flush()
                 readAll(s, 120_000, "install-write")
             }

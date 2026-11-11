@@ -112,6 +112,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -236,6 +238,10 @@ sealed class FmDlg {
     class OpenWith(val pane: FmPane, val item: FmItem) : FmDlg()
     class RootShow : FmDlg()
     class InstallFail(val message: String) : FmDlg()
+    /** Ход тихой установки: полоска, «n из N», итог. */
+    class InstallRunDlg(val run: InstRun) : FmDlg()
+    /** Подтверждение после выбора ADB-phon установщиком: версии, подпись, разрешения; «Установить» запускает установку. */
+    class InstallConfirm(val files: List<ApkFile>, val metas: Map<String, ApkMeta?>, val go: (Boolean) -> Unit) : FmDlg()
     class InstallPick(val pane: FmPane, val item: FmItem, val opts: List<InstOpt>) : FmDlg()
     class MarketPick(val pkg: String, val stores: List<Pair<String, String>>) : FmDlg()
     class ArcPass(val file: java.io.File, val arc: ArchiveFs?, val retry: () -> Unit) : FmDlg()
@@ -1290,6 +1296,20 @@ object Fm {
     fun installBundleViaAdb(p: FmPane, it: FmItem): kotlinx.coroutines.Job = scope.launch {
         val silent = Adb.isConnected && !FmIo.remote
         if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it) }) return@launch
+        if (silent) {
+            // тихая установка по ADB/root: сначала подтверждение с версиями, потом окно с полоской хода (части и OBB, «n из N»), итог внутри окна
+            val list = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(java.io.File(join(p.path, it.name)))) }.getOrDefault(emptyList()) }
+            if (list.isEmpty()) { dlg = FmDlg.InstallFail(str(R.string.inst_failed)); return@launch }
+            val metas = withContext(Dispatchers.IO) { list.associate { a -> a.name to runCatching { ApkInfo.readFor(sctx, a) }.getOrNull() } }
+            dlg = FmDlg.InstallConfirm(list, metas) { wipe ->
+                scope.launch {
+                    val run = InstRun()
+                    dlg = FmDlg.InstallRunDlg(run)
+                    installWithProgress(sctx, list, metas, run, wipe)
+                }
+            }
+            return@launch
+        }
         say(str(R.string.inst_installing))
         var last: SessionInstall.Result? = null
         val ok = withContext(Dispatchers.IO) {
@@ -1351,9 +1371,16 @@ object Fm {
     fun installViaAdb(p: FmPane, it: FmItem): kotlinx.coroutines.Job = scope.launch {
         val f = join(p.path, it.name)
         if (Adb.isConnected && !FmIo.remote && p.src == "local") {
-            say(str(R.string.inst_installing))
-            val out = runCatching { Adb.shell(pmInstallCmd(f), 180_000L) }.getOrElse { FmIo.nice(it) }
-            say(if (out.contains("Success")) str(R.string.fm_installed) else str(R.string.fm_error, out.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty()))
+            val lf = java.io.File(f)
+            val af = ApkFile(it.name, android.net.Uri.fromFile(lf), lf.length(), lf)
+            val meta = withContext(Dispatchers.IO) { ApkInfo.readFor(sctx, af) }
+            dlg = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
+                scope.launch {
+                    val run = InstRun()
+                    dlg = FmDlg.InstallRunDlg(run)
+                    installWithProgress(sctx, listOf(af), mapOf(af.name to meta), run, wipe)
+                }
+            }
             return@launch
         }
         if (!ensureInstallPermission { installViaAdb(p, it) }) return@launch
@@ -1529,6 +1556,8 @@ object FmMetrics {
 fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
     val ctx = LocalContext.current
     Fm.goConnect = onConnectTab
+    val reorderCtx = LocalContext.current
+    androidx.activity.compose.BackHandler(enabled = FmButtons.reorder != null) { FmButtons.cancelReorder(reorderCtx) }
     FmIo.remote = vm.remoteHost != null
     LaunchedEffect(Unit) { Fm.init(ctx); Fm.panes.forEach { if (it.error != null) Fm.load(it, remember = false) } }
     // 6.0: стоит старый модуль облаков (1.0), есть новый (1.1, меньше места): один раз за запуск предлагаем обновить обычной установкой (окно системы подтверждает установку)
@@ -1651,13 +1680,46 @@ object FmButtons {
     var hidden by mutableStateOf(setOf<String>())
     private var loaded = false
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
-    fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet() }
+    fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet(); loadOrder(ctx) }
     fun key(ctx: Context, label: Int): String {
         val n = runCatching { ctx.resources.getResourceEntryName(label) }.getOrDefault(label.toString())
         return if (n == "fm_mode_tree" || n == "fm_mode_list") "fm_mode" else n
     }
     fun toggle(ctx: Context, key: String) { hidden = if (key in hidden) hidden - key else hidden + key; sp(ctx).edit().putStringSet("hidden_btns", hidden.toSet()).apply() }
-    fun reset(ctx: Context) { hidden = emptySet(); sp(ctx).edit().remove("hidden_btns").apply() }
+    fun reset(ctx: Context) { hidden = emptySet(); order = emptyList(); sp(ctx).edit().remove("hidden_btns").remove("btn_order").apply() }
+
+    // ---- порядок кнопок и перестановка (7.5) ----
+    /** Сохранённый порядок ключей кнопок; кнопки, которых в нём нет, идут следом в обычном порядке. */
+    var order by mutableStateOf(listOf<String>())
+    /** Ключ кнопки, которую сейчас переставляют (режим включается долгим нажатием; на пульте удержанием ОК). */
+    var reorder by mutableStateOf<String?>(null)
+    private var snapshot: List<String> = emptyList()
+    var startedAt = 0L
+    private var lastAll: List<String> = emptyList()
+    fun loadOrder(ctx: Context) { order = sp(ctx).getString("btn_order", "")?.split(',')?.filter { it.isNotEmpty() } ?: emptyList() }
+    /** Применяет порядок к списку действий (стабильно). */
+    fun ordered(ctx: Context, all: List<FmAction>): List<FmAction> {
+        val keys = all.map { key(ctx, it.label) }
+        lastAll = keys
+        val pos = order.withIndex().associate { it.value to it.index }
+        return all.withIndex().sortedBy { pos[keys[it.index]] ?: (1000 + it.index) }.map { it.value }
+    }
+    private fun fullOrder(): List<String> { val pos = order.withIndex().associate { it.value to it.index }; return lastAll.withIndex().sortedBy { pos[it.value] ?: (1000 + it.index) }.map { it.value } }
+    private fun save(ctx: Context, l: List<String>) { order = l; sp(ctx).edit().putString("btn_order", l.joinToString(",")).apply() }
+    fun swap(ctx: Context, a: String, b: String) {
+        val l = fullOrder().toMutableList(); val i = l.indexOf(a); val j = l.indexOf(b)
+        if (i < 0 || j < 0 || i == j) return
+        java.util.Collections.swap(l, i, j); save(ctx, l)
+    }
+    /** Сдвиг кнопки на соседнюю видимую (delta кнопок в списке visible), для пульта. */
+    fun move(ctx: Context, key: String, visible: List<String>, delta: Int) {
+        val i = visible.indexOf(key); val j = i + delta
+        if (i < 0 || j !in visible.indices) return
+        swap(ctx, key, visible[j])
+    }
+    fun startReorder(key: String) { snapshot = fullOrder(); reorder = key; startedAt = System.currentTimeMillis() }
+    fun finishReorder() { reorder = null }
+    fun cancelReorder(ctx: Context) { if (reorder != null) { save(ctx, snapshot); reorder = null } }
 }
 
 /** Окно выбора кнопок боковой панели: убрать лишние и вернуть нужные. */
@@ -1665,12 +1727,12 @@ object FmButtons {
 fun FmButtonsDialog(onClose: () -> Unit) {
     val ctx = LocalContext.current
     remember { FmButtons.load(ctx); 0 }
-    val all = rememberFmActionsAll().distinctBy { FmButtons.key(ctx, it.label) }
+    val all = FmButtons.ordered(ctx, rememberFmActionsAll()).distinctBy { FmButtons.key(ctx, it.label) }
     var pickBtn by remember { mutableStateOf<Pair<String, String>?>(null) }
     pickBtn?.let { (k, t) -> CustomIconPicker(t, "s:" + k) { pickBtn = null } }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.sb_title)) },
+        title = { HintTitle(stringResource(R.string.sb_title), stringResource(R.string.sb_reorder_note) + "\n\n" + stringResource(R.string.sb_icon_hint)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 all.forEach { a ->
@@ -1686,7 +1748,6 @@ fun FmButtonsDialog(onClose: () -> Unit) {
                         Text(lbl, fontSize = 15.sp)
                     }
                 }
-                Text(stringResource(R.string.sb_icon_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(top = 6.dp))
                 androidx.compose.material3.TextButton({ CustomIcons.clearPrefix(ctx, "s:") }) { Text(stringResource(R.string.sb_reset_icons)) }
             }
         },
@@ -1700,7 +1761,8 @@ private fun rememberFmActions(): List<FmAction> {
     val c = LocalContext.current
     remember { FmButtons.load(c); 0 }
     val hid = FmButtons.hidden
-    return rememberFmActionsAll().filter { FmButtons.key(c, it.label) !in hid }
+    val allA = rememberFmActionsAll()
+    return FmButtons.ordered(c, allA).filter { FmButtons.key(c, it.label) !in hid }
 }
 
 @Composable
@@ -1800,7 +1862,7 @@ fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSiz
            lineHeight: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified, fontWeight: FontWeight? = null,
            color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (active || LocalRowActive.current), LocalMarqOnlyActive provides true) {
-        // wrap: на телефоне длинное название переносится на несколько строк (строка становится выше), а не бежит
+        // wrap: перенос на несколько строк строками списков больше не используется (7.5: при «Вкл» одна строка и бегущая строка, при «Выкл» одна строка с многоточием)
         Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -1827,25 +1889,59 @@ private fun FmSideColumn(actions: List<FmAction>, modifier: Modifier) {
             fontSize = 9.sp, lineHeight = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth())
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberSavedScroll("files.side")), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            actions.forEach { FmSquareButton(it, 44.dp, 17.dp, 8.sp) }
+            val ks = actions.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }
+            actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, 44.dp, 21.dp, 8.sp, reorderKeys = ks) } }
         }
     }
 }
 
 /** Квадратная кнопка действия: значок по центру, подпись под ним (до двух строк, узкий шрифт) внутри квадрата. На ТВ у фокуса рамка. */
 @Composable
-private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon: androidx.compose.ui.unit.Dp, label: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier) {
+private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon: androidx.compose.ui.unit.Dp, label: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier, reorderKeys: List<String>? = null, cols: Int = 1) {
     val alpha = if (a.enabled) 1f else .38f
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     var focused by remember { mutableStateOf(false) }
     val sh = RoundedCornerShape(10.dp)
+    val bctx = androidx.compose.ui.platform.LocalContext.current
+    val reorderFocus = remember { FocusRequester() }
+    val bkey = FmButtons.key(bctx, a.label)
+    val moving = FmButtons.reorder == bkey
+    val reorderOn = FmButtons.reorder != null
+    val canReorder = reorderKeys != null && bkey in reorderKeys
+    val hint = stringResource(R.string.sb_reorder_hint)
+    // 11.11.2026: после каждого сдвига кнопка меняет место в списке, фокус при этом теряется и следующие стрелки пульта не доходят: возвращаем фокус переставляемой кнопке
+    LaunchedEffect(moving, FmButtons.order) { if (moving) { kotlinx.coroutines.delay(60); runCatching { reorderFocus.requestFocus() } } }
     Column(
         modifier.size(size).clip(sh)
-            .background(if (hovered && a.enabled) MaterialTheme.colorScheme.primary.copy(alpha = .22f) else MaterialTheme.colorScheme.primary.copy(alpha = .10f))
-            .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, sh) else Modifier)
+            .background(if (moving) MaterialTheme.colorScheme.primary.copy(alpha = .38f) else if (hovered && a.enabled) MaterialTheme.colorScheme.primary.copy(alpha = .22f) else MaterialTheme.colorScheme.primary.copy(alpha = .10f))
+            .then(if (moving) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, sh) else if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, sh) else Modifier)
+            .focusRequester(reorderFocus)
             .onFocusChanged { focused = it.isFocused }
-            .hoverable(hover).clickable(enabled = a.enabled) { a.run() }.padding(2.dp),
+            .onPreviewKeyEvent { e ->
+                val nk = e.nativeKeyEvent
+                val ok = nk.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || nk.keyCode == android.view.KeyEvent.KEYCODE_ENTER || nk.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                if (!canReorder) return@onPreviewKeyEvent false
+                if (FmButtons.reorder == bkey) {
+                    // режим перестановки с пульта: стрелки двигают кнопку, ОК подтверждает
+                    if (nk.action == android.view.KeyEvent.ACTION_DOWN) when (nk.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> { FmButtons.move(bctx, bkey, reorderKeys!!, -cols); return@onPreviewKeyEvent true }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { FmButtons.move(bctx, bkey, reorderKeys!!, cols); return@onPreviewKeyEvent true }
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { if (cols > 1) FmButtons.move(bctx, bkey, reorderKeys!!, -1); return@onPreviewKeyEvent true }
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { if (cols > 1) FmButtons.move(bctx, bkey, reorderKeys!!, 1); return@onPreviewKeyEvent true }
+                    }
+                    if (ok) { if (nk.action == android.view.KeyEvent.ACTION_UP && System.currentTimeMillis() - FmButtons.startedAt > 700) FmButtons.finishReorder(); return@onPreviewKeyEvent true }
+                    false
+                } else if (ok && FmButtons.reorder == null && nk.action == android.view.KeyEvent.ACTION_DOWN && nk.repeatCount >= 1) {
+                    FmButtons.startReorder(bkey); Fm.say(hint); true      // удержание ОК на кнопке
+                } else false
+            }
+            .hoverable(hover).combinedClickable(enabled = true, onClick = {
+                if (FmButtons.reorder != null && reorderKeys != null) {
+                    if (FmButtons.reorder == bkey) { if (System.currentTimeMillis() - FmButtons.startedAt > 700) FmButtons.finishReorder() }
+                    else if (bkey in reorderKeys) { FmButtons.swap(bctx, FmButtons.reorder!!, bkey); FmButtons.finishReorder() }
+                } else if (a.enabled) a.run()
+            }, onLongClick = { if (canReorder && FmButtons.reorder == null) { FmButtons.startReorder(bkey); Fm.say(hint) } }).padding(2.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         val cs = CustomIcons.spec("s:" + FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label))
@@ -1896,7 +1992,7 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androi
             fontSize = 11.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberSavedScroll("files.narrow")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items.chunked(2).forEach { r ->
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { if (tvSize != null) FmSquareButton(it, tvSize, tvSize * 0.36f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp) else if (Marq.tv) FmSquareButton(it, 72.dp, 26.dp, 11.5.sp) else FmSquareButton(it, 78.dp, 28.dp, 12.sp) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { val rk = if (a.label == R.string.fm_more) null else (main + rest).map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; if (tvSize != null) FmSquareButton(a, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, reorderKeys = rk, cols = 2) else if (Marq.tv) FmSquareButton(a, 72.dp, 34.dp, 11.5.sp, reorderKeys = rk, cols = 2) else FmSquareButton(a, 78.dp, 37.dp, 12.sp, reorderKeys = rk, cols = 2) } } }
             }
         }
     }
@@ -1913,7 +2009,7 @@ private fun FmChip(text: String, click: () -> Unit) {
 private fun FmStrip(actions: List<FmAction>, modifier: Modifier) {
     Column(modifier.verticalScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
-        actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.forEach { FmSquareButton(it, FmMetrics.BTN_W, 17.dp, 7.5.sp) }
+        actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.let { vis -> val ks = vis.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; vis.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmMetrics.BTN_W, 21.dp, 7.5.sp, reorderKeys = ks) } } }
     }
 }
 
@@ -2102,10 +2198,10 @@ private fun FmParkedBody(p: FmPane, pk: FmParked, modifier: Modifier) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NetBrandIcon(pk.conn, if (Marq.tv) 36.dp else 28.dp)
-                Text(pk.conn.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont, maxLines = 2)
+                Text(pk.conn.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont, maxLines = 1)
             }
             if (pk.path.isNotBlank()) Text(pk.path, fontSize = 12.sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
-            if (pk.name.isNotBlank()) Text(pk.name, fontSize = 12.sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), maxLines = 2)
+            if (pk.name.isNotBlank()) Text(pk.name, fontSize = 12.sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), maxLines = 1)
             if (p.status == null) Text(stringResource(R.string.rt_parked), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             p.parkedErr?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
         }
@@ -2407,7 +2503,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                     Modifier, customKey = "f:" + key)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
-                MqText(f.name, active = hovered || pressed || focused || sel, wrap = true, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
+                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
                 val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }?.let { fmDate(it) }).joinToString("  ·  ")
                 if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
@@ -2548,6 +2644,8 @@ private fun FmDialogs() {
             dismissButton = { TextButton(close) { Text(stringResource(R.string.btn_close)) } },
         )
         is FmDlg.InstallPick -> InstallPickDialog(d, close)
+        is FmDlg.InstallRunDlg -> InstallRunDialog(d, close)
+        is FmDlg.InstallConfirm -> InstallConfirmDialog(d, close)
         is FmDlg.ArcPass -> ArcPassDialog(d, close)
         is FmDlg.ArcConflict -> ArcConflictDialog(d, close)
         is FmDlg.ArcCharset -> ArcCharsetDialog(d, close)

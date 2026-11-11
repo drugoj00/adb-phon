@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -52,13 +53,13 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Бегущая строка для длинных названий (вместо многоточия) во всей программе.
- * Режим в «Настройки»: 0 = для переполненных строк (не больше [MAX] одновременно, 15 кадров в секунду), 1 = только в строке в фокусе / под мышью / выбранной, 2 = выключено.
+ * Режим в «Настройки»: «Вкл» (1) = только в строке в фокусе / под мышью / выбранной, «Выкл» (2) = выключено; прежний режим 0 («для всех переполненных») больше не предлагается и читается как 1 (не больше [MAX] одновременно, 15 кадров в секунду).
  * На ТВ и приставках (экран без касания) режим 0 работает как 1. Анимацию не запускаем: пока палец на экране (прокрутка списков), для строк, которые
  * помещаются, и для лишних (сверх лимита). Сдвиг строки меняется только на этапе размещения (без перекомпозиции), шаг раз в ~66 мс.
  */
 object Marq {
     const val MAX = 2
-    var mode by mutableStateOf(0)
+    var mode by mutableStateOf(1)
     var tv = false
     var touching by mutableStateOf(false)
     val running = mutableStateListOf<Int>()
@@ -67,7 +68,10 @@ object Marq {
     val effective: Int get() = if (mode == 0 && tv) 1 else mode
 
     fun init(ctx: Context) {
-        mode = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getInt("marq_mode", 0)
+        // 7.5: два варианта, «Вкл» (бежит строка в фокусе/под мышью/выбранная) и «Выкл»; прежний режим 0 («для всех переполненных») стал «Вкл» (бывший «Только в фокусе»)
+        val saved = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getInt("marq_mode", 1)
+        mode = if (saved == 2) 2 else 1
+        if (saved == 0) ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putInt("marq_mode", 1).apply()
         tv = runCatching { (ctx.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION }.getOrDefault(false) ||
             !ctx.packageManager.hasSystemFeature("android.hardware.touchscreen")
     }
@@ -181,6 +185,24 @@ fun SettingSwitch(checked: Boolean, onChange: (Boolean) -> Unit, title: String, 
         Collapsible(title, Modifier.weight(1f)) {
             androidx.compose.material3.Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         }
+    }
+}
+
+/**
+ * Название пункта с пояснением внутри него (правило владелицы): виден только заголовок, по нажатию на название под ним раскрывается пояснение,
+ * повторное нажатие сворачивает. Отдельных строк «Пояснение» нет. «Свернуть все» (LocalCollapseKey) закрывает и эти пояснения.
+ */
+@Composable
+fun HintTitle(
+    title: String, hint: String, modifier: Modifier = Modifier,
+    titleColor: Color = Color.Unspecified, titleSize: TextUnit = TextUnit.Unspecified, titleWeight: FontWeight? = FontWeight.Medium, titleStyle: TextStyle? = null,
+    hintColor: Color = Color.Unspecified, hintSize: TextUnit = 12.sp, hintStyle: TextStyle? = null,
+) {
+    Collapsible(title, modifier, titleContent = {
+        androidx.compose.material3.Text(title, color = titleColor, fontSize = titleSize, fontWeight = titleWeight, style = titleStyle ?: LocalTextStyle.current)
+    }) {
+        val dim = if (hintColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface.copy(alpha = .6f) else hintColor
+        androidx.compose.material3.Text(hint, color = dim, fontSize = if (hintStyle != null) TextUnit.Unspecified else hintSize, style = hintStyle ?: LocalTextStyle.current)
     }
 }
 

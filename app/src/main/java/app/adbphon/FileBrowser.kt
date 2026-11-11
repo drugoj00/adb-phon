@@ -152,7 +152,8 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
             Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.fb_title), color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            if (kind == "smb" && smb == null) HintTitle(stringResource(R.string.fb_title), stringResource(R.string.fb_net_hint), titleColor = t.text, titleSize = 17.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
+            else Text(stringResource(R.string.fb_title), color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(stringResource(R.string.fb_src_local), kind == "local") { kind = "local" }
                 Chip(stringResource(R.string.fb_src_adb), kind == "adb") { kind = "adb" }
@@ -164,7 +165,6 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
 
             if (kind == "smb" && smb == null) {
                 // экран «Сеть»: поиск устройств с общими папками или ввод адреса
-                Text(stringResource(R.string.fb_net_hint), color = t.hint, fontSize = 12.sp)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Chip(stringResource(if (scanning) R.string.fb_scanning else R.string.fb_scan), true, Modifier.focusRequester(fr)) {
                         if (!scanning) scope.launch { scanning = true; hosts = runCatching { Lan.scanSmb() }.getOrDefault(emptyList()); scanning = false }

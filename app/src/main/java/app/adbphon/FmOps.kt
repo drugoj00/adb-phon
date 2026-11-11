@@ -217,8 +217,9 @@ object FmOpsUi {
 @Composable
 fun FmProgressBar(fraction: Float?, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 10.dp) {
     val shape = RoundedCornerShape(height / 2)
-    val brush = Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF5EEAD4)))
-    Box(modifier.fillMaxWidth().height(height).clip(shape).background(Color(0xFF0F766E).copy(alpha = .20f))) {
+    val prim = BarStyle.used()
+    val brush = Brush.horizontalGradient(listOf(prim, prim))
+    Box(modifier.fillMaxWidth().height(height).clip(shape).background(BarStyle.freeProgress()).barFrame(prim, shape)) {
         if (fraction != null) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0.02f, 1f)).clip(shape).background(brush))
         } else {
@@ -226,7 +227,7 @@ fun FmProgressBar(fraction: Float?, modifier: Modifier = Modifier, height: andro
             val ph by tr.animateFloat(0f, 1f, infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart), label = "x")
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                 val w = size.width; val seg = w * 0.4f; val start = (-0.4f + 1.4f * ph) * w
-                drawRoundRect(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF5EEAD4)), startX = start, endX = start + seg), Offset(start, 0f),
+                drawRoundRect(Brush.horizontalGradient(listOf(prim, prim), startX = start, endX = start + seg), Offset(start, 0f),
                     androidx.compose.ui.geometry.Size(seg, size.height), androidx.compose.ui.geometry.CornerRadius(size.height / 2))
             }
         }

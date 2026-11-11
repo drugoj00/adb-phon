@@ -406,8 +406,7 @@ fun WifiServerDialog(startDir: String, close: () -> Unit) {
                     Text(stringResource(R.string.ws_folder, WifiShare.root), fontSize = 12.sp)
                     Text(stringResource(R.string.ws_dav_how), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
                 } else {
-                    Text(stringResource(R.string.ws_off, startDir), fontSize = 14.sp)
-                    Text(stringResource(R.string.ws_p2p_hint), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+                    HintTitle(stringResource(R.string.ws_off, startDir), stringResource(R.string.ws_p2p_hint), titleSize = 14.sp, titleWeight = null, hintSize = 13.sp)
                     if (WifiShare.error.isNotEmpty()) Text(WifiShare.error, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     if (WifiHotspot.error.isNotEmpty()) Text(WifiHotspot.error, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }

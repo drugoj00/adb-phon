@@ -43,8 +43,7 @@ fun ShizukuSection() {
     var appsDlg by remember { mutableStateOf(false) }
     val on = ShizukuHost.up || ShizukuHost.running()
 
-    Text(stringResource(R.string.shz_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-    Text(stringResource(R.string.shz_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+    HintTitle(stringResource(R.string.shz_title), stringResource(R.string.shz_hint))
     Text(
         if (on) stringResource(R.string.shz_status_on, ShizukuHost.info() ?: "") else stringResource(R.string.shz_status_off),
         fontSize = 13.sp, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f),
@@ -101,7 +100,6 @@ private fun ShizukuAppsDialog(on: Boolean, onClose: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (!on) Text(stringResource(R.string.shz_apps_off), fontSize = 14.sp)
-                else if (loaded && rows.isEmpty()) Text(stringResource(R.string.shz_apps_none), fontSize = 14.sp)
                 rows.forEach { r ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {

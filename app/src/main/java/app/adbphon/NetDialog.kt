@@ -90,8 +90,7 @@ fun NetDialog(onClose: () -> Unit) {
             Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.pnet_title), color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text(stringResource(R.string.net_hint), color = t.hint, fontSize = 12.sp)
+            HintTitle(stringResource(R.string.pnet_title), stringResource(R.string.net_hint), titleColor = t.text, titleSize = 17.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     query, { query = it }, label = { Text(stringResource(R.string.net_query)) }, singleLine = true, colors = fields,

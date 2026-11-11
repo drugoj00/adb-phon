@@ -134,6 +134,12 @@ const val ALL_PROGRAMS_URL = "https://drugoj00.github.io/"
 const val TELEGRAM_URL = "https://t.me/PhoneInWindowSound"
 
 class MainActivity : ComponentActivity() {
+    /** 7.5: если пользуются стрелками/ОК пульта, программа запоминает это и после перезапуска возвращает фокус пульта на выбранную строку дерева «Файлов». */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && FocusRestore.isDpad(event.keyCode)) FocusRestore.markKeys(this)
+        return super.dispatchKeyEvent(event)
+    }
+
     /** Закрытие приложения: Bluetooth выключается, если его включили мы (раздел «Мышь ПК»). */
     override fun onDestroy() {
         if (isFinishing && !PadKeeper.enabled(applicationContext)) { BtHid.disconnectNow("закрытие приложения"); BtPower.leaveNow(applicationContext) }
@@ -227,6 +233,8 @@ object AppColors {
     )
     var dynamic by mutableStateOf(false)
     var accent by mutableStateOf(0)
+    /** Свой оттенок основного цвета (полоса спектра в настройках); меньше нуля: оттенок не выбран, действует [accent] (бирюзовый по умолчанию). */
+    var hue by mutableStateOf(-1f)
     private var loaded = false
 
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
@@ -236,16 +244,21 @@ object AppColors {
         loaded = true
         dynamic = sp(ctx).getBoolean("col_dynamic", false) && Build.VERSION.SDK_INT >= 31
         accent = sp(ctx).getInt("col_accent", 0).coerceIn(0, accents.size - 1)
+        hue = sp(ctx).getFloat("col_hue", -1f)
     }
 
     fun setDynamic(ctx: Context, v: Boolean) { dynamic = v && Build.VERSION.SDK_INT >= 31; sp(ctx).edit().putBoolean("col_dynamic", dynamic).apply() }
     fun setAccent(ctx: Context, i: Int) { accent = i.coerceIn(0, accents.size - 1); sp(ctx).edit().putInt("col_accent", accent).apply() }
+    fun setHue(ctx: Context, h: Float) { hue = h.coerceIn(0f, 360f); sp(ctx).edit().putFloat("col_hue", hue).apply() }
+    /** «Как у темы»: прежний бирюзовый основной цвет. */
+    fun resetColor(ctx: Context) { hue = -1f; accent = 0; sp(ctx).edit().putFloat("col_hue", -1f).putInt("col_accent", 0).apply() }
 
     fun scheme(dark: Boolean, ctx: Context): androidx.compose.material3.ColorScheme {
         if (dynamic && Build.VERSION.SDK_INT >= 31) {
             return if (dark) androidx.compose.material3.dynamicDarkColorScheme(ctx) else androidx.compose.material3.dynamicLightColorScheme(ctx)
         }
         val base = if (dark) Dark else Light
+        if (hue >= 0f) { val l = hueColor(hue, false); val d = hueColor(hue, true); return base.copy(primary = if (dark) d else l, secondaryContainer = l, primaryContainer = l) }
         if (accent == 0) return base
         val ac = accents[accent]
         val c = if (dark) ac.light else ac.light   // контейнеры выбранного цвета одинаковы в обеих темах, основной цвет светлее в тёмной
@@ -257,7 +270,7 @@ object AppColors {
 fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     val baseCtx = LocalContext.current
     val uiCtx = remember(vm.lang, baseCtx) { Lang.wrap(baseCtx, vm.lang) }
-    remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); 0 }
+    remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); BarStyle.load(baseCtx); 0 }
     val dark = when (vm.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     val fullNow = AppFull.on
     SideEffect {
@@ -569,15 +582,15 @@ fun ConnectScreen(vm: MainViewModel) {
     val askName: (Found) -> Unit = { favName = vm.names[it.host].orEmpty(); favFor = it }
     TabColumn("tab.connect", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         if (android.os.Build.VERSION.SDK_INT >= 30) WifiDebugCard(vm)
-        Text(
+        HintTitle(
             if (vm.connected && !Adb.isRoot && vm.remoteHost != null)
                 stringResource(R.string.msg_connected_to, vm.names[vm.remoteHost!!] ?: stringResource(R.string.net_name_unknown), vm.remoteHost!!)
             else stringResource(if (!vm.connected) R.string.conn_no else if (Adb.isRoot) R.string.root_on else R.string.conn_ok),
-            fontSize = 17.sp, fontWeight = FontWeight.Bold,
-            color = if (vm.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+            stringResource(R.string.conn_hold_hint),
+            titleSize = 17.sp, titleWeight = FontWeight.Bold,
+            titleColor = if (vm.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
         )
         LaunchedEffect(Unit) { if (!vm.connected && !vm.scanned) vm.scanDevices() }
-        Text(stringResource(R.string.conn_hold_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         AutoConnectCard(vm)
         InvitesSection()
         if (vm.favs.isNotEmpty()) {
@@ -621,7 +634,6 @@ fun ConnectScreen(vm: MainViewModel) {
                 // устройство из «Последнего подключения» второй раз в списке не показываем
                 vm.found.filter { f -> vm.lastDevice?.let { it.host == f.host && it.port == f.port } != true }
                     .forEach { f -> FoundRow(vm, f, askName) }
-                if (vm.scanned && !vm.scanning && vm.found.isEmpty()) Text(stringResource(R.string.net_none), fontSize = 13.sp)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -654,8 +666,7 @@ fun ConnectScreen(vm: MainViewModel) {
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.conn_title_wifi), fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.conn_steps_wifi), fontSize = 14.sp)
+                HintTitle(stringResource(R.string.conn_title_wifi), stringResource(R.string.conn_steps_wifi), titleWeight = FontWeight.Bold, hintSize = 14.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         pairPort, { pairPort = it.filter(Char::isDigit) }, Modifier.weight(1f),
@@ -684,8 +695,7 @@ fun ConnectScreen(vm: MainViewModel) {
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.conn_title_tcp), fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.conn_steps_tcp), fontSize = 14.sp)
+                HintTitle(stringResource(R.string.conn_title_tcp), stringResource(R.string.conn_steps_tcp), titleWeight = FontWeight.Bold, hintSize = 14.sp)
                 Button(onClick = { vm.connectTcp(host, 5555) }, enabled = !vm.busy) { Text(stringResource(R.string.btn_connect_tcp, host.ifBlank { "localhost" })) }
             }
         }
@@ -694,8 +704,7 @@ fun ConnectScreen(vm: MainViewModel) {
             var useRoot by remember { mutableStateOf(Cfg.useRoot(ctxR)) }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(R.string.root_title), fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.root_hint), fontSize = 14.sp)
+                    HintTitle(stringResource(R.string.root_title), stringResource(R.string.root_hint), titleWeight = FontWeight.Bold, hintSize = 14.sp)
                     val hasSu = Adb.suPresent
                     if (!hasSu) Text(stringResource(R.string.root_none), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     Button(onClick = { vm.connectRoot() }, enabled = !vm.busy && hasSu) { Text(stringResource(R.string.root_connect_btn)) }

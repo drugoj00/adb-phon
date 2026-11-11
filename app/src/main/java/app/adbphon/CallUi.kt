@@ -40,11 +40,10 @@ fun PeopleSection() {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.call_title), fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.call_listen), Modifier.weight(1f), fontSize = 13.sp)
+                HintTitle(stringResource(R.string.call_listen), stringResource(R.string.call_hint), Modifier.weight(1f), titleSize = 13.sp, titleWeight = null)
                 Switch(listen, { listen = it; CallListen.setEnabled(ctx, it) })
             }
             CField(stringResource(R.string.call_myname), myName, { myName = it; Calls.setMyName(ctx, it) })
-            if (people.isEmpty()) Text(stringResource(R.string.call_empty), fontSize = 12.sp, color = dim)
             people.toList().forEach { p ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -61,7 +60,6 @@ fun PeopleSection() {
                 }
             }
             OutlinedButton({ add = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.call_add)) }
-            Text(stringResource(R.string.call_hint), fontSize = 12.sp, color = dim)
         }
     }
     if (add) AddPersonDialog { add = false }

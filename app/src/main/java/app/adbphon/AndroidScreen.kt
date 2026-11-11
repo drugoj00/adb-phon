@@ -91,6 +91,19 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
     /** Сколько раз экран перезапускался сам из-за поворота и сколько кадров показано (для проверки и журнала). */
     @Volatile var autoRestarts = 0
     @Volatile var framesOut = 0L
+    /** Пока поток H.264 не дал первого кадра (screenrecord молчит на неподвижном экране, часть декодеров придерживает кадры), показывается снимок screencap, обновляемый раз в ~1,5 с. */
+    var preview by mutableStateOf(false)
+    /** Экран устройства выключен или устройство спит: вместо чёрного прямоугольника понятная подпись. */
+    var off by mutableStateOf(false)
+
+    private suspend fun checkOff(l: AdbLink) {
+        val w = runCatching { l.shell("dumpsys power | grep -m1 mWakefulness=", 6_000) }.getOrDefault("")
+        if (w.contains("mWakefulness")) off = w.contains("Asleep") || w.contains("Dozing")
+    }
+    private suspend fun grabPng(l: AdbLink): Bitmap? {
+        val bytes = runCatching { l.execBytes("screencap -p", 10_000) }.getOrDefault(ByteArray(0))
+        return if (bytes.size > 100) runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull() else null
+    }
     @Volatile private var codec: MediaCodec? = null
     @Volatile private var gen = 0
     private fun app() = FmIo.app
@@ -118,7 +131,7 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
     }
 
     fun stop() {
-        gen++; job?.cancel(); job = null
+        gen++; job?.cancel(); job = null; preview = false; off = false
         runCatching { codec?.stop() }; runCatching { codec?.release() }; codec = null
         runCatching { input?.close() }; input = null
         state = 0
@@ -169,6 +182,21 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
                 break
             }
         }
+        // часть декодеров (MTK на приставках) придерживает кадры, пока не наберётся «задержка вывода» (до 19 кадров): на статичном экране картинка не появляется; через 4 с без единого кадра закрываем поток и уходим в запасной режим (screencap)
+        val f0 = framesOut
+        val noFrames = java.util.concurrent.atomic.AtomicBoolean(false)
+        val prev = launch {
+            preview = true
+            try {
+                while (isActive && gen == my && framesOut == f0) {
+                    checkOff(l)
+                    val bmp = grabPng(l)
+                    if (bmp != null && framesOut == f0) { if (vw == 0 || vh == 0) { vw = bmp.width; vh = bmp.height }; frame = bmp.asImageBitmap() }
+                    delay(1500)
+                }
+            } finally { preview = false; if (mode != "png") frame = null }
+        }
+        val dog = launch { delay(6000); if (framesOut == f0 && gen == my && !rotating.get()) { noFrames.set(true); runCatching { s.close() } } }
         var b = ByteArray(1 shl 20); var n = 0
         var sps: ByteArray? = null; var pps: ByteArray? = null
         var frames = 0; var first = true; var cfgSps: ByteArray? = null
@@ -203,6 +231,7 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
             runCatching { codec?.stop() }; runCatching { codec?.release() }
             val (w0, h0) = if (vw > 0) vw to vh else if (physW > 0) (if (rot % 2 == 1) physH to physW else physW to physH) else (1280 to 720)
             val f = MediaFormat.createVideoFormat("video/avc", w0, h0)
+            f.setInteger("low-latency", 1)
             f.setByteBuffer("csd-0", java.nio.ByteBuffer.wrap(byteArrayOf(0, 0, 0, 1) + sp))
             f.setByteBuffer("csd-1", java.nio.ByteBuffer.wrap(byteArrayOf(0, 0, 0, 1) + pp))
             return runCatching {
@@ -258,19 +287,22 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
                 scanned = 0; i = 0; startPos = 0
                 if (frames == 1 && info.size == 0) { /* первый кадр отправлен */ }
             }
-        } finally { watcher.cancel(); runCatching { s.close() } }
-        frames > 0 || !first
+        } catch (e: java.io.IOException) { if (!noFrames.get()) throw e
+        } finally { watcher.cancel(); dog.cancel(); prev.cancel(); runCatching { s.close() } }
+        if (noFrames.get()) false else frames > 0 || !first
     }
 
     /** Запасной режим: снимок экрана (PNG) по кругу. */
     private suspend fun pngLoop(l: AdbLink, my: Int) {
+        runCatching { codec?.stop() }; runCatching { codec?.release() }; codec = null
+        vw = 0; vh = 0
         mode = "png"
         status = ""
         var fails = 0
         while (currentCoroutineContextActive() && gen == my) {
             val t0 = System.currentTimeMillis()
-            val bytes = runCatching { l.execBytes("screencap -p", 15_000) }.getOrDefault(ByteArray(0))
-            val bmp = if (bytes.size > 100) runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull() else null
+            val bmp = grabPng(l)
+            if (fails % 2 == 0) checkOff(l)
             if (bmp != null) { fails = 0; vw = bmp.width; vh = bmp.height; frame = bmp.asImageBitmap() }
             else if (++fails >= 4) { status = app().getString(R.string.asc_no_frames); state = 0; return }
             val fps = capFor().third
@@ -401,9 +433,12 @@ private fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () -
                         override fun surfaceDestroyed(h: SurfaceHolder) { c.surface = null }
                     }) }
                 }, modifier = Modifier.size(with(density) { dw.toDp() }, with(density) { dh.toDp() }))
-            } else if (fr != null) {
+            }
+            // снимок поверх (запасной режим или ожидание первого кадра потока)
+            if ((c.mode == "png" || c.preview) && fr != null) {
                 Canvas(Modifier.fillMaxSize()) { drawImage(fr, dstOffset = IntOffset(ox, oy), dstSize = IntSize(dw, dh)) }
             }
+            if (c.off) Text(stringResource(R.string.asc_off), color = Color.White, fontSize = 16.sp, modifier = Modifier.background(Color(0xCC000000)).padding(horizontal = 16.dp, vertical = 10.dp))
             if (c.state == 2 && haveVideo) {
                 // слой жестов поверх картинки: касание, долгое нажатие, свайп
                 Box(Modifier.fillMaxSize().pointerInput(dw, dh, ox, oy) {

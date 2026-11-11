@@ -451,7 +451,7 @@ fun AppBatchDlg(d: FmDlg.AppBatch, close: () -> Unit) {
                     }
                     1 -> {
                         Text(stringResource(R.string.ap_batch_run, step, total), fontSize = 14.sp)
-                        androidx.compose.material3.LinearProgressIndicator(progress = { step.toFloat() / total }, modifier = Modifier.fillMaxWidth())
+                        ThemedProgress({ step.toFloat() / total }, Modifier.fillMaxWidth())
                     }
                     else -> {
                         Text(stringResource(R.string.ap_batch_result, okN, total), fontSize = 15.sp)

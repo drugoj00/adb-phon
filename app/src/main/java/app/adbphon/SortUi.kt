@@ -222,7 +222,7 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
     val t = 14.sp
     LAlertDialog(
         onDismissRequest = close,
-        title = { androidx.compose.material3.Text(stringResource(R.string.sort_title) + "  ·  " + stringResource(if (p.id == 0) R.string.fm_pane_left else R.string.fm_pane_right), fontSize = 18.sp) },
+        title = { HintTitle(stringResource(R.string.sort_title) + "  ·  " + stringResource(if (p.id == 0) R.string.fm_pane_left else R.string.fm_pane_right), stringResource(R.string.sort_pane_note) + "\n\n" + stringResource(R.string.sort_file_hint), titleSize = 18.sp) },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 // область действия настройки
@@ -230,7 +230,6 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
                     FilterChip(!folderOn, { SortStore.clearFolder(p, p.path) }, { androidx.compose.material3.Text(stringResource(R.string.sort_scope_all), fontSize = 12.sp) })
                     FilterChip(folderOn, { if (!folderOn) SortStore.setFolder(p, p.path, cfg) }, { androidx.compose.material3.Text(stringResource(R.string.sort_scope_dir), fontSize = 12.sp) })
                 }
-                androidx.compose.material3.Text(stringResource(R.string.sort_pane_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 // выбор группы
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -249,7 +248,6 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
                     FilterChip(cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), true) } }, { androidx.compose.material3.Text("↑ " + stringResource(R.string.fm_sort_asc), fontSize = 12.sp) })
                     FilterChip(!cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), false) } }, { androidx.compose.material3.Text("↓ " + stringResource(R.string.fm_sort_desc), fontSize = 12.sp) })
                 }
-                if (tab == SGroup.FILE) androidx.compose.material3.Text(stringResource(R.string.sort_file_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                 if (tab != SGroup.DIR && tab != SGroup.FILE) {
                     Row(Modifier.fillMaxWidth().clickable(enabled = !cfg.grouped) { edit { it.copy(sep = if (tab in it.sep) it.sep - tab else it.sep + tab) } }, verticalAlignment = Alignment.CenterVertically) {
                         Switch(tab in cfg.sep || cfg.grouped, { v -> edit { it.copy(sep = if (v) it.sep + tab else it.sep - tab) } }, enabled = !cfg.grouped)

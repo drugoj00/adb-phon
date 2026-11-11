@@ -298,7 +298,7 @@ fun FTrashDlg(close: () -> Unit, initConfirm: String? = null) {
     LaunchedEffect(Unit) { load(); if (initConfirm != null) ask(initConfirm) }
     LAlertDialog(
         wide = true, onDismissRequest = close,
-        title = { Text(stringResource(R.string.ft_title)) },
+        title = { HintTitle(stringResource(R.string.ft_title), stringResource(R.string.ft_note)) },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -335,7 +335,6 @@ fun FTrashDlg(close: () -> Unit, initConfirm: String? = null) {
                             IconButton({ if (!busy) ask(it.id) }, enabled = !busy) { Icon(Icons.Filled.DeleteForever, stringResource(R.string.tr_perm), tint = Color(0xFFC62828)) }
                         }
                     }
-                    Text(stringResource(R.string.ft_note), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
                 }
             }
         },
@@ -368,12 +367,11 @@ fun FilesDeleteSection() {
             EqChoice(stringResource(R.string.ft_d90), FmDel.keepDays == 90) { FmDel.setKeepDays(ctx, 90) },
             EqChoice(stringResource(R.string.ft_inf), FmDel.keepDays == 0) { FmDel.setKeepDays(ctx, 0) },
         ), perRow = 2)
-        Text(stringResource(R.string.ft_max), fontWeight = fw)
+        HintTitle(stringResource(R.string.ft_max), stringResource(R.string.ft_space_hint), titleWeight = fw)
         EqChoices(listOf(
             EqChoice(stringResource(R.string.ft_inf), FmDel.maxMb == 0) { FmDel.setMaxMb(ctx, 0) },
             EqChoice(stringResource(R.string.ft_m500), FmDel.maxMb == 500) { FmDel.setMaxMb(ctx, 500) },
             EqChoice(stringResource(R.string.ft_m2g), FmDel.maxMb == 2048) { FmDel.setMaxMb(ctx, 2048) },
         ), perRow = 3)
-        Text(stringResource(R.string.ft_space_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
     }
 }

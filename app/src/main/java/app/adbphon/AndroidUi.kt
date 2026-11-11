@@ -60,7 +60,7 @@ fun DevAddDialog(editPc: PcHost?, editAdb: AdbDev?, close: () -> Unit) {
     if (inv) { InvitesDialog { inv = false }; return }
     LAlertDialog(
         onDismissRequest = close, ime = true,
-        title = { Text(stringResource(R.string.dev_add_title), fontSize = 18.sp) },
+        title = { HintTitle(stringResource(R.string.dev_add_title), stringResource(if (android) R.string.vw_hint_andr else R.string.pc_add_hint), titleSize = 18.sp) },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (!fixed) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -72,7 +72,6 @@ fun DevAddDialog(editPc: PcHost?, editAdb: AdbDev?, close: () -> Unit) {
                 if (android) CField(stringResource(R.string.dev_alt), alt, { alt = it.trim() }, type = KeyboardType.Uri)
                 else CField(stringResource(R.string.spc_code), code, { code = it.uppercase() })
                 if (err.isNotEmpty()) Text(err, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                Text(stringResource(if (android) R.string.vw_hint_andr else R.string.pc_add_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f))
                 TextButton({ inv = true }) { Text(stringResource(R.string.dev_invite), fontSize = 13.sp) }
             }
         },

@@ -243,8 +243,7 @@ fun ScreenPcScreen() {
 
     if (c.state == 0) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.spc_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp)
-            Text(stringResource(R.string.spc_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f))
+            HintTitle(stringResource(R.string.spc_title), stringResource(R.string.spc_hint), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold, titleSize = 16.sp)
             if (hosts.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     hosts.forEach { h -> AssistChip({ ip = h.ip; code = h.code }, { Text(h.name + " · " + h.ip, fontSize = 12.sp) }) }

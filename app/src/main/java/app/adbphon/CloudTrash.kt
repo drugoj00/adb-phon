@@ -421,7 +421,7 @@ fun CloudTrashDlg(c: NetConn, close: () -> Unit, initConfirm: String? = null) {
     LaunchedEffect(loading) { if (!loading && initConfirm != null && !FmDel.needAsk(true) && !autoDone) { autoDone = true; runConfirm(initConfirm) } }
     LAlertDialog(
         wide = true, onDismissRequest = close,
-        title = { Text(stringResource(R.string.tr_title, if (c.kind == "cloud") CloudErr.providerName(ctx, type) else c.title)) },
+        title = { HintTitle(stringResource(R.string.tr_title, if (c.kind == "cloud") CloudErr.providerName(ctx, type) else c.title), stringResource(if (own) R.string.tr_note_own else R.string.tr_note_show)) },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 // шапка не прокручивается: итог и «Очистить корзину» всегда на виду, даже в альбомной ориентации на низком экране
@@ -459,7 +459,6 @@ fun CloudTrashDlg(c: NetConn, close: () -> Unit, initConfirm: String? = null) {
                             IconButton({ if (!busy) ask(it.id) }, enabled = !busy) { Icon(Icons.Filled.DeleteForever, stringResource(R.string.tr_perm), tint = Color(0xFFC62828)) }
                         }
                     }
-                    Text(stringResource(if (own) R.string.tr_note_own else R.string.tr_note_show), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
                 }
             }
         },

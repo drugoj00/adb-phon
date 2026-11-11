@@ -15,6 +15,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -162,7 +163,6 @@ fun VersionsDialog(vm: MainViewModel) {
                     OutlinedButton({ vm.installVersion(v) }, Modifier.fillMaxWidth()) { Text(v.label, fontSize = 12.sp, maxLines = 2) }
                 }
                 Text(stringResource(R.string.ver_saved), fontWeight = FontWeight.Bold)
-                if (vm.localVersions.isEmpty()) Text(stringResource(R.string.rb_none), fontSize = 13.sp)
                 vm.localVersions.forEach { v ->
                     OutlinedButton({ vm.installVersion(v) }, Modifier.fillMaxWidth()) { Text(v.label, fontSize = 12.sp, maxLines = 2) }
                 }
@@ -374,8 +374,7 @@ fun RemoteScreen(vm: MainViewModel) {
                     Text(stringResource(R.string.air_sens), fontSize = 12.sp)
                     Slider(sens, { sens = it }, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
                 }
-                HelperSwitch(vm)
-                Text(stringResource(R.string.air_hint), fontSize = 12.sp)
+                HelperSwitch(vm, stringResource(R.string.air_hint))
             }
         }
     }
@@ -417,8 +416,7 @@ private fun RemoteLandscape(
                     RemoteMediaOnly(vm)
                     Text(stringResource(R.string.air_sens), fontSize = 12.sp)
                     Slider(sens, onSens, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
-                    HelperSwitch(vm)
-                    Text(stringResource(R.string.air_hint), fontSize = 12.sp)
+                    HelperSwitch(vm, stringResource(R.string.air_hint))
                 }
             }
         }
@@ -495,12 +493,13 @@ private fun PadArea(vm: MainViewModel, pad: @Composable () -> Unit) {
 }
 
 @Composable
-private fun HelperSwitch(vm: MainViewModel) {
+private fun HelperSwitch(vm: MainViewModel, extraHint: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Switch(vm.helperOn, { vm.setHelper(it) })
-        Text(stringResource(R.string.helper_switch), fontSize = 13.sp, modifier = Modifier.weight(1f))
+        val hh = listOfNotNull(if (!vm.helperOn) stringResource(R.string.helper_hint) else null, extraHint).joinToString("\n\n")
+        if (hh.isEmpty()) Text(stringResource(R.string.helper_switch), fontSize = 13.sp, modifier = Modifier.weight(1f))
+        else HintTitle(stringResource(R.string.helper_switch), hh, Modifier.weight(1f), titleSize = 13.sp, titleWeight = null, hintSize = 11.sp)
     }
-    if (!vm.helperOn) Text(stringResource(R.string.helper_hint), fontSize = 11.sp)
 }
 
 /** Короткий ряд под сенсорной панелью: назад, домой, недавние, меню. */
@@ -1019,8 +1018,7 @@ fun SettingsScreen(vm: MainViewModel) {
         val mctx = LocalContext.current
         Text(stringResource(R.string.set_marq), fontWeight = FontWeight.Medium)
         EqChoices(listOf(
-            EqChoice(stringResource(R.string.marq_on), Marq.mode == 0) { Marq.setMode(mctx, 0) },
-            EqChoice(stringResource(R.string.marq_focus), Marq.mode == 1) { Marq.setMode(mctx, 1) },
+            EqChoice(stringResource(R.string.marq_on), Marq.mode != 2) { Marq.setMode(mctx, 1) },
             EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(mctx, 2) },
         ))
         Text(stringResource(R.string.sc_font), fontWeight = FontWeight.Medium)
@@ -1036,10 +1034,15 @@ fun SettingsScreen(vm: MainViewModel) {
         val ccx = LocalContext.current
         if (android.os.Build.VERSION.SDK_INT >= 31) SettingSwitch(AppColors.dynamic, { AppColors.setDynamic(ccx, it) }, stringResource(R.string.col_dynamic), stringResource(R.string.col_dynamic_hint))
         if (!AppColors.dynamic) {
-            Text(stringResource(R.string.col_accent), fontWeight = FontWeight.Medium)
-            val colNames = listOf(R.string.col_teal, R.string.col_blue, R.string.col_purple, R.string.col_pink, R.string.col_red, R.string.col_orange, R.string.col_green, R.string.col_gray)
-            EqChoices(colNames.mapIndexed { i, r -> EqChoice(stringResource(r), AppColors.accent == i) { AppColors.setAccent(ccx, i) } }, perRow = 4)
+            val accentThemeFr = remember { androidx.compose.ui.focus.FocusRequester() }
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.col_accent), Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                androidx.compose.material3.TextButton({ AppColors.resetColor(ccx) }, Modifier.focusRequester(accentThemeFr), enabled = AppColors.hue >= 0f || AppColors.accent != 0) { Text(stringResource(R.string.bar_color_theme)) }
+            }
+            var mh by remember { mutableStateOf(if (AppColors.hue >= 0f) AppColors.hue else 175f) }
+            HueBar(mh, AppColors.hue >= 0f, { mh = it; AppColors.hue = it }, { AppColors.setHue(ccx, mh) }, themeBtn = accentThemeFr, themeBtnEnabled = AppColors.hue >= 0f || AppColors.accent != 0)
         }
+        BarContrastSetting()
         SettingSwitch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) }, stringResource(R.string.set_keep_on), stringResource(R.string.set_keep_hint))
         SettingSwitch(vm.exitOnBack, { vm.changeExitOnBack(it) }, stringResource(R.string.set_exit_back), stringResource(R.string.set_exit_hint))
         SettingSwitch(vm.logOn, { vm.changeLog(it) }, stringResource(R.string.log_switch), stringResource(R.string.log_hint))
@@ -1176,4 +1179,31 @@ fun CopiesSection() {
         EqButtons(listOf(EqBtn(stringResource(R.string.backups_open)) { open = true }))
     }
     if (open) BackupsDialog { open = false }
+}
+
+
+/** Ползунок «Контраст полосок»: разница между свободной и занятой частью на всех полосках; примеры внизу меняются сразу. */
+@Composable
+fun BarContrastSetting() {
+    val ctx = LocalContext.current
+    var v by remember { mutableStateOf(BarStyle.contrast.toFloat()) }
+    HintTitle(stringResource(R.string.bar_contrast), stringResource(R.string.bar_contrast_hint))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.bar_weak), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+        Slider(v, { v = it; BarStyle.contrast = it.toInt() }, Modifier.weight(1f).height(24.dp), valueRange = 0f..100f, onValueChangeFinished = { BarStyle.set(ctx, v.toInt()) },
+            colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
+        Text(stringResource(R.string.bar_strong), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+    }
+    FmSpaceBar(0f, Modifier.fillMaxWidth())
+    FmSpaceBar(0.5f, Modifier.fillMaxWidth().padding(top = 4.dp))
+    FmSpaceBar(0.85f, Modifier.fillMaxWidth().padding(top = 4.dp))
+    // «Цвет полосок» (как «Основной цвет»): заголовок со стрелкой пояснения слева, «Как у темы» справа в той же строке, ниже одна полоса спектра; цвет показывает бегунок
+    val barThemeFr = remember { androidx.compose.ui.focus.FocusRequester() }
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        HintTitle(stringResource(R.string.bar_color), stringResource(R.string.bar_color_hint), Modifier.weight(1f))
+        androidx.compose.material3.TextButton({ BarStyle.setColor(ctx, BarStyle.THEME) }, Modifier.focusRequester(barThemeFr), enabled = BarStyle.colorIdx != BarStyle.THEME) { Text(stringResource(R.string.bar_color_theme)) }
+    }
+    var hv by remember { mutableStateOf(BarStyle.hue) }
+    HueBar(hv, BarStyle.colorIdx == BarStyle.CUSTOM, { hv = it; BarStyle.hue = it; if (BarStyle.colorIdx != BarStyle.CUSTOM) BarStyle.colorIdx = BarStyle.CUSTOM }, { BarStyle.setColor(ctx, BarStyle.CUSTOM); BarStyle.setHue(ctx, hv) }, themeBtn = barThemeFr, themeBtnEnabled = BarStyle.colorIdx != BarStyle.THEME)
+
 }

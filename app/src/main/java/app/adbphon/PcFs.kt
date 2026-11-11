@@ -299,14 +299,13 @@ fun PcAddDialog(edit: PcHost?, close: () -> Unit) {
     var err by remember { mutableStateOf("") }
     LAlertDialog(
         onDismissRequest = close, ime = true,
-        title = { Text(stringResource(R.string.pc_add_title), fontSize = 18.sp) },
+        title = { HintTitle(stringResource(R.string.pc_add_title), stringResource(R.string.pc_add_hint), titleSize = 18.sp) },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 CField(stringResource(R.string.pc_name), name, { name = it })
                 CField(stringResource(R.string.spc_ip), ip, { ip = it.trim() }, type = KeyboardType.Uri)
                 CField(stringResource(R.string.spc_code), code, { code = it.uppercase() })
                 if (err.isNotEmpty()) Text(err, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                Text(stringResource(R.string.pc_add_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f))
             }
         },
         confirmButton = {

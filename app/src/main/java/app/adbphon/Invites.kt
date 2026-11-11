@@ -573,14 +573,13 @@ fun InvitesSection() {
     var idleMin by remember { mutableStateOf(VpnSession.idleMinutes(ctx)) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(stringResource(R.string.inv_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            HintTitle(stringResource(R.string.inv_title), stringResource(R.string.inv_hint), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(stringResource(R.string.inv_code, Invites.myCode(ctx)), Modifier.weight(1f), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                 TextButton({
                     (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", Invites.myCode(ctx)))
                 }) { Text(stringResource(R.string.inv_copy)) }
             }
-            Text(stringResource(R.string.inv_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
             OutlinedButton({ paste = true; bad = false; text = "" }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.inv_have)) }
             if (sess != null) {
                 Text(stringResource(R.string.inv_sess_text, sess.label), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
@@ -625,11 +624,10 @@ fun InvitesSection() {
 fun InvitesDialog(onClose: () -> Unit) {
     LAlertDialog(
         onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.inv_title), fontSize = 17.sp) },
+        title = { HintTitle(stringResource(R.string.inv_title), stringResource(R.string.inv_give_note), titleSize = 17.sp) },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 InvitesSection()
-                Text(stringResource(R.string.inv_give_note), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
             }
         },
         confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },

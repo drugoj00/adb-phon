@@ -60,8 +60,7 @@ fun BridgeTip(modifier: Modifier = Modifier) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 40.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.SportsEsports, null, Modifier.size(28.dp), tint = fg)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(stringResource(R.string.bridge_tip_title), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = fg)
-                    Text(stringResource(R.string.bridge_tip_text), fontSize = 12.sp, color = fg.copy(alpha = .9f))
+                    HintTitle(stringResource(R.string.bridge_tip_title), stringResource(R.string.bridge_tip_text), titleColor = fg, titleSize = 13.sp, titleWeight = FontWeight.Bold, hintColor = fg.copy(alpha = .9f), hintSize = 12.sp)
                     Button({ runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AppLinks.bridge(ctx))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }) {
                         Text(stringResource(R.string.bridge_tip_open), fontSize = 13.sp)
                     }

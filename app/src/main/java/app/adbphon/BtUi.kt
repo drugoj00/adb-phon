@@ -211,14 +211,10 @@ private fun BtOffBlock(ctx: Context) {
     }
 }
 
-/** Подсказка в одну строку с многоточием; нажатие раскрывает или сворачивает. */
+/** Пояснение в названии раздела: нажатие на название раскрывает или сворачивает (единый способ, как везде в программе). */
 @Composable
 private fun BtHintLine(pad: Boolean = false) {
-    Row(Modifier.fillMaxWidth().clickable { btHintOpen = !btHintOpen }, verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(if (pad) R.string.bt_pad_hint_pair else R.string.bt_hint), Modifier.weight(1f), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f),
-            maxLines = if (btHintOpen) Int.MAX_VALUE else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        Icon(if (btHintOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.padding(start = 4.dp))
-    }
+    HintTitle(stringResource(if (pad) R.string.sub_pad else R.string.sub_bt), stringResource(if (pad) R.string.bt_pad_hint_pair else R.string.bt_hint), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold)
 }
 
 @SuppressLint("MissingPermission")

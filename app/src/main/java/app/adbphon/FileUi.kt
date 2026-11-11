@@ -441,7 +441,7 @@ fun FilesLookSection() {
     }
     var typeIcons by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable { typeIcons = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(Icons.Filled.Image, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        FileGlyph(FCat.PHOTO, "", 32.dp)
         Text(androidx.compose.ui.res.stringResource(R.string.ic_types), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
     if (typeIcons) FileTypeIconsDialog { typeIcons = false }

@@ -285,9 +285,10 @@ object Bundles {
      * Установка по ADB: тихо, без окон. OBB копируются до установки (иначе, например, при обновлении самой программы
      * её процесс завершится раньше), при неудаче убираются. Возвращает true при успехе.
      */
-    suspend fun installAdb(ctx: Context, f: ApkFile): Boolean {
+    suspend fun installAdb(ctx: Context, f: ApkFile, flags: String = "-r", onPhase: ((Int) -> Unit)? = null): Boolean {
         val parts = f.parts ?: return false
         if (f.obb.isNotEmpty()) {
+            onPhase?.invoke(3)
             val n = copyObbAny(f.obb)
             if (n < 0) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -296,7 +297,8 @@ object Bundles {
                 return false
             }
         }
-        val r = Adb.installFiles(parts, "-r")
+        onPhase?.invoke(1)
+        val r = Adb.installFiles(parts, flags)
         if (!r.contains("Success", true)) { deleteObb(f.obb); return false }
         return true
     }

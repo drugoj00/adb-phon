@@ -142,7 +142,7 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
         onDismissRequest = { values.clear(); if (!CloudSetup.busy) CloudSetup.reset(); close() },
         title = { Row(verticalAlignment = Alignment.CenterVertically) {
             CloudTypeIcon(entry.type, entry.title, 28.dp, preset = entry.preset)
-            Text(entry.title, Modifier.padding(start = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            HintTitle(entry.title, listOfNotNull(entry.note.takeIf { it.isNotBlank() }, (when { entry.type == "mailru" -> R.string.cl_mailru_note; entry.preset["url"]?.contains("webdav.yandex") == true -> R.string.cl_yadav_note; else -> null })?.let { stringResource(it) }, stringResource(if (isOauth) R.string.cl_form_oauth_note else R.string.cl_form_key_note)).joinToString("\n\n"), Modifier.padding(start = 10.dp))
         } },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -183,11 +183,8 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
                             Text(stringResource(R.string.cl_mega_checking), fontSize = 14.sp)
                         }
                         if (CloudSetup.error.isNotEmpty()) Text(CloudSetup.error, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-                        if (entry.note.isNotBlank()) Text(entry.note, fontSize = 11.sp)
                         // где взять пароль приложения (вход прямо в программе, без браузера)
                         val loginHint = when { entry.type == "mailru" -> R.string.cl_mailru_note; entry.preset["url"]?.contains("webdav.yandex") == true -> R.string.cl_yadav_note; else -> null }
-                        loginHint?.let { Text(stringResource(it), fontSize = 12.sp) }
-                        Text(stringResource(if (isOauth) R.string.cl_form_oauth_note else R.string.cl_form_key_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                     }
                 }
             }

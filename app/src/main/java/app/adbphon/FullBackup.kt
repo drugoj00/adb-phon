@@ -317,15 +317,13 @@ fun FullBackupsDialog(onClose: () -> Unit, onSettings: (() -> Unit)? = null) {
             Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.fbk_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(stringResource(R.string.fbk_hint), color = t.hint, fontSize = 12.sp)
+            HintTitle(stringResource(R.string.fbk_title), stringResource(R.string.fbk_hint), titleColor = t.text, titleSize = 18.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
             if (busy || status.isNotEmpty()) Text(status.ifEmpty { stringResource(R.string.ver_working) }, color = t.accent, fontSize = 14.sp)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(stringResource(R.string.close), true) { onClose() }
                 if (onSettings != null) Chip(stringResource(R.string.fbk_settings), false) { onSettings() }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (loaded && items.isEmpty()) item { Text(stringResource(R.string.fbk_none), color = t.hint, fontSize = 13.sp) }
                 items(items, key = { it.dir }) { c ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.tile).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(c.label.ifEmpty { c.pkg }, color = t.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)

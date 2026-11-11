@@ -150,7 +150,7 @@ private fun OwnImageBrowser(onPicked: (Uri) -> Unit, onBack: () -> Unit) {
                 if (items.isEmpty()) Text(stringResource(if (granted) R.string.imgsrc_empty else R.string.imgsrc_noaccess), fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
                 items.forEach { f ->
                     Row(Modifier.fillMaxWidth().clickable { if (f.isDirectory) dir = f else onPicked(Uri.fromFile(f)) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(if (f.isDirectory) Icons.Filled.Folder else Icons.Filled.Image, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                        if (f.isDirectory) FolderIcon(UiPrefs.folderDefault, false, 28.dp) else FileTypeIcon(f.name, f.extension.lowercase(), f.absolutePath, 28.dp)
                         Text(f.name, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }

@@ -963,8 +963,7 @@ fun PadSettings() {
     // наклон
     check(R.string.pad_tilt, Pad.tilt) { Pad.tilt = it }
     if (Pad.tilt) {
-        Text(stringResource(R.string.pad_t_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-        Text(stringResource(R.string.pad_t_target), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        HintTitle(stringResource(R.string.pad_t_target), stringResource(R.string.pad_t_hint), titleSize = 13.sp)
         PadRadios(listOf(R.string.pad_t_left, R.string.pad_t_right, R.string.pad_t_dpad, R.string.pad_t_wheel), Pad.tiltTarget) { Pad.tiltTarget = it; Pad.save(ctx) }
         Text(stringResource(R.string.pad_t_axes), fontWeight = FontWeight.Medium, fontSize = 13.sp)
         PadRadios(listOf(R.string.pad_ax_both, R.string.pad_ax_x, R.string.pad_ax_y), Pad.tiltAxes) { Pad.tiltAxes = it; Pad.save(ctx) }
@@ -981,9 +980,8 @@ fun PadSettings() {
     check(R.string.pad_rumble, Pad.rumble) { Pad.rumble = it; if (!it) PadRumble.stop(ctx) }
     if (Pad.rumble) {
         slider(R.string.pad_rumble_gain, Pad.rumbleGain, 0f..2f, "${(Pad.rumbleGain * 100).toInt()}%") { Pad.rumbleGain = it }
-        Text(stringResource(R.string.pad_rumble_mode), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        HintTitle(stringResource(R.string.pad_rumble_mode), stringResource(R.string.pad_rumble_hint), titleSize = 13.sp)
         PadRadios(listOf(R.string.pad_rm_xbox, R.string.pad_rm_ds, R.string.pad_rm_pid), Pad.rumbleMode) { Pad.rumbleMode = it; Pad.save(ctx) }
-        Text(stringResource(R.string.pad_rumble_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         Text(stringResource(if (PadRumble.amplitudeControl(ctx)) R.string.pad_rumble_amp else R.string.pad_rumble_noamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
     }
 }

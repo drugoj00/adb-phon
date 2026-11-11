@@ -41,10 +41,9 @@ fun BtAutoDialog(vm: MainViewModel, mode: String, onClose: () -> Unit) {
         return h to p
     }
     LAlertDialog(
-        onDismissRequest = onClose, title = { Text(stringResource(R.string.bta_title)) },
+        onDismissRequest = onClose, title = { HintTitle(stringResource(R.string.bta_title), stringResource(R.string.bta_hint)) },
         text = {
             Column(Modifier.heightIn(max = 440.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.bta_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
                 if (targets.isEmpty()) Text(stringResource(R.string.bta_none), fontSize = 13.sp)
                 targets.forEach { (name, h, p) ->
                     Column(Modifier.fillMaxWidth().clickable { onClose(); BtAuto.connect(ctx, h, p, mode) }.padding(vertical = 4.dp)) {

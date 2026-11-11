@@ -126,10 +126,9 @@ fun OwnKeyPickDlg(close: () -> Unit) {
     val ctx = LocalContext.current
     LAlertDialog(
         wide = true, onDismissRequest = close,
-        title = { Text(stringResource(R.string.ok_pick_title)) },
+        title = { HintTitle(stringResource(R.string.ok_pick_title), stringResource(R.string.ok_why)) },
         text = {
             Column(Modifier.barScroll()) {
-                Text(stringResource(R.string.ok_why), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), modifier = Modifier.padding(bottom = 8.dp))
                 CloudTileGrid(OwnKeys.types.map { t -> CloudTile(CloudErr.providerName(ctx, t), t) { close(); Fm.dlg = FmDlg.OwnKey(t) } })
             }
         },

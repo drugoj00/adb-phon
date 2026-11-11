@@ -35,8 +35,10 @@ suspend fun Fs.apksIn(ctx: Context, path: String): List<ApkFile> {
             if (out.size >= 300) return
             if (!e.isDir && isApk(e.name)) {
                 val src = this
-                out.add(ApkFile(e.name, Uri.EMPTY, e.size, null, fetch = {
-                    if (src is LocalFs) File(e.path) else cacheName(ctx, e.name).also { f -> src.copyTo(e.path, f) }
+                // файл самого устройства уже на месте: сведения о пакете (версии, подпись) читаются сразу; остальное подтягивается при установке
+                if (src is LocalFs) out.add(ApkFile(e.name, Uri.fromFile(File(e.path)), e.size, File(e.path)))
+                else out.add(ApkFile(e.name, Uri.EMPTY, e.size, null, fetch = {
+                    cacheName(ctx, e.name).also { f -> src.copyTo(e.path, f) }
                 }))
             } else if (e.isDir && depth < 2) walk(e.path, depth + 1)
         }

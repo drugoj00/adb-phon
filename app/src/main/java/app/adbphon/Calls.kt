@@ -345,7 +345,7 @@ class CallListenService : Service() {
         nm.createNotificationChannel(NotificationChannel("call_listen", getString(R.string.call_listen_notif), NotificationManager.IMPORTANCE_MIN))
         val target = if (inCall) CallActivity::class.java else MainActivity::class.java
         val open = PendingIntent.getActivity(this, 4443, Intent(this, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
-        val b = NotificationCompat.Builder(this, "call_listen").setSmallIcon(R.drawable.ic_stat_blank).setOngoing(true).setSilent(true)
+        val b = NotificationCompat.Builder(this, "call_listen").setSmallIcon(R.drawable.ic_stat_call).setOngoing(true).setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN).setContentIntent(open)
         if (inCall) b.setContentTitle(getString(R.string.call_incall_notif, Calls.current?.peerName ?: ""))
         else {

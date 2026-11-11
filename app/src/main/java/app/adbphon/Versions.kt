@@ -251,12 +251,11 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
             Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.pver_title, label), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            HintTitle(stringResource(R.string.pver_title, label), stringResource(R.string.pver_hint), titleColor = t.text, titleSize = 18.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
             Text(
                 if (installed != null) stringResource(R.string.ver_installed, installed.first, installed.second) else stringResource(R.string.ver_not_installed),
                 color = t.sub, fontSize = 14.sp,
             )
-            Text(stringResource(R.string.pver_hint), color = t.hint, fontSize = 12.sp)
             if (status.isNotEmpty()) Text(status, color = t.accent, fontSize = 14.sp)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(stringResource(R.string.ver_fdroid), false, Modifier.focusRequester(first)) {
@@ -331,7 +330,6 @@ fun BackupsDialog(onClose: () -> Unit) {
             Text(stringResource(R.string.backups_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.backups_where, AppBackups.root(ctx).absolutePath), color = t.hint, fontSize = 12.sp)
             Chip(stringResource(R.string.close), true, Modifier.focusRequester(first)) { onClose() }
-            if (groups.isEmpty()) Text(stringResource(R.string.backups_empty), color = t.sub, fontSize = 14.sp)
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(groups.entries.toList(), key = { it.key }) { (pkg, list) ->
                     Row(
