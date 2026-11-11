@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 rootProject.name = "ADB-phon"
 include(":app")
 include(":clouds")
+include(":shizuku")

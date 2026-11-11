@@ -14,18 +14,27 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 6.0.** [ADB-phon-6.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 7.0.** [ADB-phon-7.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `64d73544c6d5578868c8f3eac617035c47504aaf1019b52939a023a93f98df48`
+SHA-256: `a7faf4dd97df9204350ffdea8c7d7577ce7b75333bd71cd8455eb596a5b750ac`
 
-## What's new in 6.0
+## What's new in 7.0
 
-- Interface improvements.
-- Fixed installation of the module for cloud drives.
-- Smaller installed size of the module for cloud drives: from 105 MB to 44 MB (ARM 64-bit).
-- Critical bugs fixed.
-
-The cloud drives module needs to be updated to version 1.1: ADB-phon 6.0 will offer this by itself.
+- Shizuku compatibility: apps that support Shizuku get shell permissions through ADB-phon
+- Dynamic colors from the wallpaper and a choice of the main color
+- Font size and element size
+- Full screen mode
+- Custom icons: folders, files, drives and places, apps, tabs, side panel buttons; the picture is chosen in a built-in browser or in any file manager
+- Side panel buttons in Files: hide and restore
+- List and tree on the Files root screen, folder colors
+- Console: live terminal, history, Ctrl+C, Tab, My commands
+- Devices in Files: computers and Android devices in one group, each with Files and Video window folders
+- Video window: view and control the screen of a computer or another Android, auto-rotation, text input in any language
+- Video call between Android devices and computers: incoming call window, sound, speaker, camera
+- Invitations: join a Tailscale network by an invitation from a PC
+- Another VPN is turned off for the duration of a session and restored afterwards
+- A hint about ADB-phon Bridge in the Gamepad section
+- Fixed APK installation and file operations with Cyrillic and other non-Latin names
 
 ## Features
 
@@ -47,11 +56,19 @@ The cloud drives module needs to be updated to version 1.1: ADB-phon 6.0 will of
 - **Network folders.** SMB, SFTP, FTP, FTPS and WebDAV: browse, copy and move in both directions, also directly between two network sources or from a cloud to the network. A file is written safely: the original survives a failure or cancel.
 - **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
-- **Console.** Any shell command.
-- **Settings.** Theme (auto, light, dark), language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
+- **Devices and Video window.** The Files tree has one “Devices” group: computers and Android devices together, each with Files and Video window folders. Video window shows and controls the screen of a computer or another Android device: auto-rotation, text input in any language.
+- **Video call.** Video call between Android devices and computers (the Windows program “Phone in Window with Sound” 3.0): incoming call window, sound, speaker, camera.
+- **Invitations.** Join a Tailscale network by an invitation from a PC. Another VPN is turned off for the duration of a session and restored afterwards.
+- **Shizuku compatibility.** Apps that support Shizuku get shell permissions through ADB-phon.
+- **Console.** Live terminal: any shell command, history, Ctrl+C, Tab, “My commands”.
+- **Settings.** Theme (auto, light, dark), dynamic colors from the wallpaper and the main color, font size and element size, full screen mode, custom icons for folders, files, drives, apps and side panel buttons, language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
 - **Free.** No ads, open source.
 
 ## Screenshots
+
+![Files: the “Devices” group for computers and Android devices (“Add device…”).](screenshots/en/devices.png)
+
+![Settings: theme, language, font size, element size, full screen mode.](screenshots/en/appearance.png)
 
 ![Files: two panels, buttons on the right (Up, Refresh, Copy, Move, Delete, Rename, New folder, Text file, ZIP, Select all) and the tab bar with “Exit”.](screenshots/en/01-files.png)
 
@@ -76,7 +93,7 @@ The cloud drives module needs to be updated to version 1.1: ADB-phon 6.0 will of
 
 ## Quick start
 
-1. Download ADB-phon-6.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-7.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
@@ -94,6 +111,7 @@ Android 8.0 or newer (ARMv7, ARM64, x86, x86_64). Wi-Fi for wireless debugging (
 - Cloud drives need the separate module “ADB-phon Clouds” (one download, internet needed). Google Drive: the app’s shared key is a trial one (first 100 users); then create your own key in the app. RAR5 archives are supported (also with a password). FTPS: browsing and downloading are tested, uploading only partly.
 - SSH and “PC mouse” are new and tested only partly: SSH against OpenSSH for Windows up to the password step, the Bluetooth mouse is not on every phone (some firmwares switch the HID profile off).
 - Special access settings can differ on Xiaomi, Huawei and other firmwares; on Xiaomi also turn on “USB debugging (security settings)”.
+- Video window at a Tailscale address (100.x) works when both devices are in the Tailscale network (with another permanent VPN on the phone, use the address of that network). Text input in the Video window in any layout needs ADB-phon 7.0 or newer on the target device.
 
 ## Built with
 
