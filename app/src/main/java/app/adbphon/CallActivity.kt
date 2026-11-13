@@ -90,7 +90,7 @@ class CallActivity : Activity() {
         root = FrameLayout(this).apply { setBackgroundColor(bg); fitsSystemWindows = true }
         setContentView(root)
         val c = Calls.current
-        if (c == null) { finish(); return }
+        if (c == null) { closeTask(); return }
         call = c
         route(intent)
     }
@@ -143,7 +143,7 @@ class CallActivity : Activity() {
             if (web == null && !ended && !c.outgoing) when (k) {
                 "hangup" -> closeRing(getString(R.string.call_cancelled))
                 "timeout" -> closeRing(getString(R.string.call_missed))
-                "localdecline" -> { ended = true; finish() }
+                "localdecline" -> { ended = true; closeTask() }
             }
         }
         if (Calls.auto == "answer") ui.postDelayed({ if (web == null && !ended) answer() }, 2500)
@@ -156,12 +156,12 @@ class CallActivity : Activity() {
         root.removeAllViews()
         root.addView(TextView(this).apply { text = msg; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f); gravity = Gravity.CENTER })
         call?.let { Calls.finish(applicationContext, it) }
-        ui.postDelayed({ finish() }, 1500)
+        ui.postDelayed({ closeTask() }, 1500)
     }
 
     private fun answer() {
         val c = call ?: return
-        if (c.state == "over") { finish(); return }
+        if (c.state == "over") { closeTask(); return }
         Calls.answered(applicationContext, c)
         begin()
     }
@@ -171,7 +171,7 @@ class CallActivity : Activity() {
         ended = true
         Calls.decline(applicationContext, c)
         Calls.finish(applicationContext, c)
-        finish()
+        closeTask()
     }
 
     // ---------------------------------------------------------------- разговор
@@ -478,8 +478,8 @@ class CallActivity : Activity() {
                 updatePipParams()
                 val why = m.optString("why"); android.util.Log.i("TvoCall", "ENDED $why")
                 Calls.finish(applicationContext, c)
-                // в окошке (PiP) обычный finish() на части прошивок (приставка Android 9) оставляет замёрзшее окошко: убираем задачу целиком
-                ui.postDelayed({ if (!isFinishing) { if (isInPictureInPictureMode) runCatching { finishAndRemoveTask() }.onFailure { finish() } else finish() } }, if (why == "ended" || why == "gone") 1200L else 4500L)
+                // в окошке (PiP) обычный closeTask() на части прошивок (приставка Android 9) оставляет замёрзшее окошко: убираем задачу целиком
+                ui.postDelayed({ if (!isFinishing) { if (isInPictureInPictureMode) runCatching { finishAndRemoveTask() }.onFailure { closeTask() } else closeTask() } }, if (why == "ended" || why == "gone") 1200L else 4500L)
             }
             "log" -> android.util.Log.i("TvoCall", "page: " + m.optString("m"))
             "pref" -> getSharedPreferences("call_ui", Context.MODE_PRIVATE).edit().putString(m.optString("k"), m.optString("v")).apply()
@@ -507,10 +507,13 @@ class CallActivity : Activity() {
         }, 70_000)
     }
 
+    /** 8.1: закрыть окно звонка вместе с его задачей (taskAffinity пустая): иначе после звонка в списке задач оставалась невидимая задача */
+    private fun closeTask() { try { finishAndRemoveTask() } catch (e: Throwable) { try { finish() } catch (_: Throwable) { } } }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (fullOn) { js("tvoFull(false)"); return }
-        if (web != null && !ended) js("tvoHangup()") else if (web == null && !ended && call?.state == "ring") decline() else finish()
+        if (web != null && !ended) js("tvoHangup()") else if (web == null && !ended && call?.state == "ring") decline() else closeTask()
     }
 
     override fun onDestroy() {
