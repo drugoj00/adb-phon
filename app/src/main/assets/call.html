@@ -7,6 +7,7 @@
 <style>
 :root {
   --teal: #0D9488; --teal-dark: #0b7a70; --bg: #0b1514; --panel: #12201f; --text: #e8f5f3; --muted: #9fb8b4; --red: #dc2626;
+  --warn-bg: #3a2a0c; --warn-line: #b45309; --warn-text: #fde68a;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, Arial, sans-serif; overflow: hidden; }
@@ -14,72 +15,221 @@ body { display: flex; flex-direction: column; }
 header { background: var(--teal); color: #fff; text-align: center; padding: 9px 12px 8px; flex: 0 0 auto; }
 #title { font-size: 17px; font-weight: 600; line-height: 1.25; }
 #sub { font-size: 13px; opacity: .92; margin-top: 2px; min-height: 17px; }
-main { position: relative; flex: 1 1 auto; min-height: 0; background: #000; display: flex; align-items: center; justify-content: center; }
-#rv { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#warn { flex: 0 0 auto; position: relative; padding: 7px 38px 7px 12px; font-size: 13px; line-height: 1.35; color: var(--warn-text); background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); }
+#warn[hidden] { display: none; }
+#warnX { position: absolute; right: 6px; top: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1; color: var(--warn-text); border-radius: 6px; cursor: pointer; user-select: none; }
+#warnX:hover { background: rgba(255,255,255,.14); }
+#warnX:focus-visible { outline: 3px solid #5eead4; outline-offset: 1px; }
+#wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+main { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; background: #000; display: flex; align-items: center; justify-content: center; }
+#rv { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+#rv.live { display: block; }
+/* 7.6: редко нужное (зеркало, поворот, вид, запись, качество, выбор устройств) спрятано под «Ещё», чтобы на телефоне хватало места видео */
+#dock { position: relative; flex: 0 0 auto; }
+#more { display: none; position: absolute; left: 0; right: 0; bottom: 100%; z-index: 6; max-height: 62vh; overflow-y: auto; background: var(--vu-bg); color: var(--vu-text); font-size: 12px; border-top: 2px solid var(--teal); box-shadow: 0 -6px 14px rgba(0,0,0,.45); }
+#more.open { display: block; }
+#more #dev { padding: 6px 12px 10px; }
+#more footer { background: var(--panel); }
+button.more { flex: 0 0 auto; min-width: 70px; max-width: 150px; }
+
 #ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 40%, #16302d 0%, #0b1514 70%); text-align: center; padding: 20px; }
 #av { width: 112px; height: 112px; border-radius: 50%; background: var(--teal); color: #fff; font-size: 52px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
 #phn { font-size: 20px; font-weight: 600; }
 #pht { font-size: 14px; color: var(--muted); max-width: 520px; line-height: 1.4; }
 #lv { position: absolute; right: 12px; bottom: 12px; width: 168px; height: 95px; object-fit: cover; background: #111; border: 2px solid var(--teal); border-radius: 8px; transform: scaleX(-1); }
 #lv.off { display: none; }
-footer { flex: 0 0 auto; background: var(--panel); padding: 10px 12px; display: flex; gap: 10px; justify-content: center; }
-button { flex: 1 1 0; max-width: 210px; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 600; text-align: center; color: var(--text); background: transparent; border: 2px solid var(--teal); border-radius: 8px; cursor: pointer; }
+/* 4.0: индикаторы уровня звука: слышно ли собеседника и слышно ли вас */
+:root { --vu-bg: #0b1514; --vu-track: #1d2f2d; --vu-fill: #0D9488; --vu-hot: #f59e0b; --vu-text: #cfe3e0; --vu-bad: #fca5a5; }
+@media (prefers-color-scheme: light) { :root { --vu-bg: #e8f3f1; --vu-track: #c5d9d6; --vu-fill: #0b7a70; --vu-hot: #b45309; --vu-text: #12302d; --vu-bad: #b91c1c; } }
+#vu { flex: 0 0 auto; background: var(--vu-bg); color: var(--vu-text); padding: 6px 12px 4px; border-top: 1px solid rgba(255,255,255,.06); font-size: 12px; line-height: 1.25; }
+#vu .vrow { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+#vu .vl { flex: 0 0 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#vu .vbar { position: relative; flex: 1 1 auto; height: 10px; background: var(--vu-track); border-radius: 5px; overflow: hidden; }
+#vu .vbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--vu-fill); border-radius: 5px; }
+#vu .vbar b { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: var(--vu-hot); }
+#vu .vn { flex: 0 0 96px; text-align: right; font-variant-numeric: tabular-nums; }
+#vu .vw { min-height: 15px; color: var(--vu-bad); padding-left: 158px; }
+#rec, #peerRec { position: absolute; top: 10px; z-index: 5; padding: 3px 10px; border-radius: 12px; font-size: 13px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); }
+#rec { left: 12px; border: 2px solid #ef4444; } #rec b { color: #ef4444; animation: blink 1s steps(2, start) infinite; }
+#peerRec { right: 12px; border: 2px solid #f59e0b; color: #fde68a; }
+@keyframes blink { to { visibility: hidden; } }
+#rec[hidden], #peerRec[hidden], #toast[hidden] { display: none; }
+#toast { position: fixed; left: 12px; right: 12px; bottom: 148px; z-index: 8; padding: 8px 12px; border-radius: 8px; background: #0b7a70; color: #fff; font-size: 13px; word-break: break-all; }
+footer.cap button.sm { flex: 0 0 auto; min-width: 44px; max-width: 54px; padding: 6px 8px; } footer.cap button.sm .lbl { display: none; } footer.cap { padding-top: 0; } footer.cap button { min-height: 34px; font-size: 13px; }
+footer { flex: 0 0 auto; background: var(--panel); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+button { flex: 1 1 140px; min-width: 104px; max-width: 230px; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 600; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--text); background: transparent; border: 2px solid var(--teal); border-radius: 8px; cursor: pointer; }
 button:hover { background: rgba(13,148,136,.22); }
 button:focus-visible { outline: 3px solid #5eead4; outline-offset: 2px; }
 button.off { border-color: #6b7f7c; color: var(--muted); text-decoration: line-through; }
 button.end { border-color: var(--red); color: #fecaca; }
 button.end:hover { background: rgba(220,38,38,.25); }
 button:disabled { opacity: .5; cursor: default; }
-/* узкий экран телефона: четыре кнопки в два ряда */
-@media (max-width: 560px) { footer { flex-wrap: wrap; } button { flex: 1 1 42%; max-width: none; } }
+button svg { flex: 0 0 auto; width: 19px; height: 19px; fill: currentColor; }
+@media (max-width: 600px) {
+  footer { padding: 6px 6px; gap: 5px; }
+  button { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: 12px; gap: 3px; overflow: hidden; }
+  #mainRow { flex-wrap: wrap; }
+  #mainRow button:not(.more) { flex: 1 1 22%; }
+  button.more { flex: 1 1 45%; min-width: 0; max-width: none; }
+  button:not(.sm) svg { display: none; }
+  #capRow { flex-wrap: nowrap; } #capRow button.sm { flex: 0 0 auto; min-width: 38px; padding: 6px 4px; }
+  #vu .vl { flex-basis: 104px; } #vu .vn { flex-basis: 92px; white-space: nowrap; font-size: 11px; } #vu .vw { padding-left: 0; }
+  #dev select { max-width: 100%; min-width: 0; width: 100%; }
+  #dev label { width: 100%; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; }
+}
+}
+button.off .lbl { text-decoration: line-through; }
+button .lbl { white-space: normal; text-align: center; line-height: 1.15; }
+#dev { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 3px 0 2px; }
+#dev label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#dev select { max-width: 270px; min-width: 120px; background: var(--vu-track); color: var(--vu-text); border: 1px solid var(--vu-fill); border-radius: 6px; padding: 2px 4px; font: inherit; font-size: 12px; }
+#dev select:focus-visible { outline: 3px solid #5eead4; outline-offset: 1px; }
+button.off { text-decoration: none; }
+/* ландшафт телефона: места по высоте мало */
+@media (max-height: 520px) {
+  header { padding: 4px 8px; } #title { font-size: 15px; } #sub { font-size: 12px; min-height: 14px; }
+  #vu { padding: 2px 12px; } #vu .vw { min-height: 0; } #vu .vrow { margin: 0; }
+  footer { padding: 4px 6px; } button { min-height: 32px; padding: 4px 6px; }
+  #more { max-height: 72vh; } #av { width: 64px; height: 64px; font-size: 30px; } #phn { font-size: 16px; }
+}
+body.pip header, body.pip #dock, body.pip #warn, body.pip #lv, body.pip #rec, body.pip #peerRec, body.pip #toast { display: none !important; }
+body.pip #av { width: 56px; height: 56px; font-size: 26px; } body.pip #phn { font-size: 13px; } body.pip #pht { display: none; } body.pip #ph { gap: 6px; padding: 6px; }
+/* 7.6: широкий экран (ТВ, планшет, телефон в альбоме): картинка слева, колонка кнопок сбоку (справа или слева, настройка «Кнопки звонка») */
+@media (orientation: landscape) and (min-width: 560px) {
+  #wrap { flex-direction: row; } body.btnL #wrap { flex-direction: row-reverse; }
+  #dock { flex: 0 0 300px; width: 300px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; background: var(--panel); }
+  #vu { padding: 6px 8px 2px; } #vu .vrow { flex-wrap: wrap; gap: 2px 6px; } #vu .vl { flex: 1 0 100%; } #vu .vbar { flex: 1 1 0; } #vu .vn { flex: 0 0 auto; white-space: nowrap; text-align: right; } #vu .vw { padding-left: 0; }
+  #mainRow { flex-direction: column; flex-wrap: nowrap; padding: 6px 8px; gap: 6px; }
+  #mainRow button { flex: 0 0 auto; width: 100%; max-width: none; min-height: 40px; justify-content: flex-start; padding: 6px 12px; font-size: 14px; }
+  #mainRow button svg { display: inline-block; }
+  #more { position: static; display: none; max-height: none; box-shadow: none; border-top: 1px solid rgba(255,255,255,.1); }
+  #more.open { display: block; } #more footer { padding: 6px 8px; } #more button { min-width: 0; flex: 1 1 40%; justify-content: center; }
+  #more #capRow button.sm { flex: 0 0 auto; }
+  #dev label { width: 100%; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; } #dev select { width: 100%; max-width: none; }
+}
+@media (orientation: landscape) and (min-width: 560px) and (max-height: 520px) {
+  #mainRow { display: grid; grid-template-columns: 1fr 1fr; } #mainRow button { min-height: 34px; padding: 4px 8px; font-size: 13px; } #mainRow button svg { display: none; }
+  #dock { flex-basis: 330px; width: 330px; }
+}
+/* 7.6: «На весь экран»: только картинка (значки записи и всплывающее сообщение остаются) */
+body.full header, body.full #dock, body.full #warn { display: none !important; }
+/* 7.6: аватарки: у собеседника без видео крупно по центру (вписана, без растяжения), при видео маленькая у названия; режим «Картинка вместо видео» */
+header { position: relative; }
+#hav { display: none; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; background: center / cover no-repeat; border: 2px solid rgba(255,255,255,.6); }
+#hav.on { display: block; }
+#av.img { width: min(62vmin, 440px); height: min(62vmin, 440px); border-radius: 14%; background: center / cover no-repeat; font-size: 0; }
+#ph.pic { background: #0b1514 center / contain no-repeat; }
+#ph.pic #av, #ph.pic #phn { display: none; }
+body.pip #av.img { width: min(78vmin, 100%); height: min(78vmin, 100%); } body.pip #ph.pic #pht, body.pip #av.img ~ #phn { display: none; }
 </style>
 </head>
 <body>
-<header><div id="title"></div><div id="sub"></div></header>
+<header><div id="hav"></div><div id="title"></div><div id="sub"></div></header>
+<div id="warn" hidden role="status"><span id="warnTxt"></span><span id="warnX" role="button" tabindex="0">✕</span></div>
+<div id="wrap">
 <main>
-  <video id="rv" autoplay playsinline></video>
+  <video id="rv" autoplay playsinline poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
   <div id="ph"><div id="av"></div><div id="phn"></div><div id="pht"></div></div>
-  <video id="lv" class="off" autoplay playsinline muted></video>
+  <div id="rec" hidden></div><div id="peerRec" hidden></div>
+  <video id="lv" class="off" autoplay playsinline muted poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
 </main>
-<footer>
+<div id="dock">
+<div id="vu" role="group">
+  <div class="vrow" id="vrIn"><span class="vl" id="vlIn"></span><div class="vbar"><i id="vIn"></i><b id="vInPk"></b></div><span class="vn" id="vInN"></span></div>
+  <div class="vw" id="vwIn"></div>
+  <div class="vrow" id="vrOut"><span class="vl" id="vlOut"></span><div class="vbar"><i id="vOut"></i><b id="vOutPk"></b></div><span class="vn" id="vOutN"></span></div>
+  <div class="vw" id="vwOut"></div>
+</div>
+<footer id="mainRow">
   <button id="bMic"></button>
   <button id="bSpk"></button>
   <button id="bCam"></button>
   <button id="bEnd" class="end"></button>
+  <button id="bBg" class="more"></button>
+  <button id="bPip" class="more" style="display:none"></button>
+  <button id="bFull" class="more"></button>
+  <button id="bMore" class="more"></button>
 </footer>
+<div id="more">
+  <footer id="moreRow">
+    <button id="bMir"></button>
+    <button id="bRot"></button>
+    <button id="bView"></button>
+    <button id="bOth" style="display:none"></button>
+  </footer>
+  <footer class="cap" id="capRow">
+    <button id="bShot"></button>
+    <button id="bDirS" class="sm"></button>
+    <button id="bRec"></button>
+    <button id="bDirV" class="sm"></button>
+    <button id="bRecA"></button>
+    <button id="bDirA" class="sm"></button>
+    <button id="bOpen" style="display:none"></button>
+  </footer>
+  <div id="dev"><label><span id="dlMic"></span><select id="selMic"></select></label><label><span id="dlSpk"></span><select id="selSpk"></select></label><label><span id="dlVq"></span><select id="selVq"></select></label><label><span id="dlRq"></span><select id="selRq"></select></label><label><span id="dlRf"></span><select id="selRf"></select></label></div>
+</div>
+</div>
+</div>
+<div id="toast" hidden></div>
 <script>
 'use strict';
 const L = {
   ru: {
     title: 'Видеозвонок', calling: 'Звоним: ', waitAnswer: 'Ждём, пока ответят…', incoming: 'Разговор: ', connecting: 'Соединяем…',
     connected: 'На связи', lost: 'Связь пропала, пробуем восстановить…', failed: 'Связь не получилась', ended: 'Звонок завершён',
-    mic: 'Звук: вкл', micOff: 'Звук: выкл', spk: 'Динамик: вкл', spkOff: 'Динамик: выкл', cam: 'Камера: вкл', camOff: 'Камера: выкл', end: 'Завершить',
+    mic: 'Звук: вкл', micOff: 'Звук: выкл', spk: 'Динамик: вкл', spkOff: 'Динамик: выкл', cam: 'Камера: вкл', camOff: 'Камера: выкл', end: 'Завершить', dirShot: 'Папка скриншотов (фото)…', dirVideo: 'Папка видео записей…', dirAudio: 'Папка записей звука…', dirBtn: 'Папка…', dirNow: 'Папка записей: ', tipDir: 'Выбрать папку для записей и скриншотов', vqLbl: 'Качество видео: ', vqAuto: 'Авто', vqEco: 'Эконом 360p · 0,7 Мбит', vqNorm: 'Обычное 480p · 1,2 Мбит', vqHigh: 'Высокое 720p · 2,5 Мбит', vqMax: 'Максимум 1080p · 5 Мбит', tipVq: 'Чем выше, тем больше нагрузка на сеть; слабая камера или канал могут не дать максимум; «Авто» само снижает качество при потерях', rqLbl: 'Качество записи: ', rqLow: 'Низкое 1 Мбит', rqMid: 'Среднее 2 Мбит', rqHigh: 'Высокое 4 Мбит', rqMax: 'Максимум 8 Мбит', mbMin: 'МБ/мин', rfLbl: 'Формат: ', quality: 'качество', shot: 'Скриншот', rec: 'Запись', recStop: 'Стоп', recA: 'Запись звука', openDir: 'Открыть запись', saved: 'Сохранено: ', recOn: 'Идёт запись', peerRecTxt: 'Собеседник записывает', recFail: 'Запись не получилась', noShot: 'Нет картинки собеседника для скриншота', tipShot: 'Сохранить кадр видео собеседника', tipRec: 'Записать видео и звук обеих сторон (собеседник увидит «Собеседник записывает»)', tipRecA: 'Записать только звук обеих сторон (собеседник увидит «Собеседник записывает»)', viewFit: 'Вид: вписать', viewFill: 'Вид: заполнить', viewWin: 'Подогнать экран', tipView: 'Вписать: видео целиком (возможны чёрные поля). Заполнить: без полей, края обрезаются. Подогнать экран: поворот экрана под пропорции видео', devMic: 'Микрофон: ', devSpk: 'Выход звука: ', vuNoMic: 'Микрофон не слышно: выбери другой в списке или проверь его в настройках звука', micAuto: 'Подбираем микрофон: скажите что-нибудь…', vuIn: 'Собеседника слышно', vuOut: 'Вас слышно', vuPk: 'пик', vuNoIn: 'Собеседник молчит или у него нет микрофона/микрофон отключён', vuNoOut: 'Вас не слышно: проверьте микрофон', oth: 'Звук других: вкл', othOff: 'Звук других: откл', tipOth: 'Звук других программ (AnyDesk и т. п.) на этом компьютере: отключить на время звонка или вернуть', rot: 'Поворот: ', tipRot: 'Повернуть видео собеседника на 90° по кругу (0, 90, 180, 270); свой экран не меняется', mir: 'Зеркало: вкл', mirOff: 'Зеркало: выкл', mirAll: 'Зеркало: всем', tipMir: 'Зеркальное отражение своей камеры. Вкл: зеркально только у тебя (как в зеркале). Выкл: как снимает камера. Всем: зеркально и у тебя, и у собеседника',
     noCam: 'Камеры нет или она занята. Звонок идёт только со звуком.', noMic: 'Микрофона нет или он занят. Ты слышишь собеседника, он тебя нет.',
     noMedia: 'Нет ни камеры, ни микрофона: звонок только на приём.', testTitle: 'Проверка камеры и микрофона', testSub: 'Говори: полоска ниже показывает уровень микрофона', testNote: 'Это только проверка: картинка и звук никуда не передаются.', peerCamOff: 'Камера у собеседника выключена',
-    failHint: 'Обычно причина в том, что устройства не в одной сети: нужен Tailscale на обоих.', declined: 'Собеседник отклонил звонок', busy: 'Собеседник уже говорит', noAnswer: 'Нет ответа', gone: 'Собеседник завершил звонок'
+    failHint: 'Обычно причина в том, что устройства не в одной сети: нужен Tailscale на обоих.', declined: 'Собеседник отклонил звонок', busy: 'Собеседник уже говорит', noAnswer: 'Нет ответа. Возможно, у собеседника старая версия программы без звонков или программа не запущена.', gone: 'Собеседник завершил звонок',
+    ringing: 'У собеседника звонит…', noRing: 'Собеседник пока не отвечает. Возможно, у него старая версия без звонков или программа не запущена.',
+    bg: 'Скрыть, звонок идёт', tipBg: 'Окно закрывается, звонок и звук продолжаются; вернуться можно из уведомления', pip: 'Окошко', tipPip: 'Маленькое окошко с видео поверх других программ (кнопка «Дом» делает то же)', full: 'На весь экран', more: 'Ещё ▾', less: 'Меньше ▴', titleVoice: 'Голосовой звонок', callingVoice: 'Звоним голосом: ', tipMic: 'Включить или выключить свой микрофон', tipSpk: 'Включить или выключить звук собеседника', tipCam: 'Включить или выключить свою камеру: звонок не прерывается', tipEnd: 'Завершить звонок', warnClose: 'Скрыть предупреждение'
   },
   uk: {
     title: 'Відеодзвінок', calling: 'Дзвонимо: ', waitAnswer: 'Чекаємо, поки відповідять…', incoming: 'Розмова: ', connecting: 'Зʼєднуємо…',
     connected: 'На звʼязку', lost: 'Звʼязок зник, пробуємо відновити…', failed: 'Звʼязок не вдався', ended: 'Дзвінок завершено',
-    mic: 'Звук: увімк', micOff: 'Звук: вимк', spk: 'Динамік: увімк', spkOff: 'Динамік: вимк', cam: 'Камера: увімк', camOff: 'Камера: вимк', end: 'Завершити',
+    mic: 'Звук: увімк', micOff: 'Звук: вимк', spk: 'Динамік: увімк', spkOff: 'Динамік: вимк', cam: 'Камера: увімк', camOff: 'Камера: вимк', end: 'Завершити', dirShot: 'Тека знімків (фото)…', dirVideo: 'Тека відеозаписів…', dirAudio: 'Тека записів звуку…', dirBtn: 'Тека…', dirNow: 'Тека записів: ', tipDir: 'Вибрати теку для записів і знімків', vqLbl: 'Якість відео: ', vqAuto: 'Авто', vqEco: 'Економ 360p · 0,7 Мбіт', vqNorm: 'Звичайна 480p · 1,2 Мбіт', vqHigh: 'Висока 720p · 2,5 Мбіт', vqMax: 'Максимум 1080p · 5 Мбіт', tipVq: 'Чим вище, тим більше навантаження на мережу; слабка камера або канал можуть не дати максимум; «Авто» саме знижує якість за втрат', rqLbl: 'Якість запису: ', rqLow: 'Низька 1 Мбіт', rqMid: 'Середня 2 Мбіт', rqHigh: 'Висока 4 Мбіт', rqMax: 'Максимум 8 Мбіт', mbMin: 'МБ/хв', rfLbl: 'Формат: ', quality: 'якість', shot: 'Знімок екрана', rec: 'Запис', recStop: 'Стоп', recA: 'Запис звуку', openDir: 'Відкрити запис', saved: 'Збережено: ', recOn: 'Іде запис', peerRecTxt: 'Співрозмовник записує', recFail: 'Запис не вдався', noShot: 'Немає картинки співрозмовника для знімка', tipShot: 'Зберегти кадр відео співрозмовника', tipRec: 'Записати відео й звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', tipRecA: 'Записати лише звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', viewFit: 'Вигляд: вписати', viewFill: 'Вигляд: заповнити', viewWin: 'Підігнати екран', tipView: 'Вписати: відео повністю (можливі чорні поля). Заповнити: без полів, краї обрізаються. Підігнати екран: поворот екрана під пропорції відео', devMic: 'Мікрофон: ', devSpk: 'Вихід звуку: ', vuNoMic: 'Мікрофон не чутно: вибери інший у списку або перевір його в налаштуваннях звуку', micAuto: 'Підбираємо мікрофон: скажіть щось…', vuIn: 'Співрозмовника чутно', vuOut: 'Вас чутно', vuPk: 'пік', vuNoIn: 'Співрозмовник мовчить або в нього немає мікрофона/мікрофон вимкнено', vuNoOut: 'Вас не чутно: перевірте мікрофон', oth: 'Звук інших: увімк', othOff: 'Звук інших: вимк', tipOth: 'Звук інших програм (AnyDesk тощо) на цьому комп’ютері: вимкнути на час дзвінка або повернути', rot: 'Поворот: ', tipRot: 'Повернути відео співрозмовника на 90° по колу (0, 90, 180, 270); свій екран не змінюється', mir: 'Дзеркало: увімк', mirOff: 'Дзеркало: вимк', mirAll: 'Дзеркало: всім', tipMir: 'Дзеркальне відображення своєї камери. Увімк: дзеркально лише в тебе (як у дзеркалі). Вимк: як знімає камера. Всім: дзеркально і в тебе, і в співрозмовника',
     noCam: 'Камери немає або вона зайнята. Дзвінок іде лише зі звуком.', noMic: 'Мікрофона немає або він зайнятий. Ти чуєш співрозмовника, він тебе ні.',
     noMedia: 'Немає ні камери, ні мікрофона: дзвінок лише на прийом.', testTitle: 'Перевірка камери й мікрофона', testSub: 'Говори: смужка нижче показує рівень мікрофона', testNote: 'Це лише перевірка: картинка й звук нікуди не передаються.', peerCamOff: 'Камеру співрозмовника вимкнено',
-    failHint: 'Зазвичай причина в тому, що пристрої не в одній мережі: потрібен Tailscale на обох.', declined: 'Співрозмовник відхилив дзвінок', busy: 'Співрозмовник уже говорить', noAnswer: 'Немає відповіді', gone: 'Співрозмовник завершив дзвінок'
+    failHint: 'Зазвичай причина в тому, що пристрої не в одній мережі: потрібен Tailscale на обох.', declined: 'Співрозмовник відхилив дзвінок', busy: 'Співрозмовник уже говорить', noAnswer: 'Немає відповіді. Можливо, у співрозмовника стара версія програми без дзвінків або програму не запущено.', gone: 'Співрозмовник завершив дзвінок',
+    ringing: 'У співрозмовника дзвонить…', noRing: 'Співрозмовник поки не відповідає. Можливо, у нього стара версія без дзвінків або програму не запущено.',
+    bg: 'Сховати, дзвінок іде', tipBg: 'Вікно закривається, дзвінок і звук тривають; повернутися можна з сповіщення', pip: 'Віконце', tipPip: 'Маленьке віконце з відео поверх інших програм (кнопка «Додому» робить те саме)', full: 'На весь екран', more: 'Ще ▾', less: 'Менше ▴', titleVoice: 'Голосовий дзвінок', callingVoice: 'Дзвонимо голосом: ', tipMic: 'Увімкнути або вимкнути свій мікрофон', tipSpk: 'Увімкнути або вимкнути звук співрозмовника', tipCam: 'Увімкнути або вимкнути свою камеру: дзвінок не переривається', tipEnd: 'Завершити дзвінок', warnClose: 'Сховати попередження'
   },
   en: {
     title: 'Video call', calling: 'Calling: ', waitAnswer: 'Waiting for an answer…', incoming: 'Talking with ', connecting: 'Connecting…',
     connected: 'Connected', lost: 'Connection lost, trying to restore…', failed: 'Could not connect', ended: 'Call ended',
-    mic: 'Sound: on', micOff: 'Sound: off', spk: 'Speaker: on', spkOff: 'Speaker: off', cam: 'Camera: on', camOff: 'Camera: off', end: 'End call',
+    mic: 'Sound: on', micOff: 'Sound: off', spk: 'Speaker: on', spkOff: 'Speaker: off', cam: 'Camera: on', camOff: 'Camera: off', end: 'End call', dirShot: 'Screenshots (photo) folder…', dirVideo: 'Video recordings folder…', dirAudio: 'Audio recordings folder…', dirBtn: 'Folder…', dirNow: 'Recordings folder: ', tipDir: 'Choose the folder for recordings and screenshots', vqLbl: 'Video quality: ', vqAuto: 'Auto', vqEco: 'Economy 360p · 0.7 Mbit', vqNorm: 'Normal 480p · 1.2 Mbit', vqHigh: 'High 720p · 2.5 Mbit', vqMax: 'Maximum 1080p · 5 Mbit', tipVq: 'The higher, the heavier the load on the network; a weak camera or link may not give the maximum; “Auto” lowers the quality itself on losses', rqLbl: 'Recording quality: ', rqLow: 'Low 1 Mbit', rqMid: 'Medium 2 Mbit', rqHigh: 'High 4 Mbit', rqMax: 'Maximum 8 Mbit', mbMin: 'MB/min', rfLbl: 'Format: ', quality: 'quality', shot: 'Screenshot', rec: 'Record', recStop: 'Stop', recA: 'Record audio', openDir: 'Open recording', saved: 'Saved: ', recOn: 'Recording', peerRecTxt: 'The other person is recording', recFail: 'Recording failed', noShot: 'No picture from the other person for a screenshot', tipShot: 'Save a frame of the other person video', tipRec: 'Record video and sound of both sides (the other person sees “The other person is recording”)', tipRecA: 'Record only the sound of both sides (the other person sees “The other person is recording”)', viewFit: 'View: fit', viewFill: 'View: fill', viewWin: 'Fit screen', tipView: 'Fit: the whole picture (black bars are possible). Fill: no bars, the edges are cropped. Fit screen: rotate the screen to the video proportions', devMic: 'Microphone: ', devSpk: 'Sound output: ', vuNoMic: 'The microphone is not heard: choose another in the list or check it in the sound settings', micAuto: 'Choosing a microphone: say something…', vuIn: 'Hearing the other person', vuOut: 'You are heard', vuPk: 'peak', vuNoIn: 'The other person is silent or has no microphone / the microphone is off', vuNoOut: 'You are not heard: check your microphone', oth: 'Sound of others: on', othOff: 'Sound of others: off', tipOth: 'Sound of other programs (AnyDesk and the like) on this computer: turn it off for the call or restore it', rot: 'Rotate: ', tipRot: 'Rotate the other person video by 90° in a circle (0, 90, 180, 270); your own picture is not changed', mir: 'Mirror: on', mirOff: 'Mirror: off', mirAll: 'Mirror: all', tipMir: 'Mirror image of your camera. On: mirrored only for you (like a mirror). Off: as the camera films. All: mirrored for you and for the other person',
     noCam: 'No camera or it is busy. The call goes with sound only.', noMic: 'No microphone or it is busy. You hear the other person, they do not hear you.',
     noMedia: 'No camera and no microphone: receive-only call.', testTitle: 'Camera and microphone check', testSub: 'Speak: the bar below shows the microphone level', testNote: 'This is only a check: no picture or sound is sent anywhere.', peerCamOff: 'The other camera is off',
-    failHint: 'Usually the devices are not on one network: Tailscale is needed on both.', declined: 'The other person declined', busy: 'The other person is already on a call', noAnswer: 'No answer', gone: 'The other person ended the call'
+    failHint: 'Usually the devices are not on one network: Tailscale is needed on both.', declined: 'The other person declined', busy: 'The other person is already on a call', noAnswer: 'No answer. The other side may have an old version without calls or the program is not running.', gone: 'The other person ended the call',
+    ringing: 'Ringing on the other side…', noRing: 'No reply yet. The other side may have an old version without calls or the program is not running.',
+    bg: 'Hide, call goes on', tipBg: 'The window closes, the call and sound go on; come back from the notification', pip: 'Mini window', tipPip: 'A small video window over other apps (the Home button does the same)', full: 'Full screen', more: 'More ▾', less: 'Less ▴', titleVoice: 'Voice call', callingVoice: 'Voice call to: ', tipMic: 'Turn your microphone on or off', tipSpk: 'Turn the other side sound on or off', tipCam: 'Turn your camera on or off: the call is not interrupted', tipEnd: 'End the call', warnClose: 'Hide the warning'
   }
 };
 let lang = 'ru', S = L.ru, cfg = {}, pc = null, dc = null, localStream = null, camSender = null, micSender = null, camOn = true, micOn = true, spkOn = true;
-let ended = false, connectedAt = 0, timer = null, statsTimer = null, lostTimer = null, failTimer = null;
+let mirMode = 'on', mirOut = null, rotDeg = 0, othState = 0, viewMode = 'fit', viewFlash = 0;   // othState: 0 программ со звуком нет, 1 звук других отключён, 2 программы есть, звук не отключён
+let ended = false, connectedAt = 0, timer = null, statsTimer = null, diagTimer = null, lostTimer = null, failTimer = null;
+const IC = {
+  mic: '<svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z"/></svg>',
+  spk: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>',
+  cam: '<svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>',
+  end: '<svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85a.99.99 0 0 1-1.41-.01L.29 13.08a.96.96 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67a.96.96 0 0 1 0 1.41l-2.48 2.48a.99.99 0 0 1-1.41.01 11.3 11.3 0 0 0-2.66-1.85.99.99 0 0 1-.56-.9v-3.1A15.9 15.9 0 0 0 12 9z"/></svg>',
+  mir: '<svg viewBox="0 0 24 24"><path d="M15 21h2v-2h-2v2zm4-12h2V7h-2v2zM3 5v14c0 1.1.9 2 2 2h4v-2H5V5h4V3H5c-1.1 0-2 .9-2 2zm16-2v2h2c0-1.1-.9-2-2-2zm-8 20h2V1h-2v22zm8-6h2v-2h-2v2zM15 5h2V3h-2v2zm4 8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2z"/></svg>',
+  shot: '<svg viewBox="0 0 24 24"><path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>',
+  rec: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z" style="fill:#ef4444"/></svg>',
+  recA: '<svg viewBox="0 0 24 24"><path d="M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>',
+  view: '<svg viewBox="0 0 24 24"><path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z"/></svg>',
+  rot: '<svg viewBox="0 0 24 24"><path d="M15.55 5.55 11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42 1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>',
+  oth: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.4-2.4L17.6 8.2 15.2 10.6 12.8 8.2 11.4 9.6l2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4z"/></svg>',
+  pip: '<svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg>',
+  hide: '<svg viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>',
+  slash: '<svg viewBox="0 0 24 24" style="position:absolute;left:0;top:0;width:19px;height:19px"><path d="M4 3.5 20.5 20" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>'
+};
+function btnHtml(icon, off, label) { return '<span style="position:relative;display:inline-flex">' + IC[icon] + (off ? IC.slash : '') + '</span><span class="lbl">' + label + '</span>'; }
 const $ = id => document.getElementById(id);
-// Android (ADB-phon): сообщения хосту идут через мост TvoAndroid.post; в WebView2 на Windows работает window.chrome.webview
-const post = o => { try { const j = JSON.stringify(o); if (window.TvoAndroid) window.TvoAndroid.post(j); else window.chrome.webview.postMessage(j); } catch (e) { } };
+const post = o => { try { window.TvoAndroid.post(JSON.stringify(o)); } catch (e) { } };
+// настройки страницы хранит программа: при запуске приходят в cfg.prefs, изменения уходят сообщением pref (localStorage в WebView программы выключен)
+const PREF = {}; const LS = { getItem: k => (k in PREF ? PREF[k] : null), setItem: (k, v) => { PREF[k] = String(v); post({ type: 'pref', k: String(k), v: String(v) }); } };
 const log = m => post({ type: 'log', m: String(m) });
 
 function setStatus(sub, big, hint) { $('sub').textContent = sub || ''; if (big !== undefined) $('pht').textContent = hint || ''; }
@@ -107,8 +257,11 @@ function gatherDone(p, ms) {
 function preferCodecs(tr) {
   try {
     const kind = tr.receiver.track.kind, caps = RTCRtpReceiver.getCapabilities(kind).codecs;
-    const want = kind === 'video' ? /^video\/(VP8|rtx)$/i : /^audio\/opus$/i;
-    const pick = caps.filter(c => want.test(c.mimeType));
+    if (kind === 'video' && !window.__capLogged) { window.__capLogged = 1; log('кодеки приёма: ' + caps.map(c => c.mimeType.replace('video/', '') + (c.sdpFmtpLine && /H264/i.test(c.mimeType) ? '[' + ((c.sdpFmtpLine.match(/profile-level-id=(\w+)/) || [])[1] || '-') + '/pm' + ((c.sdpFmtpLine.match(/packetization-mode=(\d)/) || [])[1] || '0') + ']' : '')).join(' ') + ' | отправки: ' + RTCRtpSender.getCapabilities('video').codecs.map(c => c.mimeType.replace('video/', '') + (c.sdpFmtpLine && /H264/i.test(c.mimeType) ? '[' + ((c.sdpFmtpLine.match(/profile-level-id=(\w+)/) || [])[1] || '-') + '/pm' + ((c.sdpFmtpLine.match(/packetization-mode=(\d)/) || [])[1] || '0') + ']' : '')).join(' ')); }
+    const vc = String(cfg.vcodec || 'vp8').toLowerCase();
+    const want = kind === 'video' ? new RegExp('^video\\/(' + (vc === 'h264' ? 'H264' : (vc === 'vp9' ? 'VP9' : 'VP8')) + '|rtx)$', 'i') : /^audio\/opus$/i;
+    let pick = caps.filter(c => want.test(c.mimeType));
+    if (kind === 'video') { if (vc === 'h264') pick.sort((a, b) => ((/profile-level-id=42e0/i.test(b.sdpFmtpLine || '')) - (/profile-level-id=42e0/i.test(a.sdpFmtpLine || '')))); const rest = caps.filter(c => /^video\/(VP8|rtx)$/i.test(c.mimeType) && pick.indexOf(c) < 0); pick = pick.concat(rest); }
     if (pick.length) tr.setCodecPreferences(pick);
   } catch (e) { log('codecs: ' + e); }
 }
@@ -116,7 +269,7 @@ function preferCodecs(tr) {
 // проверки на Android: вместо настоящих камеры и микрофона синтетический поток (цветной кадр со счётчиком и тон); включается только ключом fake, в обычном звонке не используется
 let fakeCtx = null, fakeCanvas = null;
 function fakeVideoTrack() {
-  if (!fakeCanvas) { fakeCanvas = document.createElement('canvas'); fakeCanvas.width = 640; fakeCanvas.height = 360; const x = fakeCanvas.getContext('2d'); let n = 0; setInterval(() => { x.fillStyle = '#0F766E'; x.fillRect(0, 0, 640, 360); x.fillStyle = '#fff'; x.font = '56px sans-serif'; x.fillText('TEST ' + (n++), 60, 200); }, 66); }
+  if (!fakeCanvas) { fakeCanvas = document.createElement('canvas'); fakeCanvas.width = (cfg.fw | 0) || 640; fakeCanvas.height = (cfg.fh | 0) || 360; const x = fakeCanvas.getContext('2d'); let n = 0; setInterval(() => { x.fillStyle = '#0F766E'; x.fillRect(0, 0, 640, 360); x.fillStyle = '#fff'; x.font = '56px sans-serif'; x.fillText('TEST ' + (n++), 60, 200); }, 66); }
   return fakeCanvas.captureStream(15).getVideoTracks()[0];
 }
 function fakeAudioTrack() {
@@ -126,25 +279,59 @@ function fakeAudioTrack() {
 }
 async function getVideoTrack() {
   if (cfg.fake) { if (cfg.fake === 'av') return fakeVideoTrack(); throw new Error('nocam'); }
-  const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 30 } } }); return s.getVideoTracks()[0];
+  const s = await navigator.mediaDevices.getUserMedia({ video: vqVideoC() }); return s.getVideoTracks()[0];
 }
-async function getMedia() {
+async function getMedia(noVideo) {
   const out = { audio: null, video: null };
-  if (cfg.fake) { out.audio = fakeAudioTrack(); if (cfg.fake === 'av') out.video = fakeVideoTrack(); return out; }
+  if (cfg.fake) { out.audio = fakeAudioTrack(); if (cfg.fake === 'av' && !noVideo) out.video = fakeVideoTrack(); return out; }
   const t = !!cfg.test;
-  try { const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); out.audio = s.getAudioTracks()[0]; } catch (e) { log('mic: ' + e.name); }
-  try { const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 30 } } }); out.video = s.getVideoTracks()[0]; } catch (e) { log('cam: ' + e.name); }
+  { const sid = (() => { try { return LS.getItem('tvoMicId') || ''; } catch (e) { return ''; } })();
+    const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    if (sid) { try { const s = await navigator.mediaDevices.getUserMedia({ audio: Object.assign({ deviceId: { exact: sid } }, base) }); out.audio = s.getAudioTracks()[0]; log('mic: сохранённый выбор'); } catch (e) { log('mic: сохранённый не найден (' + e.name + ')'); } }
+    if (!out.audio) { try { const s = await navigator.mediaDevices.getUserMedia({ audio: base }); out.audio = s.getAudioTracks()[0]; } catch (e) { log('mic: ' + e.name); } } }
+  if (!noVideo) { try { const s = await navigator.mediaDevices.getUserMedia({ video: vqVideoC() }); out.video = s.getVideoTracks()[0]; } catch (e) { log('cam: ' + e.name); } }
   return out;
 }
 
+// «Есть ли живая картинка собеседника» определяем по декодированным кадрам, а не по состоянию дорожки: у части WebView (приставки на Android 9)
+// дорожка без картинки не помечается «немой», и вместо значка собеседника показывалась пустая или растянутая заглушка видео
+let liveTimer = null, lastFd = -1, lastFdAt = 0;
+let peerAv = '', picMode = 'peer', ownPic = '', isLive = false;
+function setPeerAv(b64) { if (b64 && b64.length < 90000 && /^[A-Za-z0-9+\/=]+$/.test(b64)) { peerAv = 'data:image/jpeg;base64,' + b64; applyPh(); } }
+// заглушка без видео: аватарка собеседника (по умолчанию), своя картинка или только буква; при живом видео маленькая аватарка у названия
+function applyPh() {
+  const av = $('av'), ph = $('ph'), hav = $('hav');
+  const usePeer = picMode === 'peer' && peerAv, useOwn = picMode === 'own' && ownPic;
+  ph.classList.toggle('pic', !!useOwn); ph.style.backgroundImage = useOwn ? 'url(' + ownPic + ')' : '';
+  av.classList.toggle('img', !!usePeer); av.style.backgroundImage = usePeer ? 'url(' + peerAv + ')' : '';
+  av.textContent = usePeer ? '' : ((cfg.peer || '').trim()[0] || '?').toUpperCase();
+  if (usePeer) $('phn').style.display = '';
+  hav.style.backgroundImage = usePeer ? 'url(' + peerAv + ')' : ''; hav.classList.toggle('on', !!usePeer && isLive);
+}
+window.tvoSetPic = (m, p) => { picMode = (m === 'own' || m === 'letter') ? m : 'peer'; ownPic = p || ''; applyPh(); };
+function setLive(live) { isLive = live; applyPh(); $('rv').classList.toggle('live', live); showPh(!live); if (!ended) $('pht').textContent = live ? '' : (connectedAt ? S.peerCamOff : ''); }
+async function liveTick() {
+  if (!pc || ended) return;
+  try {
+    const st = await pc.getStats(); let fd = -1;
+    st.forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') fd = r.framesDecoded || 0; });
+    const now = Date.now(); if (fd !== lastFd) { lastFd = fd; lastFdAt = now; }
+    let pk = 0; st.forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') pk = r.packetsReceived || 0; });
+    if (connectedAt && pk > 30 && fd === 0) rxBad++; else if (fd > 0) rxBad = 0;
+    if (rxBad >= 5 && !lowAsked) { lowAsked = true; try { LS.setItem('tvoWeakRx', String(Date.now())); } catch (e) { } dcSend('lowres:1'); log('видео приходит, но не расшифровывается: просим собеседника снизить разрешение'); }
+    setLive(fd > 0 && now - lastFdAt < 3500);
+  } catch (e) { }
+}
 function newPc() {
+  clearInterval(liveTimer); liveTimer = setInterval(liveTick, 1000);
   pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], bundlePolicy: 'max-bundle' });
   pc.ontrack = ev => {
     const rv = $('rv');
     if (!rv.srcObject) rv.srcObject = new MediaStream();
     rv.srcObject.addTrack(ev.track);
+    if (ev.track.kind === 'audio') vuAttachIn(ev.track);
     if (ev.track.kind === 'video') {
-      const upd = () => { const live = !ev.track.muted && ev.track.readyState === 'live'; showPh(!live); $('pht').textContent = live ? '' : (connectedAt ? S.peerCamOff : ''); };
+      const upd = () => { liveTick(); };
       ev.track.onmute = upd; ev.track.onunmute = upd; ev.track.onended = upd; upd();
     }
   };
@@ -153,8 +340,10 @@ function newPc() {
     if (ended) return;
     if (st === 'connected') {
       clearTimeout(lostTimer); clearTimeout(failTimer);
-      if (!connectedAt) { connectedAt = Date.now(); startTimer(); }
+      if (!connectedAt) { connectedAt = Date.now(); startTimer(); wtStop(); }
       post({ type: 'state', v: 'connected' }); $('title').textContent = S.incoming + (cfg.peer || '');
+      if (weakRxKnown() && !lowAsked) { lowAsked = true; setTimeout(() => dcSend('lowres:1'), 1500); log('слабый приёмник (запомнено): просим низкое разрешение сразу'); }
+      try { $('bBg').focus({ preventScroll: true }); } catch (e) { }   // пульт: фокус сразу на кнопке «В фоне»
     } else if (st === 'disconnected') {
       $('sub').textContent = S.lost; clearTimeout(lostTimer); lostTimer = setTimeout(() => { if (pc && pc.connectionState !== 'connected') finish('failed'); }, 12000);
     } else if (st === 'failed') { finish('failed'); }
@@ -163,13 +352,28 @@ function newPc() {
   pc.ondatachannel = ev => setDc(ev.channel);
 }
 function setDc(ch) {
-  dc = ch; ch.onmessage = ev => { if (ev.data === 'bye') finish('gone'); };
+  dc = ch; const sendAv = () => { try { if (cfg.avatar && ch.readyState === 'open') ch.send('av:' + cfg.avatar); } catch (e) { } }; ch.onopen = sendAv; sendAv();
+  ch.onmessage = ev => { if (typeof ev.data === 'string' && ev.data.startsWith('av:')) { setPeerAv(ev.data.slice(3)); return; } if (ev.data === 'lowres:1') { setLowRes('просьба собеседника'); return; } if (ev.data === 'bye') finish('gone'); else if (ev.data === 'rec:1') peerRecShow(true); else if (ev.data === 'rec:0') peerRecShow(false); };
 }
 
 function startTimer() {
   const tick = () => { const s = Math.floor((Date.now() - connectedAt) / 1000), m = Math.floor(s / 60); $('sub').textContent = S.connected + ' — ' + String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
   tick(); timer = setInterval(tick, 1000);
   if (cfg.test) statsTimer = setInterval(sendStats, 1500);
+  if (cfg.role !== 'preview') diagTimer = setInterval(diagAudio, 10000);
+}
+// диагностика звука в журнал программы (раз в 10 с): идёт ли звук собеседника и свой звук
+async function diagAudio() {
+  if (!pc || ended) return; logVideoStats();
+  try {
+    const st = await pc.getStats(); let inb = null, outb = null;
+    st.forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'audio') inb = r; if (r.type === 'outbound-rtp' && r.kind === 'audio') outb = r; });
+    const rv = $('rv'); const tr = rv && rv.srcObject ? rv.srcObject.getAudioTracks() : [];
+    log('звук: принято ' + (inb ? (inb.bytesReceived + ' Б, пакетов ' + inb.packetsReceived + ', уровень ' + (inb.audioLevel != null ? inb.audioLevel.toFixed(3) : '-') + ', энергия ' + (inb.totalAudioEnergy != null ? inb.totalAudioEnergy.toFixed(4) : '-')) : 'нет входящего аудио') +
+      '; отправлено ' + (outb ? (outb.bytesSent + ' Б, пакетов ' + outb.packetsSent) : 'нет исходящего аудио') +
+      '; дорожек звука собеседника ' + tr.length + (tr[0] ? (' (muted=' + tr[0].muted + ', ' + tr[0].readyState + ')') : '') +
+      '; плеер: paused=' + (rv ? rv.paused : '-') + ', muted=' + (rv ? rv.muted : '-') + ', volume=' + (rv ? rv.volume : '-') + '; Динамик ' + (spkOn ? 'вкл' : 'выкл') + ', Звук ' + (micOn ? 'вкл' : 'выкл'));
+  } catch (e) { log('диагностика звука: ' + e); }
 }
 async function sendStats() {
   if (!pc) return;
@@ -185,57 +389,357 @@ async function sendStats() {
   } catch (e) { }
 }
 
-function attachLocal(media) {
-  const lv = $('lv');
+function attachLocal(media, voice) {
+  const lv = $('lv'); if (media.audio) vuAttachOut(media.audio);
   if (media.video) { lv.srcObject = new MediaStream([media.video]); lv.classList.remove('off'); } else { camOn = false; }
   if (!media.audio) micOn = false;
-  if (!media.audio && !media.video) $('pht').textContent = S.noMedia; else if (!media.video) $('pht').textContent = S.noCam; else if (!media.audio) $('pht').textContent = S.noMic;
+  if (voice) { if (!media.audio) $('pht').textContent = S.noMic; }
+  else if (!media.audio && !media.video) $('pht').textContent = S.noMedia; else if (!media.video) $('pht').textContent = S.noCam; else if (!media.audio) $('pht').textContent = S.noMic;
   updBtns();
 }
 function updBtns() {
-  $('bMic').textContent = micOn ? S.mic : S.micOff; $('bMic').classList.toggle('off', !micOn);
-  $('bSpk').textContent = spkOn ? S.spk : S.spkOff; $('bSpk').classList.toggle('off', !spkOn);
-  $('bCam').textContent = camOn ? S.cam : S.camOff; $('bCam').classList.toggle('off', !camOn);
+  $('bMic').innerHTML = btnHtml('mic', !micOn, micOn ? S.mic : S.micOff); $('bMic').classList.toggle('off', !micOn); $('bMic').title = S.tipMic || '';
+  $('bSpk').innerHTML = btnHtml('spk', !spkOn, spkOn ? S.spk : S.spkOff); $('bSpk').classList.toggle('off', !spkOn); $('bSpk').title = S.tipSpk || '';
+  $('bCam').innerHTML = btnHtml('cam', !camOn, camOn ? S.cam : S.camOff); $('bCam').classList.toggle('off', !camOn); $('bCam').title = S.tipCam || '';
+  { const mb = $('bMir'); if (mb) { mb.innerHTML = btnHtml('mir', mirMode === 'off', mirMode === 'on' ? S.mir : (mirMode === 'off' ? S.mirOff : S.mirAll)); mb.classList.toggle('off', mirMode === 'off'); mb.title = S.tipMir || ''; } }
+  { const rb = $('bRot'); if (rb) { rb.innerHTML = btnHtml('rot', false, (S.rot || '') + rotDeg + '°'); rb.title = S.tipRot || ''; } }
+  { const ob = $('bOth'); if (ob) { ob.style.display = othState ? '' : 'none'; ob.innerHTML = btnHtml('oth', false, othState === 1 ? S.othOff : S.oth); ob.classList.toggle('off', othState === 1); ob.title = S.tipOth || ''; } }
+  { const vb = $('bView'); if (vb) { vb.innerHTML = btnHtml('view', false, viewFlash ? S.viewWin : (viewMode === 'fill' ? S.viewFill : S.viewFit)); vb.title = S.tipView || ''; } }
+  { const b1 = $('bShot'), b2 = $('bRec'), b3 = $('bRecA'), b4 = $('bOpen');
+    if (b1) { b1.innerHTML = btnHtml('shot', false, S.shot); b1.title = S.tipShot || ''; }
+    if (b2) { b2.innerHTML = btnHtml('rec', false, (rec && rec.kind === 'av') ? (S.recStop + ' ' + recClock()) : S.rec); b2.title = S.tipRec || ''; b2.disabled = !!(rec && rec.kind === 'a') || ended; }
+    if (b3) { b3.innerHTML = btnHtml('recA', false, (rec && rec.kind === 'a') ? (S.recStop + ' ' + recClock()) : S.recA); b3.title = S.tipRecA || ''; b3.disabled = !!(rec && rec.kind === 'av') || ended; }
+    [['bDirS', S.dirShot], ['bDirV', S.dirVideo], ['bDirA', S.dirAudio]].forEach(a => { const bd = $(a[0]); if (bd) { bd.innerHTML = btnHtml('folder', false, a[1]); bd.title = a[1] || ''; bd.setAttribute('aria-label', a[1] || ''); } });
+    if (b4) { b4.innerHTML = btnHtml('folder', false, S.openDir); b4.style.display = recLast ? '' : 'none'; } }
+  $('bEnd').innerHTML = btnHtml('end', false, S.end); $('bEnd').title = S.tipEnd || '';
+  { const bm = $('bMore'); if (bm) bm.textContent = $('more').classList.contains('open') ? (S.less || '') : (S.more || ''); }
+  { const bb = $('bBg'); if (bb) { bb.innerHTML = btnHtml('hide', false, S.bg || ''); bb.title = S.tipBg || ''; bb.setAttribute('aria-label', (S.bg || '') + '. ' + (S.tipBg || '')); } }
+  { const bp = $('bPip'); if (bp) { bp.innerHTML = btnHtml('pip', false, S.pip || ''); bp.title = S.tipPip || ''; bp.setAttribute('aria-label', (S.pip || '') + '. ' + (S.tipPip || '')); bp.style.display = cfg.pip ? '' : 'none'; } }
+  { const bf = $('bFull'); if (bf) bf.textContent = S.full || ''; }
 }
 
+// 3.1/4.0: качество видео в звонке (Авто/Эконом/Обычное/Высокое/Максимум), качество записи, формат; выбор запоминается
+const VQ = { low: { w: 320, h: 240, fps: 15, kbps: 300 }, eco: { w: 640, h: 360, fps: 24, kbps: 700 }, norm: { w: 854, h: 480, fps: 30, kbps: 1200 }, high: { w: 1280, h: 720, fps: 30, kbps: 2500 }, max: { w: 1920, h: 1080, fps: 30, kbps: 5000 } };
+const VQ_ORDER = ['eco', 'norm', 'high', 'max'];
+const RQ = { low: { v: 1000, a: 96, fps: 25 }, mid: { v: 2000, a: 128, fps: 25 }, high: { v: 4000, a: 192, fps: 30 }, max: { v: 8000, a: 192, fps: 30 } };
+let vqPick = 'auto', vqCur = 'high', vqLoss = 0, vqGood = 0, vqTimer = null, rqPick = 'mid', rfPick = 'mp4', recLastQ = '';
+function loadPrefs() { try { Object.assign(PREF, cfg.prefs || {}); if (LS.getItem('tvoView') === 'fill') viewMode = 'fill'; const mv = LS.getItem('tvoMirror'); if (mv === 'on' || mv === 'off' || mv === 'all') mirMode = mv; const a = LS.getItem('tvoVq'); if (a === 'auto' || VQ[a]) { vqPick = a; if (VQ[a]) vqCur = a; } const b = LS.getItem('tvoRq'); if (RQ[b]) rqPick = b; const c = LS.getItem('tvoRf'); if (c === 'mp4' || c === 'webm') rfPick = c; } catch (e) { } }
+function vqKbps() { return VQ[vqCur].kbps; }
+function vqVideoC() { const q = VQ[vqCur]; return { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } }; }
+function rqMb(k) { const q = RQ[k]; return Math.round((q.v + q.a) * 60 / 8000); }
+function qualInit() {
+  $('dlVq').textContent = S.vqLbl || ''; $('dlRq').textContent = S.rqLbl || ''; $('dlRf').textContent = S.rfLbl || '';
+  const sv = $('selVq'), sr = $('selRq'), sf = $('selRf'); if (!sv) return;
+  sv.innerHTML = ''; [['auto', S.vqAuto], ['eco', S.vqEco], ['norm', S.vqNorm], ['high', S.vqHigh], ['max', S.vqMax]].forEach(a => { const o = document.createElement('option'); o.value = a[0]; o.textContent = a[1]; sv.appendChild(o); }); sv.value = vqPick; sv.title = S.tipVq || '';
+  sr.innerHTML = ''; [['low', S.rqLow], ['mid', S.rqMid], ['high', S.rqHigh], ['max', S.rqMax]].forEach(a => { const o = document.createElement('option'); o.value = a[0]; o.textContent = a[1] + ' ≈ ' + rqMb(a[0]) + ' ' + S.mbMin; sr.appendChild(o); }); sr.value = rqPick;
+  sf.innerHTML = ''; ['mp4', 'webm'].forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sf.appendChild(o); }); sf.value = rfPick;
+}
+function syncSel() { const sv = $('selVq'); if (sv) sv.value = vqPick; }
+// слабый приёмник (например приставка Amlogic S905X: её декодер не берёт кадры крупнее 320×240, расшифровано 0 кадров): приёмник просит «lowres:1»,
+// отправитель снижает видео до 320×240, 15 к/с, 300 кбит/с; приёмник запоминает слабость на 14 дней и просит сразу при следующих звонках (потом проверяет заново)
+let lowRes = false, rxBad = 0, lowAsked = false;
+async function setLowRes(why) {
+  if (lowRes) return; lowRes = true; vqPick = 'low'; vqCur = 'low'; log('низкое разрешение видео: ' + why);
+  await applyVq();
+  try {
+    const t = localStream && localStream.video, w = t ? ((t.getSettings && t.getSettings().width) || 640) : 640;
+    if (camSender) { const p = camSender.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].scaleResolutionDownBy = Math.max(1, w / 320); p.encodings[0].maxFramerate = 15; await camSender.setParameters(p); }
+    if (camSender) { const q = camSender.getParameters().encodings[0] || {}; log('понижение применено: масштаб ' + q.scaleResolutionDownBy + ', к/с ' + q.maxFramerate + ', битрейт ' + q.maxBitrate); }
+  } catch (e) { log('lowres: ' + e); }
+}
+function weakRxKnown() { const t = parseInt(LS.getItem('tvoWeakRx') || '0', 10); return t > 0 && Date.now() - t < 14 * 86400000; }
+async function applyVq() {
+  const q = VQ[vqCur], t = localStream && localStream.video;
+  try { if (t && camOn && t.readyState === 'live') await t.applyConstraints(vqVideoC()); } catch (e) { log('качество: камера не приняла ' + vqCur + ' (' + e.name + ')'); }
+  try { if (camSender) await setBitrate(camSender, q.kbps); } catch (e) { }
+  log('качество видео: ' + vqPick + ' → ' + vqCur + ' ' + q.w + 'x' + q.h + ' ' + q.fps + ' к/с ' + q.kbps + ' кбит/с'); syncSel();
+}
+async function setVq(k) {   // выбор владельца; «Авто» начинает с «Высокое» и само снижает при потерях
+  vqPick = k; try { LS.setItem('tvoVq', k); } catch (e) { }
+  vqCur = VQ[k] ? k : (VQ[vqCur] && vqPick === 'auto' && vqCur !== 'max' ? vqCur : 'high'); vqLoss = 0; vqGood = 0; await applyVq();
+}
+function setRq(k) { if (!RQ[k]) return; rqPick = k; try { LS.setItem('tvoRq', k); } catch (e) { } const sr = $('selRq'); if (sr) sr.value = k; }
+function setRf(k) { rfPick = k === 'webm' ? 'webm' : 'mp4'; try { LS.setItem('tvoRf', rfPick); } catch (e) { } const sf = $('selRf'); if (sf) sf.value = rfPick; }
+async function vqTick() {   // «Авто»: если потери видео растут, снижаем качество на ступень; если долго чисто, поднимаем (не выше «Высокое»)
+  if (vqPick !== 'auto' || lowRes || !pc || !connectedAt || ended) return;
+  try {
+    const st = await pc.getStats(); let fl = 0; st.forEach(r => { if (r.type === 'remote-inbound-rtp' && r.kind === 'video') fl = r.fractionLost || 0; });
+    if (fl > 0.05) { vqLoss++; vqGood = 0; } else if (fl < 0.01) { vqGood++; vqLoss = 0; } else vqLoss = 0;
+    const i = VQ_ORDER.indexOf(vqCur);
+    if (vqLoss >= 2 && i > 0) { vqCur = VQ_ORDER[i - 1]; vqLoss = 0; await applyVq(); }
+    else if (vqGood >= 10 && i < 2) { vqCur = VQ_ORDER[i + 1]; vqGood = 0; await applyVq(); }
+  } catch (e) { }
+}
+let lastVB = 0, lastVT = 0;
+async function logVideoStats() {   // реальные разрешение, к/с и битрейт отправляемого видео (для журнала и проверок)
+  if (!pc) return; try { const st = await pc.getStats(); st.forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { const cd = r.codecId ? st.get(r.codecId) : null; log('видео приём: ' + (cd ? cd.mimeType : '?') + ' ' + (r.decoderImplementation || '?') + ', принято кадров ' + (r.framesReceived || 0) + ', расшифровано ' + (r.framesDecoded || 0) + ', потеряно ' + (r.framesDropped || 0) + ', ключевых ' + (r.keyFramesDecoded || 0) + ', ' + (r.frameWidth || 0) + 'x' + (r.frameHeight || 0) + ', ' + Math.round(r.framesPerSecond || 0) + ' к/с, пакетов потеряно ' + (r.packetsLost || 0) + ', запросов ключевого кадра ' + (r.pliCount || 0)); } if (r.type === 'outbound-rtp' && r.kind === 'video') { const now = Date.now(), kb = lastVT ? Math.round((r.bytesSent - lastVB) * 8 / (now - lastVT)) : 0; lastVB = r.bytesSent; lastVT = now; log('видео отправка: ' + ((r.codecId && st.get(r.codecId)) ? st.get(r.codecId).mimeType + ' ' : '') + (r.encoderImplementation || '') + ' ' + (r.frameWidth || 0) + 'x' + (r.frameHeight || 0) + ' ' + Math.round(r.framesPerSecond || 0) + ' к/с, ' + kb + ' кбит/с (выбор ' + vqPick + ' → ' + vqCur + ')'); } }); } catch (e) { }
+}
+window.setVq = setVq; window.setRq = setRq; window.setRf = setRf; window.logVideoStats = logVideoStats; window.tvoToast = t => toast(String(t || ''));
+// 4.0: выбор микрофона и динамиков в окне звонка, автоподбор микрофона при тишине, запоминание выбора, список устройств в журнал
+let micAutoRun = false, micTried = false, vuOutLow = 0, spkIds = '';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const idTail = id => String(id || '').slice(-6);
+async function devList(kind) { try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === kind); } catch (e) { return []; } }
+function curMicId() { try { return (localStream && localStream.audio && localStream.audio.getSettings().deviceId) || ''; } catch (e) { return ''; } }
+async function devInit() {
+  const mics = await devList('audioinput'), cur = curMicId();
+  log('микрофоны: ' + (mics.map(d => '[' + (d.label || '?') + ' | …' + idTail(d.deviceId) + (d.deviceId === cur ? ' | ВЫБРАН' : '') + ']').join(' ') || 'нет'));
+  const sm = $('selMic'); if (!sm) return;
+  sm.innerHTML = ''; mics.forEach(d => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('…' + idTail(d.deviceId)); if (d.deviceId === cur) o.selected = true; sm.appendChild(o); });
+  sm.disabled = !mics.length;
+}
+// выходы звука (динамик телефона, разговорный, наушники, Bluetooth) собирает и переключает программа: WebView сам выбрать динамик не умеет
+window.tvoSetOutputs = (list, sel) => {
+  const ss = $('selSpk'); if (!ss) return; ss.innerHTML = '';
+  (list || []).forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.label; ss.appendChild(o); });
+  if (sel) ss.value = sel; ss.disabled = !(list && list.length);
+};
+async function switchMicTrack(t, meter, remember) {
+  t.enabled = micOn;
+  const old = localStream && localStream.audio;
+  try { if (micSender) await micSender.replaceTrack(t); else { const tr = pc && pc.getTransceivers().find(x => x.receiver.track.kind === 'audio'); if (tr) { await tr.sender.replaceTrack(t); micSender = tr.sender; } } } catch (e) { log('mic replaceTrack: ' + e); }
+  if (!localStream) localStream = { audio: null, video: null }; localStream.audio = t; try { recRewireMic(); } catch (e) { }
+  try { if (old && old !== t) old.stop(); } catch (e) { }
+  vuOut = meter || vuMake(t); vuOutQuiet = 0; vuOutLow = 0; vuOutPk = 0; vuStart();
+  if (remember) { try { LS.setItem('tvoMicId', t.getSettings().deviceId || ''); } catch (e) { } }
+  $('vwOut').textContent = '';
+  const sm = $('selMic'); if (sm) { const id = t.getSettings().deviceId || ''; for (const o of sm.options) if (o.value === id) { sm.value = id; break; } }
+  log('микрофон: выбран ' + (t.label || '?') + ' | …' + idTail(t.getSettings().deviceId));
+}
+async function pickMic(id) {   // ручной выбор из списка: звонок не обрывается
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: id }, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    micTried = true; await switchMicTrack(s.getAudioTracks()[0], null, true);
+  } catch (e) { log('микрофон: не открылся (' + e.name + ')'); }
+}
+async function micAuto() {   // тишина >10 с: пробуем по очереди другие микрофоны, оставляем первый, где есть сигнал
+  if (micAutoRun || micTried) return; micAutoRun = true;
+  const cur = curMicId(); const rank = d => d.deviceId === 'default' ? 0 : (d.deviceId === 'communications' ? 1 : 2);
+  const list = (await devList('audioinput')).filter(d => d.deviceId && d.deviceId !== cur).sort((a, b) => rank(a) - rank(b));
+  log('автоподбор микрофона: текущий молчит, пробуем ' + list.length + ' шт.');
+  $('vwOut').textContent = S.micAuto || '';
+  for (const d of list) {
+    let t = null;
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: d.deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      t = s.getAudioTracks()[0]; const m = vuMake(t); let pk = 0; const t0 = Date.now();
+      while (Date.now() - t0 < 3000) { await sleep(100); pk = Math.max(pk, vuLevel(m)); }
+      log('автоподбор: ' + (d.label || '?') + ' | …' + idTail(d.deviceId) + ' пик ' + Math.round(pk * 100) + '%');
+      if (pk > 0.02) { micTried = true; micAutoRun = false; await switchMicTrack(t, m, true); log('автоподбор: оставлен ' + (d.label || '?')); return; }
+      t.stop();
+    } catch (e) { log('автоподбор: ' + (d.label || '?') + ' не открылся (' + e.name + ')'); try { if (t) t.stop(); } catch (e2) { } }
+  }
+  micTried = true; micAutoRun = false; $('vwOut').textContent = S.vuNoMic || '';
+  log('автоподбор микрофона: ни один не дал сигнала');
+}
+// 4.0: индикаторы уровня звука (VU): входящий звук собеседника и свой микрофон; без них на слух проверить звук нельзя, если звук собеседника глушат (например AnyDesk)
+let vuAc = null, vuIn = null, vuOut = null, vuTimer = null, vuInPk = 0, vuOutPk = 0, vuInPkAt = 0, vuOutPkAt = 0, vuInQuiet = 0, vuOutQuiet = 0, vuLast = 0;
+function vuMake(track) {
+  try {
+    if (!vuAc) { vuAc = new (window.AudioContext || window.webkitAudioContext)(); }
+    try { if (vuAc.state === 'suspended') vuAc.resume(); } catch (e) { }
+    const an = vuAc.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0;
+    vuAc.createMediaStreamSource(new MediaStream([track])).connect(an);   // к выходу не подключаем: звук играет элемент rv, здесь только измеряем
+    return { an, buf: new Uint8Array(an.fftSize), track };
+  } catch (e) { log('vu: ' + e); return null; }
+}
+function vuLevel(m) {
+  if (!m) return 0;
+  try { m.an.getByteTimeDomainData(m.buf); let pk = 0; for (let i = 0; i < m.buf.length; i++) { const d = Math.abs(m.buf[i] - 128); if (d > pk) pk = d; } return pk / 128; } catch (e) { return 0; }
+}
+function vuLabels() {
+  qualInit();
+  $('vlIn').textContent = S.vuIn || ''; $('vlOut').textContent = S.vuOut || ''; $('dlMic').textContent = S.devMic || ''; $('dlSpk').textContent = S.devSpk || '';
+  $('vInN').textContent = '0% · ' + (S.vuPk || '') + ' 0%'; $('vOutN').textContent = '0% · ' + (S.vuPk || '') + ' 0%';
+  if (cfg.role === 'preview') { $('vrIn').style.display = 'none'; $('vwIn').style.display = 'none'; $('capRow').style.display = 'none'; }
+}
+function vuAttachIn(track) { vuIn = vuMake(track); vuStart(); }
+function vuAttachOut(track) { vuOut = vuMake(track); vuStart(); }
+function vuStart() {
+  if (vuTimer) return; vuLast = Date.now();
+  vuTimer = setInterval(() => {
+    const now = Date.now(), dt = now - vuLast; vuLast = now;
+    const li = vuLevel(vuIn), lo = (micOn ? vuLevel(vuOut) : 0);
+    if (li > vuInPk || now - vuInPkAt > 2000) { vuInPk = li; vuInPkAt = now; }
+    if (lo > vuOutPk || now - vuOutPkAt > 2000) { vuOutPk = lo; vuOutPkAt = now; }
+    const fi = Math.min(100, Math.round(li * 160)), fo = Math.min(100, Math.round(lo * 160));
+    $('vIn').style.width = fi + '%'; $('vOut').style.width = fo + '%';
+    $('vInPk').style.left = Math.min(99, Math.round(vuInPk * 160)) + '%'; $('vOutPk').style.left = Math.min(99, Math.round(vuOutPk * 160)) + '%';
+    $('vIn').style.background = fi > 85 ? 'var(--vu-hot)' : 'var(--vu-fill)'; $('vOut').style.background = fo > 85 ? 'var(--vu-hot)' : 'var(--vu-fill)';
+    $('vInN').textContent = Math.round(li * 100) + '% · ' + S.vuPk + ' ' + Math.round(vuInPk * 100) + '%';
+    $('vOutN').textContent = (micOn ? Math.round(lo * 100) : 0) + '% · ' + S.vuPk + ' ' + Math.round(vuOutPk * 100) + '%';
+    // тишина дольше 10 секунд подряд: входящая при включённом «Динамик» и установленном соединении; исходящая при включённом «Звук»
+    vuOutLow = (lo < 0.03 && micOn) ? vuOutLow + dt : 0;
+    if (vuOutLow > 10000 && connectedAt && micOn && vuOut && !micTried && !micAutoRun && cfg.role !== 'preview') micAuto();
+    vuInQuiet = (li < 0.012) ? vuInQuiet + dt : 0; vuOutQuiet = (lo < 0.012 && micOn) ? vuOutQuiet + dt : 0;
+    $('vwIn').textContent = (connectedAt && spkOn && vuIn && vuInQuiet > 10000) ? (S.vuNoIn || '') : '';
+    if (!micAutoRun && !(micTried && vuOutQuiet > 10000)) $('vwOut').textContent = (micOn && vuOut && vuOutQuiet > 10000) ? (S.vuNoOut || '') : '';
+  }, 100);
+}
+function vuStop() { clearInterval(vuTimer); vuTimer = null; try { if (vuAc) vuAc.close(); } catch (e) { } vuAc = null; }
+// 4.0: вид видео собеседника и подгонка окна под его пропорции (окном управляет программа: сюда приходит только размер видео и свободной области)
+function applyView() { $('rv').style.objectFit = viewMode === 'fill' ? 'cover' : 'contain'; }
+function tvoSendSize(force) {
+  const rv = $('rv'), m = document.querySelector('main'); if (!rv || !m || !rv.videoWidth || !rv.videoHeight) return;
+  post({ type: 'vsize', w: rv.videoWidth, h: rv.videoHeight, rot: rotDeg, mw: m.clientWidth, mh: m.clientHeight, dpr: window.devicePixelRatio || 1, force: !!force });
+}
+window.tvoSendSize = tvoSendSize;
+window.tvoSizeTest = (w, h) => { const m = document.querySelector('main'); post({ type: 'vsize', w, h, rot: rotDeg, mw: m.clientWidth, mh: m.clientHeight, dpr: window.devicePixelRatio || 1, force: true }); };   // только для проверок
+let vsT = 0; const vsLater = () => { clearTimeout(vsT); vsT = setTimeout(() => tvoSendSize(false), 450); };
+window.addEventListener('resize', vsLater);
+document.addEventListener('DOMContentLoaded', () => { const rv = $('rv'); rv.addEventListener('loadedmetadata', vsLater); rv.addEventListener('resize', vsLater); applyView(); });
+// 4.0: скриншот и запись (видео+звук обеих сторон или только звук). Куски пишутся на диск через программу (формат сообщения «REC|вид|первый|расширение|имя|base64»), чтобы не держать запись в памяти; собеседник по каналу данных получает «rec:1»
+let rec = null, recLast = '', recLastType = 'video', peerRecT = 0;
+function recClock() { if (!rec) return ''; const sec = Math.floor((Date.now() - rec.t0) / 1000); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'); }
+function toast(txt) { const t = $('toast'); t.textContent = txt; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 9000); }
+function b64Buf(buf) { let r = ''; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 0x8000) r += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(r); }
+function recSend(kind, first, ext, b64) { post({ type: 'rec', k: kind, first: first, ext: ext, peer: String(cfg.peer || '').replace(/[|\\\/:*?"<>]+/g, '_'), b64: b64 || '' }); }
+function peerRecShow(on) { const e = $('peerRec'); e.textContent = '● ' + (S.peerRecTxt || ''); e.hidden = !on; clearTimeout(peerRecT); if (on) peerRecT = setTimeout(() => { e.hidden = true; }, 9000); }
+function dcSend(t) { try { if (dc && dc.readyState === 'open') dc.send(t); } catch (e) { } }
+function takeShot() {
+  const rv = $('rv'); if (!rv.videoWidth || !rv.videoHeight) { toast(S.noShot || ''); return; }
+  const c = document.createElement('canvas'); c.width = rv.videoWidth; c.height = rv.videoHeight; c.getContext('2d').drawImage(rv, 0, 0, c.width, c.height);
+  c.toBlob(async b => { if (!b) return; recSend('P', '1', 'png', b64Buf(await b.arrayBuffer())); }, 'image/png');
+}
+function recMime(kind) {
+  const mp4 = kind === 'av' ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2'] : ['audio/mp4;codecs=mp4a.40.2'], webm = kind === 'av' ? ['video/webm;codecs=vp8,opus', 'video/webm'] : ['audio/webm;codecs=opus', 'audio/webm'];
+  const list = rfPick === 'webm' ? webm.concat(mp4) : mp4.concat(webm);
+  for (const m of list) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { } }
+  return '';
+}
+async function startRec(kind) {
+  if (rec || ended || cfg.role === 'preview') return;
+  try {
+    const rs = $('rv').srcObject, rAudio = rs ? rs.getAudioTracks()[0] : null, mic = localStream && localStream.audio;
+    const ac = new (window.AudioContext || window.webkitAudioContext)(); try { await ac.resume(); } catch (e) { }
+    const rq = RQ[rqPick];
+    const dst = ac.createMediaStreamDestination(); const r = { kind, ac, dst, t0: Date.now(), seq: 0, chain: Promise.resolve() };
+    if (rAudio) { r.remoteSrc = ac.createMediaStreamSource(new MediaStream([rAudio])); r.remoteSrc.connect(dst); }
+    if (mic) { r.micSrc = ac.createMediaStreamSource(new MediaStream([mic])); r.micSrc.connect(dst); }
+    let tracks = dst.stream.getAudioTracks();
+    if (kind === 'av') {
+      const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360; const cx = cv.getContext('2d'); r.cv = cv;
+      r.iv = setInterval(() => {
+        const v = $('rv'), vw = v.videoWidth || 640, vh = v.videoHeight || 360, sc = Math.min(1, 1920 / vw), W = Math.round(vw * sc / 2) * 2, H = Math.round(vh * sc / 2) * 2;
+        if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+        cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H); try { if (v.videoWidth) cx.drawImage(v, 0, 0, W, H); } catch (e) { }
+        const l = $('lv'); if (l && l.videoWidth && !l.classList.contains('off')) { const lw = Math.round(W * 0.22), lh = Math.round(lw * l.videoHeight / l.videoWidth); cx.save(); cx.translate(W - 8, H - lh - 8); if (mirMode !== 'off') { cx.scale(-1, 1); cx.drawImage(l, 0, 0, lw, lh); } else { cx.translate(-lw, 0); cx.drawImage(l, 0, 0, lw, lh); } cx.restore(); }
+      }, Math.round(1000 / rq.fps));
+      tracks = cv.captureStream(rq.fps).getVideoTracks().concat(tracks);
+    }
+    const mime = recMime(kind); r.ext = kind === 'av' ? (mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm') : (mime.indexOf('mp4') >= 0 ? 'm4a' : 'webm');
+    r.q = (kind === 'av' ? (rq.v / 1000) + ' Мбит + ' : '') + rq.a + ' кбит/с' + ', ' + (kind === 'av' ? rq.fps + ' к/с, ' : '') + r.ext + ', ≈ ' + (kind === 'av' ? rqMb(rqPick) : Math.round(rq.a * 60 / 8000)) + ' ' + (S.mbMin || '');
+    const mr = new MediaRecorder(new MediaStream(tracks), mime ? (kind === 'av' ? { mimeType: mime, videoBitsPerSecond: rq.v * 1000, audioBitsPerSecond: rq.a * 1000 } : { mimeType: mime, audioBitsPerSecond: rq.a * 1000 }) : {}); r.mr = mr; recLastQ = r.q;
+    mr.ondataavailable = ev => { if (!ev.data || !ev.data.size) return; r.chain = r.chain.then(async () => { const first = r.seq === 0 ? '1' : '0'; r.seq++; recSend(kind === 'av' ? 'V' : 'A', first, r.ext, b64Buf(await ev.data.arrayBuffer())); }); };
+    mr.onstop = () => { r.chain = r.chain.then(() => recSend('E', '0', r.ext, '')); };
+    mr.onerror = e => { log('запись: ошибка ' + (e && e.error ? e.error.name : e)); toast(S.recFail || ''); };
+    rec = r; mr.start(1000); post({ type: 'recstate', k: kind });
+    r.tick = setInterval(() => { const e = $('rec'); e.innerHTML = '<b>●</b> ' + (S.recOn || '') + ' ' + recClock(); e.hidden = false; updBtns(); dcSend('rec:1'); }, 1000);
+    $('rec').innerHTML = '<b>●</b> ' + (S.recOn || '') + ' 00:00'; $('rec').hidden = false; dcSend('rec:1'); updBtns();
+    log('запись началась: ' + kind + ', ' + (mime || 'формат по умолчанию'));
+  } catch (e) { log('запись: не началась (' + e + ')'); toast(S.recFail || ''); rec = null; updBtns(); }
+}
+function recStop() {
+  if (!rec) return; const r = rec; rec = null; clearInterval(r.iv); clearInterval(r.tick); post({ type: 'recstate', k: '' });
+  try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) { }
+  setTimeout(() => { try { r.ac.close(); } catch (e) { } }, 2500);
+  $('rec').hidden = true; dcSend('rec:0'); try { updBtns(); } catch (e) { }
+  log('запись остановлена');
+}
+function recRewireMic() {   // микрофон сменился во время записи: подключаем новый источник к записи
+  if (!rec || !localStream || !localStream.audio) return;
+  try { if (rec.micSrc) rec.micSrc.disconnect(); } catch (e) { }
+  try { rec.micSrc = rec.ac.createMediaStreamSource(new MediaStream([localStream.audio])); rec.micSrc.connect(rec.dst); } catch (e) { log('запись: микрофон: ' + e); }
+}
+window.tvoRecSaved = function (path, kind) { recLastType = (kind === 'shot' || kind === 'audio') ? kind : 'video'; recLast = String(path || ''); toast((S.saved || '') + recLast + ((kind === 'video' || kind === 'audio') && recLastQ ? ' · ' + recLastQ : '')); updBtns(); };
+// 4.0: зеркало своей камеры. on (по умолчанию): зеркально только своё превью; off: как снимает камера; all: зеркально и превью, и то, что видит собеседник (через canvas)
+function mirStop() { if (mirOut) { try { clearInterval(mirOut.iv); mirOut.track.stop(); } catch (e) { } mirOut = null; } }
+function mirStart(raw) {
+  mirStop();
+  const vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.srcObject = new MediaStream([raw]); vid.play().catch(() => { });
+  const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360; const ctx = cv.getContext('2d');
+  const draw = () => { const w = vid.videoWidth || 640, h = vid.videoHeight || 360; if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } ctx.save(); ctx.translate(cv.width, 0); ctx.scale(-1, 1); ctx.drawImage(vid, 0, 0, cv.width, cv.height); ctx.restore(); };
+  const iv = setInterval(draw, 40); draw();
+  const track = cv.captureStream(25).getVideoTracks()[0];
+  mirOut = { iv, track, raw };
+  return track;
+}
+async function applyOutgoing() {
+  if (cfg.role === 'preview' || !camSender || !localStream || !localStream.video || !camOn) return;
+  const raw = localStream.video;
+  try {
+    if (mirMode === 'all') { const t = (mirOut && mirOut.raw === raw) ? mirOut.track : mirStart(raw); await camSender.replaceTrack(t); }
+    else if (mirOut) { await camSender.replaceTrack(raw); mirStop(); }
+  } catch (e) { log('mirror: ' + e); }
+}
+// 4.0: поворот видео собеседника на 90° по кругу: картинка вписывается без обрезки (при 90/270 рамка видео меняет стороны); свой превью не трогаем
+function rvTransform() {
+  const parts = [];
+  if (rotDeg) parts.push('rotate(' + rotDeg + 'deg)');
+  if (cfg.role === 'preview' && mirMode !== 'off') parts.push('scaleX(-1)');
+  return parts.length ? parts.join(' ') : 'none';
+}
+function applyRot() {   // после поворота пропорции меняются: окну сообщаем заново
+  setTimeout(() => tvoSendSize(true), 120);
+  const m = document.querySelector('main'), rv = $('rv'); if (!m || !rv) return;
+  if (rotDeg % 180) { rv.style.flex = 'none'; rv.style.width = m.clientHeight + 'px'; rv.style.height = m.clientWidth + 'px'; }
+  else { rv.style.flex = ''; rv.style.width = '100%'; rv.style.height = '100%'; }
+  rv.style.transform = rvTransform();
+}
+window.addEventListener('resize', () => { if (rotDeg % 180) applyRot(); });
+function tvoOthersState(n) { othState = n | 0; updBtns(); }
+window.tvoSendSize = tvoSendSize;
+function applyMirror() {
+  const tf = mirMode === 'off' ? 'none' : 'scaleX(-1)';
+  $('lv').style.transform = tf;
+  $('rv').style.transform = rvTransform();
+  applyOutgoing();
+}
 async function setBitrate(sender, kbps) { try { const p = sender.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = kbps * 1000; await sender.setParameters(p); } catch (e) { } }
 
 async function tvoStart(c) {
-  cfg = c || {}; lang = L[cfg.lang] ? cfg.lang : 'ru'; S = L[lang];
-  document.documentElement.lang = lang; document.title = S.title; $('bEnd').textContent = S.end;
+  cfg = c || {}; lang = L[cfg.lang] ? cfg.lang : 'ru'; S = L[lang]; loadPrefs(); tvoSetSide(cfg.side); tvoSetPic(cfg.picMode, cfg.pic); if (cfg.spkOff) { spkOn = false; $('rv').muted = true; }
+  document.documentElement.lang = lang; document.title = cfg.voice ? S.titleVoice : S.title;
   const peer = cfg.peer || '';
   $('av').textContent = (peer.trim()[0] || '?').toUpperCase(); $('phn').textContent = peer;
-  $('title').textContent = cfg.role === 'caller' ? S.calling + peer : S.connecting;
-  $('sub').textContent = S.connecting; updBtns();
+  $('title').textContent = cfg.role === 'caller' ? (cfg.voice ? S.callingVoice : S.calling) + peer : S.connecting;
+  othState = (cfg.others | 0); vuLabels(); $('sub').textContent = S.connecting; updBtns();
+  $('warnX').title = S.warnClose || ''; $('warnX').setAttribute('aria-label', S.warnClose || '');
+  if (cfg.warn) tvoWarn(cfg.warn);
   if (cfg.test) $('rv').muted = true;
   if (cfg.role === 'preview') $('bSpk').style.display = 'none';
   if (cfg.role === 'preview') return preview();
   newPc();
-  const media = await getMedia(); localStream = media; attachLocal(media);
+  const media = await getMedia(!!cfg.voice); localStream = media; attachLocal(media, !!cfg.voice); devInit();
   try {
     if (cfg.role === 'caller') {
       setDc(pc.createDataChannel('ctl'));
       if (media.audio) { micSender = pc.addTrack(media.audio, new MediaStream([media.audio])); } else pc.addTransceiver('audio', { direction: 'recvonly' });
-      if (media.video) { camSender = pc.addTrack(media.video, new MediaStream([media.video])); } else pc.addTransceiver('video', { direction: 'recvonly' });
+      if (media.video) { camSender = pc.addTrack(media.video, new MediaStream([media.video])); } else { camSender = pc.addTransceiver('video', { direction: 'sendrecv' }).sender; }
       pc.getTransceivers().forEach(preferCodecs);
       await pc.setLocalDescription(await pc.createOffer());
       await gatherDone(pc, 3500);
       const sdp = slim(pc.localDescription.sdp);
       $('sub').textContent = S.waitAnswer;
       post({ type: 'offer', sdp: await pack(sdp), raw: sdp.length });
+      wtStart();   // 4.1: гудок ожидания
     } else {
-      await pc.setRemoteDescription({ type: 'offer', sdp: await unpack(cfg.offer) });
+      { const osdp = await unpack(cfg.offer); try { log('SDP-предложение видео: ' + osdp.split('\n').filter(l => l.indexOf('m=video') === 0 || /a=rtpmap:[0-9]+ (H264|VP8|VP9)/.test(l)).map(l => l.trim()).join(' | ').slice(0, 500)); } catch (e) { } await pc.setRemoteDescription({ type: 'offer', sdp: osdp }); }
       pc.getTransceivers().forEach(tr => {
         if (tr.receiver.track.kind === 'audio' && media.audio) { tr.sender.replaceTrack(media.audio); tr.direction = 'sendrecv'; micSender = tr.sender; }
-        if (tr.receiver.track.kind === 'video' && media.video) { tr.sender.replaceTrack(media.video); tr.direction = 'sendrecv'; camSender = tr.sender; }
+        if (tr.receiver.track.kind === 'video') { try { tr.direction = 'sendrecv'; } catch (e) { } if (media.video) tr.sender.replaceTrack(media.video); camSender = tr.sender; }
       });
+      pc.getTransceivers().forEach(preferCodecs);
       await pc.setLocalDescription(await pc.createAnswer());
+      try { log('SDP-ответ видео: ' + pc.localDescription.sdp.split('\n').filter(l => l.indexOf('m=video') === 0 || /a=rtpmap:[0-9]+ (H264|VP8|VP9)/.test(l)).map(l => l.trim()).join(' | ').slice(0, 500)); } catch (e) { }
       await gatherDone(pc, 3500);
       const sdp = slim(pc.localDescription.sdp);
       post({ type: 'answer', sdp: await pack(sdp), raw: sdp.length });
       failTimer = setTimeout(() => { if (!connectedAt && !ended) finish('failed'); }, 30000);
     }
-    if (camSender) setBitrate(camSender, 700);
+    if (camSender) setBitrate(camSender, vqKbps());
+    applyMirror(); vqTimer = setInterval(vqTick, 3000);
+    if (cfg.lowforce) setLowRes('проверка: с самого начала');
   } catch (e) { log('start: ' + e); finish('failed'); }
 }
 
@@ -243,8 +747,8 @@ async function tvoStart(c) {
 async function preview() {
   $('title').textContent = S.testTitle; $('sub').textContent = S.testSub; $('av').textContent = '🎥'; $('phn').textContent = ''; $('pht').textContent = S.testNote;
   const media = await getMedia(); localStream = media; attachLocal(media); $('lv').classList.add('off');
-  const rv = $('rv'); rv.muted = true; rv.style.transform = 'scaleX(-1)';
-  if (media.video) { rv.srcObject = new MediaStream([media.video]); showPh(false); }
+  const rv = $('rv'); rv.muted = true; rv.style.transform = rvTransform();
+  if (media.video) { rv.srcObject = new MediaStream([media.video]); rv.classList.add('live'); showPh(false); }
   if (media.audio) {
     try {
       const ac = new (window.AudioContext || window.webkitAudioContext)(), an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(new MediaStream([media.audio])).connect(an);
@@ -261,22 +765,83 @@ async function tvoAnswer(packed) {
     clearTimeout(failTimer); failTimer = setTimeout(() => { if (!connectedAt && !ended) finish('failed'); }, 30000);
   } catch (e) { log('answer: ' + e); finish('failed'); }
 }
-function tvoPeerSays(kind) {   // от хоста: declined / busy / noAnswer / hangup
+// 4.0: баннер «звук может задвоиться и будет писк» (программа удалённого доступа или другая программа с микрофоном); не блокирует звонок, закрывается крестиком;
+// после закрытия тот же текст не возвращается, новый (список программ изменился) показывается снова
+let warnDismissed = '';
+function tvoWarn(text) {
+  text = String(text || '');
+  const box = $('warn');
+  if (!text || text === warnDismissed) { box.hidden = true; if (!text) warnDismissed = ''; return; }
+  $('warnTxt').textContent = text; box.hidden = false; log('warn shown'); vsLater();
+}
+$('warnX').onclick = () => { warnDismissed = $('warnTxt').textContent; $('warn').hidden = true; vsLater(); };
+$('warnX').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('warnX').click(); } };
+function tvoPeerSays(kind) {   // от хоста: ring / noRing / declined / busy / noAnswer / hangup
+  if (kind === 'ring') { if (!connectedAt && !ended) { $('sub').textContent = S.ringing; $('pht').textContent = ''; } return; }
+  if (kind === 'noRing') { if (!connectedAt && !ended) { $('pht').textContent = S.noRing; } return; }
   if (kind === 'declined') finish('declined'); else if (kind === 'busy') finish('busy'); else if (kind === 'noAnswer') finish('noAnswer'); else finish('gone');
 }
 
+// 4.1 (12.11.2026): гудок ожидания (ту-ту) у звонящего. Выбирается в окне «Мелодия звонка» (cfg.waitTone: w1..w4 или off; cfg.ringVol 0..100).
+// Играет, пока на другом конце не ответили; замолкает при ответе, отказе, отмене и конце звонка; при выключенном «Динамике» не слышен; идёт на выбранные динамики.
+let wtCtx = null, wtGain = null, wtTimer = null;
+const WT_PERIOD = { w1: 5000, w2: 3500, w3: 4000, w4: 4000 };
+function wtVol() { return spkOn ? Math.max(0, Math.min(1, (cfg.ringVol == null ? 70 : (cfg.ringVol | 0)) / 100)) : 0; }
+function wtTone(ac, out, f, st, dur, amp) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f;
+  g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(amp, st + 0.01); g.gain.setValueAtTime(amp, st + dur - 0.03); g.gain.linearRampToValueAtTime(0, st + dur);
+  o.connect(g); g.connect(out); o.start(st); o.stop(st + dur + 0.05);
+}
+function wtBell(ac, out, f, st, dur, amp) {
+  [[1, 1, 2.8], [2.76, 0.4, 6], [5.4, 0.18, 9]].forEach(p => {
+    const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f * p[0];
+    g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(amp * p[1], st + 0.004); g.gain.setTargetAtTime(0, st + 0.004, 1 / p[2]);
+    o.connect(g); g.connect(out); o.start(st); o.stop(st + dur);
+  });
+}
+function wtGlide(ac, out, f0, f1, st, dur, amp) {
+  const o = ac.createOscillator(), g = ac.createGain(), n = 64, c = new Float32Array(n); o.frequency.setValueAtTime(f0, st); o.frequency.linearRampToValueAtTime(f1, st + dur);
+  for (let i = 0; i < n; i++) c[i] = amp * Math.pow(Math.sin(Math.PI * i / (n - 1)), 2);
+  g.gain.setValueCurveAtTime(c, st, dur); o.connect(g); g.connect(out); o.start(st); o.stop(st + dur + 0.05);
+}
+function wtCycle(ac, out, id, st) {
+  if (id === 'w1') wtTone(ac, out, 425, st, 1.0, 0.6);
+  else if (id === 'w2') { wtTone(ac, out, 425, st, 0.4, 0.6); wtTone(ac, out, 425, st + 0.6, 0.4, 0.6); }
+  else if (id === 'w3') { wtBell(ac, out, 783.99, st, 1.5, 0.35); wtBell(ac, out, 987.77, st + 0.35, 1.5, 0.35); }
+  else if (id === 'w4') wtGlide(ac, out, 350, 470, st, 1.4, 0.6);
+}
+async function wtStart() {
+  const id = String(cfg.waitTone || 'w1');
+  if (cfg.role !== 'caller' || (cfg.test && !cfg.waitTest) || !WT_PERIOD[id] || wtCtx || ended || connectedAt) return;
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)(); wtCtx = ac;
+    try { const spk = LS.getItem('tvoSpkId'); if (spk && ac.setSinkId) await ac.setSinkId(spk); } catch (e) { }
+    try { await ac.resume(); } catch (e) { }
+    if (wtCtx !== ac) { try { ac.close(); } catch (e) { } return; }
+    wtGain = ac.createGain(); wtGain.gain.value = wtVol(); wtGain.connect(ac.destination);
+    const run = () => wtCycle(ac, wtGain, id, ac.currentTime + 0.05);
+    run(); wtTimer = setInterval(run, WT_PERIOD[id]); log('гудок ожидания: ' + id + ', громкость ' + wtVol());
+  } catch (e) { log('гудок ожидания: ' + e); }
+}
+function wtStop() { clearInterval(wtTimer); wtTimer = null; try { if (wtCtx) wtCtx.close(); } catch (e) { } wtCtx = null; wtGain = null; }
+function wtMute() { if (wtGain) wtGain.gain.value = wtVol(); }
+
 function stopAll() {
-  clearInterval(timer); clearInterval(statsTimer); clearTimeout(lostTimer); clearTimeout(failTimer);
+  clearInterval(liveTimer);
+  try { wtStop(); } catch (e) { }
+  try { recStop(); } catch (e) { }
+  clearInterval(vqTimer); vuStop(); clearInterval(timer); clearInterval(statsTimer); clearInterval(diagTimer); clearTimeout(lostTimer); clearTimeout(failTimer);
   try { if (localStream) { if (localStream.audio) localStream.audio.stop(); if (localStream.video) localStream.video.stop(); } } catch (e) { }
+  mirStop();
   try { if (dc && dc.readyState === 'open') dc.close(); } catch (e) { }
   try { if (pc) pc.close(); } catch (e) { }
 }
 function finish(why) {
   if (ended) return; ended = true; stopAll();
   const msg = { gone: S.gone, ended: S.ended, declined: S.declined, busy: S.busy, noAnswer: S.noAnswer, failed: S.failed }[why] || S.ended;
-  $('title').textContent = S.title; $('sub').textContent = msg; showPh(true); $('pht').textContent = why === 'failed' ? S.failHint : ''; $('lv').classList.add('off');
-  $('rv').srcObject = null;
-  ['bMic', 'bSpk', 'bCam'].forEach(i => $(i).disabled = true);
+  $('title').textContent = S.title; $('sub').textContent = msg; showPh(true); $('pht').textContent = why === 'failed' ? S.failHint : (why === 'noAnswer' ? S.noAnswer : ''); $('lv').classList.add('off');
+  $('rv').classList.remove('live'); $('rv').srcObject = null;
+  ['bMic', 'bSpk', 'bCam', 'bMir', 'bRot', 'bOth', 'bView', 'bShot', 'bRec', 'bRecA', 'bDirS', 'bDirV', 'bDirA'].forEach(i => { const e = $(i); if (e) e.disabled = true; });
   post({ type: 'ended', why });
 }
 function userHangup() {
@@ -287,12 +852,12 @@ function userHangup() {
 }
 
 $('bMic').onclick = () => { micOn = !micOn; if (localStream && localStream.audio) localStream.audio.enabled = micOn; updBtns(); post({ type: 'ui', mic: micOn }); };
-$('bSpk').onclick = () => { spkOn = !spkOn; if (!cfg.test && cfg.role !== 'preview') $('rv').muted = !spkOn; updBtns(); post({ type: 'ui', spk: spkOn }); };
+$('bSpk').onclick = () => { spkOn = !spkOn; if (!cfg.test && cfg.role !== 'preview') $('rv').muted = !spkOn; wtMute(); updBtns(); post({ type: 'ui', spk: spkOn }); };
 $('bCam').onclick = async () => {
   if (cfg.role === 'preview') { if (!localStream || !localStream.video) return; camOn = !camOn; localStream.video.enabled = camOn; updBtns(); return; }
   if (camOn) {
     camOn = false;
-    try { if (localStream && localStream.video) { localStream.video.stop(); } if (camSender) await camSender.replaceTrack(null); } catch (e) { }
+    try { mirStop(); if (localStream && localStream.video) { localStream.video.stop(); } if (camSender) await camSender.replaceTrack(null); } catch (e) { }
     $('lv').classList.add('off');
   } else {
     try {
@@ -300,12 +865,49 @@ $('bCam').onclick = async () => {
       if (camSender) await camSender.replaceTrack(t);
       else { const tr = pc.getTransceivers().find(x => x.receiver.track.kind === 'video'); if (tr) { await tr.sender.replaceTrack(t); camSender = tr.sender; } }
       $('lv').srcObject = new MediaStream([t]); $('lv').classList.remove('off'); camOn = true;
-      if (camSender) setBitrate(camSender, 700);
+      await applyOutgoing();
+      if (camSender) setBitrate(camSender, vqKbps());
     } catch (e) { log('cam2: ' + e.name); $('pht').textContent = S.noCam; }
   }
   updBtns(); post({ type: 'ui', cam: camOn });
 };
+$('bMir').onclick = () => { mirMode = mirMode === 'on' ? 'off' : (mirMode === 'off' ? 'all' : 'on'); try { LS.setItem('tvoMirror', mirMode); } catch (e) { } updBtns(); applyMirror(); post({ type: 'ui', mir: mirMode }); };
+$('bRot').onclick = () => { rotDeg = (rotDeg + 90) % 360; updBtns(); applyRot(); post({ type: 'ui', rot: rotDeg }); };
+$('bOth').onclick = () => { post({ type: 'others', on: othState !== 1 }); };
+$('selMic').onchange = e => { if (e.target.value) pickMic(e.target.value); };
+$('selSpk').onchange = e => { post({ type: 'output', id: e.target.value }); log('выход звука: ' + (e.target.selectedOptions[0] ? e.target.selectedOptions[0].textContent : '')); };
+$('bView').onclick = () => {
+  if (viewMode === 'fit') { viewMode = 'fill'; try { LS.setItem('tvoView', 'fill'); } catch (e) { } applyView(); updBtns(); }
+  else { viewMode = 'fit'; try { LS.setItem('tvoView', 'fit'); } catch (e) { } applyView(); viewFlash = 1; updBtns(); post({ type: 'fitwin' }); setTimeout(() => { viewFlash = 0; updBtns(); }, 1600); }
+};
+$('bShot').onclick = takeShot;
+$('bRec').onclick = () => { if (rec && rec.kind === 'av') recStop(); else startRec('av'); };
+$('bRecA').onclick = () => { if (rec && rec.kind === 'a') recStop(); else startRec('a'); };
+$('bOpen').onclick = () => post({ type: 'openfolder', t: recLastType });
+$('selVq').onchange = e => setVq(e.target.value);
+$('selRq').onchange = e => setRq(e.target.value);
+$('selRf').onchange = e => setRf(e.target.value);
+$('bDirS').onclick = () => post({ type: 'pickdir', t: 'shot' });
+$('bDirV').onclick = () => post({ type: 'pickdir', t: 'video' });
+$('bDirA').onclick = () => post({ type: 'pickdir', t: 'audio' });
 $('bEnd').onclick = userHangup;
+$('bBg').onclick = () => post({ type: 'bg' });
+// сторона колонки кнопок на широком экране берётся из «Настроек» программы («Панели управления»: справа или слева), меняется и во время звонка
+window.tvoSetSide = v => document.body.classList.toggle('btnL', v === 'left');
+// «На весь экран»: видео без кнопок и подписей; вернуть кнопки можно любой клавишей пульта, касанием или щелчком; «Назад» сначала выходит отсюда
+let fullAt = 0;
+function setFull(on) {
+  on = !!on; if (document.body.classList.contains('full') === on) return;
+  document.body.classList.toggle('full', on); fullAt = Date.now(); post({ type: 'full', on });
+  if (!on) setTimeout(() => { try { $('bFull').focus({ preventScroll: true }); } catch (e) { } tvoSendSize(true); }, 60); else { try { document.activeElement.blur(); } catch (e) { } setTimeout(() => tvoSendSize(true), 120); }
+}
+window.tvoFull = setFull;
+$('bFull').onclick = () => setFull(true);
+['keydown', 'mousedown', 'touchstart', 'click'].forEach(ev => document.addEventListener(ev, e => { if (document.body.classList.contains('full') && Date.now() - fullAt > 450) { setFull(false); e.preventDefault(); e.stopPropagation(); } }, true));
+$('bPip').onclick = () => post({ type: 'pip' });
+// «картинка в картинке»: в маленьком окошке только картинка собеседника (или значок) без кнопок и шкал
+window.tvoPip = on => { document.body.classList.toggle('pip', !!on); setTimeout(() => { if (rotDeg % 180) applyRot(); tvoSendSize(true); }, 200); };
+$('bMore').onclick = () => { $('more').classList.toggle('open'); updBtns(); setTimeout(() => tvoSendSize(false), 120); };
 window.addEventListener('beforeunload', () => { if (!ended) { try { if (dc && dc.readyState === 'open') dc.send('bye'); } catch (e) { } } });
 
 // снимок удалённой картинки (для проверок): PNG в сообщении хосту
@@ -315,7 +917,7 @@ window.tvoSnap = function () {
     post({ type: 'snap', w: c.width, h: c.height, png: c.toDataURL('image/png').split(',')[1] });
   } catch (e) { log('snap: ' + e); }
 };
-window.tvoStart = tvoStart; window.tvoAnswer = tvoAnswer; window.tvoPeerSays = tvoPeerSays; window.tvoHangup = userHangup;
+window.tvoOthersState = tvoOthersState; window.tvoWarn = tvoWarn; window.tvoStart = tvoStart; window.tvoAnswer = tvoAnswer; window.tvoPeerSays = tvoPeerSays; window.tvoHangup = userHangup;
 post({ type: 'ready' });
 </script>
 </body>
