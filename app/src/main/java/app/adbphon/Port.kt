@@ -106,7 +106,7 @@ object Cfg {
         return handState.value
     }
     fun setRightHanded(ctx: android.content.Context, v: Boolean) { handState.value = v; handLoaded = true; sp(ctx).edit().putBoolean("hand_right", v).apply() }
-    /** Пробовать права root (Magisk) для этого телефона вместо ADB. */
+    /** Пробовать права root для этого телефона вместо ADB. */
     fun useRoot(ctx: android.content.Context): Boolean = sp(ctx).getBoolean("use_root", true)
     fun setUseRoot(ctx: android.content.Context, v: Boolean) { sp(ctx).edit().putBoolean("use_root", v).apply() }
 }

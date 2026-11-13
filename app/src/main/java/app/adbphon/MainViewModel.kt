@@ -86,7 +86,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Adb.connectLocal(port, hostOf(host)).onSuccess { onConnected(host) }.onFailure { if (manual) fail(it) else AppLog.i("ADBphon", "автоподключение к последнему устройству не удалось: ${it.message}") }
     }
 
-    /** Этот телефон через root (Magisk) вместо ADB. */
+    /** Этот телефон через root вместо ADB. */
     fun connectRoot() = launchBusy {
         Adb.autoOff = false
         manualPending = true
@@ -614,9 +614,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun installMenuApp() {
         launcherGuard = null
         val lc = Lang.wrap(ctx, lang)
+        viewModelScope.launch {
+            val via = ViaAsk.ask(ctx, 1) ?: return@launch
+            installMenuAppVia(lc, via)
+        }
+    }
+
+    private fun installMenuAppVia(lc: android.content.Context, via: InstOpt) {
         launchBusy {
             message = t(R.string.lg_installing)
-            message = runCatching { Launchers.installMenu(lc) }.getOrElse { AppLog.e("ADBphon", "install menu", it); t(R.string.lg_failed, it.message ?: "error") }
+            message = runCatching { Launchers.installMenu(lc, via) }.getOrElse { AppLog.e("ADBphon", "install menu", it); t(R.string.lg_failed, it.message ?: "error") }
             loadApps()
         }
     }
@@ -702,21 +709,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Обновление: сначала через ADB этого телефона, иначе системным установщиком. */
+    /** Обновление программы: сначала выбор установщика (если включено «Спрашивать, чем устанавливать»), затем ADB этого телефона или выбранный установщик. */
     fun installUpdate() {
         val r = updateRelease ?: return
         updateRelease = null
-        if (connected && remoteHost == null) { installVersion(Ver(r.tag, null, r)); return }
-        launchBusy {
-            message = t(R.string.ver_downloading, r.tag)
-            val f = withContext(Dispatchers.IO) { runCatching { Updater.download(ctx, r) } }
-                .getOrElse { AppLog.e("ADBphon", "download", it); message = t(R.string.ver_dl_failed, it.message ?: "error"); return@launchBusy }
-            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
-            ctx.startActivity(
-                android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+        viewModelScope.launch {
+            val o = ViaAsk.ask(ctx, 1) ?: return@launch
+            if (o.id == "adb" && connected && remoteHost == null) { installVersion(Ver(r.tag, null, r), true); return@launch }
+            installVersionExternal(Ver(r.tag, null, r), o)
         }
+    }
+
+    /** Версия ставится выбранным не нашим способом: файл скачивается (или берётся готовый) и открывается в установщике. */
+    private fun installVersionExternal(v: Ver, o: InstOpt) = launchBusy {
+        versionsOpen = false
+        val f = v.path?.let { java.io.File(it) } ?: run {
+            message = t(R.string.ver_downloading, v.rel!!.tag)
+            withContext(Dispatchers.IO) { runCatching { Updater.download(ctx, v.rel!!) } }
+                .getOrElse { AppLog.e("ADBphon", "download", it); message = t(R.string.ver_dl_failed, it.message ?: "error"); return@launchBusy }
+        }
+        message = t(if (ViaAsk.launchExternal(ctx, f, o)) R.string.via_started else R.string.fm_no_app)
     }
 
     /** Действие над выбранными приложениями; возвращает пропущенные защищённые. */
@@ -963,7 +975,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Ставит выбранную версию поверх текущей. Нужно подключение к этому же телефону по ADB. */
-    fun installVersion(v: Ver) {
+    fun installVersion(v: Ver, asked: Boolean = false) {
+        if (!asked) {
+            viewModelScope.launch {
+                val o = ViaAsk.ask(ctx, 1) ?: return@launch
+                if (o.id == "adb") installVersion(v, true) else installVersionExternal(v, o)
+            }
+            return
+        }
         if (!connected || remoteHost != null) { message = t(R.string.ver_need_local); return }
         launchBusy {
             versionsOpen = false

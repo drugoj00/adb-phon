@@ -261,6 +261,8 @@ sealed class FmDlg {
     /** Группа «Устройства»: добавить или изменить (ПК или Android), экран и консоль Android-устройства. */
     class DevAdd(val pc: PcHost?, val adb: AdbDev?) : FmDlg()
     class AndroidScreen(val dev: AdbDev) : FmDlg()
+    /** Звонок устройству без известного кода программы: спрашиваем код (7.6). */
+    class CallCode(val name: String, val ip: String, val voice: Boolean) : FmDlg()
     class AndroidConsole(val dev: AdbDev) : FmDlg()
     class Source(val prefill: NetHost? = null) : FmDlg()
     class CloudAdd : FmDlg()
@@ -309,6 +311,18 @@ object Fm {
     var treeMode by mutableStateOf(true)     // «Дерево»: папки раскрываются прямо в списке (по умолчанию), иначе обычный «Список»
     var vols by mutableStateOf<List<FmVol>>(emptyList())
     var dlg by mutableStateOf<FmDlg?>(null)
+    /**
+     * 7.6: простые окна «Файлов» (Показать/Скрыть, меню, сортировка, поиск, маска, закладки, история и т.п.) не запоминаются: при выходе из программы
+     * они закрываются, и после возврата открыт основной экран. Положение дерева и фокус запоминаются отдельно (ScrollMem). Окна, которые ведут во внешние экраны,
+     * вводят пароли/ключи или показывают ход работы, не трогаются.
+     */
+    fun closeSimpleDialogsOnLeave() {
+        val d = dlg ?: return
+        val simple = d is FmDlg.RootShow || d is FmDlg.Bookmarks || d is FmDlg.History || d is FmDlg.Tree || d is FmDlg.Storage || d is FmDlg.Sort || d is FmDlg.View ||
+            d is FmDlg.Mask || d is FmDlg.Search || d is FmDlg.SearchResult || d is FmDlg.More || d is FmDlg.Props || d is FmDlg.Perms || d is FmDlg.OpenAs ||
+            d is FmDlg.NewFolder || d is FmDlg.NewFile || d is FmDlg.NewZip || d is FmDlg.Rename || d is FmDlg.CloudAll
+        if (simple) dlg = null
+    }
     /** Очередь длительных операций (копирование, перенос, удаление, упаковка): выполняются по одной, у каждой своя полоска. */
     val jobs = androidx.compose.runtime.mutableStateListOf<FmJob>()
     val job: FmJob? get() = jobs.firstOrNull()
@@ -1298,13 +1312,14 @@ object Fm {
         if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it) }) return@launch
         if (silent) {
             // тихая установка по ADB/root: сначала подтверждение с версиями, потом окно с полоской хода (части и OBB, «n из N»), итог внутри окна
-            val list = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(java.io.File(join(p.path, it.name)))) }.getOrDefault(emptyList()) }
+            val srcF = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+            val list = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(srcF)) }.getOrDefault(emptyList()) }
             if (list.isEmpty()) { dlg = FmDlg.InstallFail(str(R.string.inst_failed)); return@launch }
             val metas = withContext(Dispatchers.IO) { list.associate { a -> a.name to runCatching { ApkInfo.readFor(sctx, a) }.getOrNull() } }
             dlg = FmDlg.InstallConfirm(list, metas) { wipe ->
                 scope.launch {
                     val run = InstRun()
-                    dlg = FmDlg.InstallRunDlg(run)
+                    InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
                     installWithProgress(sctx, list, metas, run, wipe)
                 }
             }
@@ -1312,9 +1327,10 @@ object Fm {
         }
         say(str(R.string.inst_installing))
         var last: SessionInstall.Result? = null
+        val srcF2 = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
         val ok = withContext(Dispatchers.IO) {
             runCatching {
-                val f = java.io.File(join(p.path, it.name))
+                val f = srcF2
                 val list = Archives.extractApks(sctx, android.net.Uri.fromFile(f))
                 list.isNotEmpty() && list.all { a ->
                     val parts = a.parts ?: listOfNotNull(a.file)
@@ -1331,6 +1347,16 @@ object Fm {
         if (ok) say(str(R.string.fm_installed))
         else if (r != null && r.cancelled) say(str(R.string.fm_cancelled))
         else dlg = FmDlg.InstallFail(r?.message.orEmpty())
+    }
+
+    /** Файл пакета для установки из любого источника: локальный, сетевая папка, облако, архив или оболочка ADB (забирается во временную папку). */
+    private suspend fun fileForInstall(p: FmPane, name: String): java.io.File? = when (p.src) {
+        "local" -> java.io.File(join(p.path, name))
+        "adb" -> withContext(Dispatchers.IO) {
+            val t = java.io.File(arcTmp(), "inst_" + System.nanoTime().toString(36) + "_" + name.substringAfterLast('/').replace(Regex("[^\\w.\\- ]"), "_"))
+            if (runCatching { Adb.pull(join(p.path, name), t); t.exists() && t.length() > 0 }.getOrDefault(false)) t else null
+        }
+        else -> localFileOf(p, name)
     }
 
     /** Что доделать после возврата с экрана «Установка неизвестных приложений». */
@@ -1377,16 +1403,26 @@ object Fm {
             dlg = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
                 scope.launch {
                     val run = InstRun()
-                    dlg = FmDlg.InstallRunDlg(run)
+                    InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
                     installWithProgress(sctx, listOf(af), mapOf(af.name to meta), run, wipe)
                 }
             }
             return@launch
         }
-        if (!ensureInstallPermission { installViaAdb(p, it) }) return@launch
+        // сеть, облако, архив, оболочка ADB: файл забирается во временную папку, дальше то же окно «Установка» с версиями и ход установки
         say(str(R.string.inst_installing))
-        val file = localFileOf(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
-        reportSession(SessionInstall.install(sctx, listOf(file)))
+        val file = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        val af = ApkFile(it.name, android.net.Uri.fromFile(file), file.length(), file)
+        val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(sctx, af) }.getOrNull() }
+        dlg = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
+            scope.launch {
+                if (Adb.isConnected && !FmIo.remote) {
+                    val run = InstRun()
+                    InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
+                    installWithProgress(sctx, listOf(af), mapOf(af.name to meta), run, wipe)
+                } else installFilesViaSession(listOf(file))
+            }
+        }
     }
 
     /** Встроенный просмотрщик или редактор для типа файла независимо от запомненного приложения. */
@@ -1408,7 +1444,7 @@ object Fm {
             "audio" -> openBuiltin(sctx, p, it, "audio", f)
             "video" -> openBuiltin(sctx, p, it, "video", f)
             "archive" -> openArchive(p, it.name)
-            "apk" -> if (p.src == "adb") {
+            "apk" -> if (p.src == "adb" && it.ext == "apk") ApkInstall.start(p, it) else if (p.src == "adb") {
                 val out = runCatching { Adb.shell(pmInstallCmd(f), 120_000L) }.getOrDefault("")
                 say(if (out.contains("Success")) str(R.string.fm_installed) else str(R.string.fm_error, out.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty()))
             } else if (!openWithPkg(p, it, null, "application/vnd.android.package-archive")) say(str(R.string.fm_no_app))
@@ -1456,6 +1492,7 @@ object Fm {
 
     fun openFile(p: FmPane, it: FmItem) = scope.launch {
         val f = join(p.path, it.name)
+        if (p.src == "adb" && (it.ext == "apk" || ApkInstall.isBundle(it.ext))) { ApkInstall.start(p, it); return@launch }
         if (p.src != "adb" && Arc.kindOf(it.name) != null) {
             if (it.ext == "apk" || it.ext == "apks" || it.ext == "xapk") { ApkInstall.start(p, it); return@launch }
             if (Arc.opensAsFolder(it.name)) { openArchive(p, it.name); return@launch }
@@ -1561,10 +1598,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
     FmIo.remote = vm.remoteHost != null
     LaunchedEffect(Unit) { Fm.init(ctx); Fm.panes.forEach { if (it.error != null) Fm.load(it, remember = false) } }
     // 6.0: стоит старый модуль облаков (1.0), есть новый (1.1, меньше места): один раз за запуск предлагаем обновить обычной установкой (окно системы подтверждает установку)
-    LaunchedEffect(Fm.dlg == null) {
-        delay(2500)
-        if (!CloudModule.upgradeAsked && Fm.dlg == null && CloudModule.upgradeAvailable(ctx)) { CloudModule.upgradeAsked = true; Fm.dlg = FmDlg.CloudModule(upgrade = true) }
-    }
+    // 7.6: вопрос об обновлении модуля и само обновление теперь в корне экрана (ModuleHost), при запуске программы на любой вкладке
     Fm.sctx = ctx
     // на Android 6-10 доступ просится обычным системным окном
     val legacy = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { Fm.recheck(ctx) }
@@ -2682,6 +2716,7 @@ private fun FmDialogs() {
         is FmDlg.PcScreen -> PcScreenDialog(d.host, close)
         is FmDlg.DevAdd -> DevAddDialog(d.pc, d.adb, close)
         is FmDlg.AndroidScreen -> AndroidScreenDialog(d.dev, close)
+        is FmDlg.CallCode -> CallCodeDialog(d.name, d.ip, d.voice, close)
         is FmDlg.AndroidConsole -> AndroidConsoleDialog(d.dev, close)
         is FmDlg.SearchResult -> PathListDlg(R.string.fm_search, d.list, R.string.fm_nothing, close, subtitle = stringResource(R.string.fm_found, d.list.size)) {
             Fm.goTo(Fm.cur, it, false)

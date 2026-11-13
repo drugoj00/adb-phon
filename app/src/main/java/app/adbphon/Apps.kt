@@ -235,6 +235,8 @@ object AppActions {
     suspend fun installCopy(c: BkCopy): String {
         val files = c.files
         if (files.isEmpty()) return Fm.str(R.string.ap_copy_gone)
+        val via = ViaAsk.ask(ctx(), files.size) ?: return Fm.str(R.string.via_cancelled)
+        if (via.id != "adb") return Fm.str(if (ViaAsk.launchExternal(ctx(), files.first(), via)) R.string.via_started else R.string.fm_no_app)
         if (Adb.isConnected) {
             val r = AppBackups.installFiles(ctx(), c.pkg, files, c.code)
             refresh()

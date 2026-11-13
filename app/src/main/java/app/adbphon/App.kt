@@ -9,6 +9,8 @@ class App : Application() {
         super.onCreate()
         // TLS 1.3 с экспортом ключевого материала нужен для сопряжения и беспроводной отладки
         Security.insertProviderAt(Conscrypt.newProvider(), 1)
+        // корневые сертификаты для старых Android (7.1 и ниже): без них запросы к GitHub, ntfy и облакам заканчиваются «Trust anchor for certification path not found»
+        runCatching { TlsFix.install(this) }
         AppLog.init(this)
         Feedback.init(this)
         Marq.init(this)

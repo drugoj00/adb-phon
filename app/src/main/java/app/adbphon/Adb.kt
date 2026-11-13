@@ -21,13 +21,18 @@ object Adb {
         appCtx = context.applicationContext
         mgr = AdbConn(context.applicationContext)
         autoOff = appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("auto_off", false)   // отключение помнится и после перезапуска
+        run {
+            val sp = appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+            // тип su запоминается: после перезапуска программа не пробует лишний раз `su -mm`
+            RootShell.init(if (sp.contains("su_mm")) sp.getBoolean("su_mm", false) else null) { v -> sp.edit().putBoolean("su_mm", v).apply() }
+        }
         AdbServer.init(appCtx)
         srvScope.launch { AdbServer.ping() }   // сервер мог остаться с прошлого запуска (7.0)
     }
 
     private val srvScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
-    /** Команды этого телефона идут через root (Magisk), а не через ADB: компьютер и отладка по Wi-Fi не нужны. */
+    /** Команды этого телефона идут через root, а не через ADB: компьютер и отладка по Wi-Fi не нужны. */
     @Volatile private var rootOn = false
     /** Пользователь сам отключился: сами к root не возвращаемся, пока он не нажмёт «Подключить через root». */
     @Volatile var rootSuppressed = false
@@ -46,9 +51,9 @@ object Adb {
         val dirs = (System.getenv("PATH") ?: "").split(':').filter { it.isNotBlank() } +
             listOf("/system/bin", "/system/xbin", "/sbin", "/su/bin", "/system/sbin", "/vendor/bin", "/product/bin", "/odm/bin", "/apex/com.android.runtime/bin", "/debug_ramdisk")
         // файлы su могут быть скрыты, а root есть: root уже работал раньше, или su просто запускается (ошибка запуска = su нет)
+        // 7.6: su здесь НЕ запускается (раньше запуск «su -c true» на экране подключения давал запрос и уведомление root без действия пользователя)
         dirs.any { runCatching { java.io.File(it, "su").exists() }.getOrDefault(false) } ||
-            (::appCtx.isInitialized && appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false)) ||
-            runCatching { ProcessBuilder("su", "-c", "true").redirectErrorStream(true).start().also { it.destroy() }; true }.getOrDefault(false)
+            (::appCtx.isInitialized && appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false))
     }
 
     /** Идёт подключение или отключение: библиотека держит блокировку, и опрос состояния из интерфейса вешал его на десятки секунд (приставка, 08.11.2026). */
@@ -61,7 +66,7 @@ object Adb {
     private inline fun <T> guarded(block: () -> T): T { busyConn++; try { return block() } finally { busyConn-- } }
 
     /**
-     * Проверяет, дал ли Magisk (или другой su) права root этому приложению. При первом запуске появится запрос Magisk:
+     * Проверяет, дал ли su права root этому приложению. При первом запуске появится запрос root:
      * ждём ответа до 30 секунд. Успех включает режим root для всех команд на этом телефоне.
      */
     suspend fun tryRoot(manual: Boolean = false): Boolean = withContext(Dispatchers.IO) {
@@ -74,28 +79,17 @@ object Adb {
         ok
     }
 
-    fun disableRoot() { rootOn = false }
+    fun disableRoot() { rootOn = false; RootShell.closeAll() }
 
     /**
-     * Magisk: `su -mm` запускает команду в общем (главном) пространстве файловой системы. Без него на Android 11 и новее
+     * su -mm: запускает команду в общем (главном) пространстве файловой системы. Без него на Android 11 и новее
      * приложение видит только свою папку в /data/data (изоляция данных приложений), и полные копии других приложений пустые.
      * null: ещё не проверяли; false: su не знает этот ключ (другой su), используется обычный `su -c`.
      */
-    @Volatile private var suMountMaster: Boolean? = null
-
     private fun suArgs(cmd: String): List<String> {
-        var mm = suMountMaster
-        if (mm == null) {
-            mm = runCatching {
-                val pr = ProcessBuilder("su", "-mm", "-c", "id").redirectErrorStream(true).start()
-                val txt = pr.inputStream.bufferedReader().readText()
-                pr.waitFor()
-                txt.contains("uid=0")
-            }.getOrDefault(false)
-            suMountMaster = mm
-            AppLog.i("ADBphon", "su -mm: $mm")
-        }
-        return if (mm) listOf("su", "-mm", "-c", cmd) else listOf("su", "-c", cmd)
+        // тип su (с ключом -mm или обычный) определяет постоянная root-оболочка при первом запуске; отдельных пробных запусков su нет
+        if (RootShell.mountMaster == null) RootShell.short.ensure()
+        return if (RootShell.mountMaster == true) listOf("su", "-mm", "-c", cmd) else listOf("su", "-c", cmd)
     }
 
     private fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
@@ -105,6 +99,9 @@ object Adb {
      * Возвращает объединённый вывод; по тайм-ауту процесс убивается.
      */
     private fun rootRun(cmd: String, input: InputStream?, timeoutMs: Long): String {
+        // без входных данных: постоянная root-оболочка (root запрашивается один раз на сеанс, без запуска su на каждую команду)
+        if (input == null) return RootShell.exec(cmd, timeoutMs)
+        // с потоком входных данных (запись файла, установка пакета): отдельный запуск по действию пользователя
         val p = ProcessBuilder(suArgs(cmd)).redirectErrorStream(true).start()
         val out = java.io.ByteArrayOutputStream()
         val reader = Thread { runCatching { p.inputStream.copyTo(out) } }

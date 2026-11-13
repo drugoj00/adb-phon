@@ -54,18 +54,19 @@ object CloudModule {
     /** Нужная версия протокола между основной программой и модулем (meta-data ENGINE_API у модуля). */
     const val API_NEEDED = 1
     /** Известная версия модуля, которую предлагаем скачать. Файлов четыре, по одному на архитектуру (один пакет, одна подпись). */
-    const val VERSION = "1.1"   // 6.0: 1.1 = движок упакован (UPX), установленный вес модуля 105 → 44 МБ; протокол прежний (ENGINE_API 1), модуль 1.0 остаётся рабочим
-    const val VERSION_CODE = 2
+    // ЧЕРНОВИК (12.11.2026): 1.2 = модуль без значка в списке приложений; релиз clouds-1.2 на GitHub нужно выложить ДО выпуска основной программы с этой таблицей
+    const val VERSION = "1.2"   // 6.0: 1.1 = движок упакован (UPX), установленный вес модуля 105 → 44 МБ; протокол прежний (ENGINE_API 1), модуль 1.0 остаётся рабочим
+    const val VERSION_CODE = 3
 
     /** Вариант модуля: ключ, имя файла, ABI, e_machine движка в ELF, versionCode (база*10+номер), размер (МБ) и SHA-256 файла. */
     class Variant(val key: String, val abi: String, val machine: Int, val code: Int, val sizeMb: Int, val sha: String) {
         val file get() = "ADB-phon-Clouds-$VERSION-$key.apk"
     }
     val VARIANTS = listOf(
-        Variant("arm64", "arm64-v8a", 183, 22, 22, "b92067e2f0ec41efb7a2c7040863044c183797deba00de3d8bb35bc0c80bf42e"),
-        Variant("arm32", "armeabi-v7a", 40, 21, 24, "c8194b78f34fe2bcad5a857f992b8c9b628fe76e177f864edcbbd528fb57cac2"),
-        Variant("x86_64", "x86_64", 62, 24, 25, "489935ab5c2da93b5aafad556152f1d33c8fd8a9f698860fe29fee2278c9430e"),
-        Variant("x86", "x86", 3, 23, 24, "807c6a53026ef1bc27e7d54ae8229eb6c27da0ef273cb3cd549b09e89d467a28"),
+        Variant("arm64", "arm64-v8a", 183, 32, 22, "f6953d40e569905bb6e010c8c1caff895e6a0a158b5c608fa3ed4aa1c1386435"),
+        Variant("arm32", "armeabi-v7a", 40, 31, 24, "ebc6ed6715383d13d92bdba647be0432c15256fa6a788928338ca336a36ca358"),
+        Variant("x86_64", "x86_64", 62, 34, 26, "39fe0df21096cf1ac11f2dbaad405dc978e677216d9b95233310bed2534ea09b"),
+        Variant("x86", "x86", 3, 33, 24, "07bc3efaa10d695c861532a842081af591a300d5d2d9d889646e5ab5c7ea520c"),
     )
 
     /** Вариант для этого устройства: первый подходящий из SUPPORTED_ABIS (порядок задаёт система: на 64-разрядном ядре с 32-разрядным пространством пользователя в списке только 32-разрядные). null: архитектура не поддерживается. */
@@ -217,6 +218,69 @@ object CloudModule {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
+    // ---- 7.6: окно установки модуля, вопрос об обновлении и автообновление (рисуются в корне экрана: [ModuleHost]) ----
+    var confirm by mutableStateOf<FmDlg.InstallConfirm?>(null)
+    var runDlg by mutableStateOf<FmDlg.InstallRunDlg?>(null)
+    /** Корневой вопрос «Доступно обновление модуля 1.1 → 1.2. Обновить сейчас?». */
+    var askUpdate by mutableStateOf(false)
+    fun auto(ctx: Context) = prefs(ctx).getBoolean("cloudmod_auto", false)
+    fun setAuto(ctx: Context, v: Boolean) { prefs(ctx).edit().putBoolean("cloudmod_auto", v).apply(); autoTick++ }
+    var autoTick by mutableIntStateOf(0)
+
+    /**
+     * Установить скачанный файл модуля через окно «Установка» (ADB-phon) или выбранным установщиком.
+     * true: поставлено, false: ошибка (текст в [error]), null: отмена.
+     */
+    private suspend fun installViaWindow(app: Context, f: File): Boolean? {
+        val o = ViaAsk.ask(app, 1) ?: return null
+        if (o.id != "adb") {
+            if (!ViaAsk.launchExternal(app, f, o)) { error = app.getString(R.string.fm_no_app); return false }
+            val need = (variant()?.code ?: 0).toLong()
+            repeat(720) { if (installedCode(app) >= need && ok(app)) return true; delay(250) }
+            return null
+        }
+        val af = ApkFile(f.name, android.net.Uri.fromFile(f), f.length(), f)
+        val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(app, af) }.getOrNull() }
+        val result = kotlinx.coroutines.CompletableDeferred<Boolean?>()
+        var started = false
+        confirm = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
+            started = true; confirm = null
+            Fm.scope.launch {
+                try {
+                    if (Adb.isConnected && !FmIo.remote) {
+                        val run = InstRun(); InstBg.launch(app, run) { runDlg = FmDlg.InstallRunDlg(it) }
+                        val res = installWithProgress(app, listOf(af), mapOf(af.name to meta), run, wipe)
+                        if (res.second > 0) error = run.fails.firstOrNull().orEmpty()
+                        result.complete(res.second == 0 && res.first > 0)
+                    } else {
+                        val r = SessionInstall.install(app, listOf(f))
+                        if (!r.ok) error = if (r.cancelled) app.getString(R.string.fm_cancelled) else r.message
+                        result.complete(if (r.cancelled) null else r.ok)
+                    }
+                } catch (e: Throwable) { error = e.message ?: e.javaClass.simpleName; result.complete(false) }
+            }
+        }
+        // окно закрыли без «Установить»: отмена
+        while (!result.isCompleted) { delay(250); if (!started && confirm == null) result.complete(null) }
+        return result.await()
+    }
+
+    /** Состояние окон корня закрыть (после установки/отмены). */
+    fun closeInstallWindows() { confirm = null; runDlg = null }
+
+    /** Удалить модуль: pm uninstall при ADB/root, иначе системное окно удаления. Возвращает текст итога. */
+    suspend fun uninstall(ctx: Context): String {
+        val app = ctx.applicationContext
+        if (info(app) == null) return app.getString(R.string.cmu_removed)
+        if (Adb.isConnected) {
+            val out = withContext(Dispatchers.IO) { runCatching { Adb.shell("pm uninstall --user 0 $PKG 2>&1", 60_000, fast = true) }.getOrDefault("") }
+            ver++
+            return if (out.contains("Success")) app.getString(R.string.cmu_removed) else app.getString(R.string.cmu_remove_fail, out.lines().firstOrNull { it.isNotBlank() }.orEmpty())
+        }
+        runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_DELETE, android.net.Uri.parse("package:$PKG")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        return app.getString(R.string.cmu_removed)
+    }
+
     /** Скачать, проверить, установить, убрать файл. true: модуль готов. Ошибка и причина остаются в [error]. */
     suspend fun fetchAndInstall(ctx: Context): Boolean {
         val app = ctx.applicationContext
@@ -233,10 +297,11 @@ object CloudModule {
             val got = withContext(Dispatchers.IO) { sha256(f) }
             if (got != sha(app)) { error = app.getString(R.string.cm_sha_bad); phase = 4; return false }
             phase = 3
-            // 10.11.2026 (владелица: «пусть ставится как положено»): всегда обычной установкой с подтверждением системы, без тихой установки через ADB
-            // (на S9 с Android 10 «pm install» по пути не открывал файл из кэша, и модуль не ставился)
-            val r = SessionInstall.install(app, listOf(f))
-            if (!r.ok) { error = if (r.cancelled) app.getString(R.string.fm_cancelled) else r.message.ifBlank { app.getString(R.string.cm_failed) }; phase = 4; return false }
+            // 7.6 (владелица: «я же просил, чтобы окно установки было всегда»): установка и обновление модуля всегда идут через наше окно «Установка» (выбор установщика,
+            // если включено «Спрашивать», затем «Сейчас / Новое», метка «Обновление», подпись и ход установки), а не молча и не одним системным окном
+            val res = installViaWindow(app, f)
+            if (res == null) { reset(); return false }
+            if (!res) { phase = 4; if (error.isBlank()) error = app.getString(R.string.cm_failed); return false }
             // пакет модуля появляется не мгновенно
             repeat(20) { if (ok(app)) return@repeat; delay(250) }
             if (!ok(app)) { error = app.getString(R.string.cm_failed); phase = 4; return false }
@@ -297,4 +362,71 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
         },
         dismissButton = { TextButton({ CloudModule.cancel(ctx); CloudModule.reset(); close() }) { Text(stringResource(R.string.btn_cancel)) } },
     )
+}
+
+/**
+ * 7.6: корневые окна модуля облаков (видны на любой вкладке): вопрос об обновлении при запуске, ход скачивания, окно «Установка» с версиями и ход установки, ошибка.
+ * «Обновлять автоматически» включается кнопкой в вопросе или в Настройках; тогда при запуске обновление начинается само, а окно «Установка» всё равно показывается.
+ */
+@Composable
+fun ModuleHost() {
+    val ctx = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(CloudModule.ver, CloudModule.autoTick) {
+        kotlinx.coroutines.delay(2000)
+        if (!CloudModule.upgradeAsked && CloudModule.phase !in 1..3 && CloudModule.upgradeAvailable(ctx)) {
+            CloudModule.upgradeAsked = true
+            if (CloudModule.auto(ctx)) CloudModule.start(ctx, null, upgrade = true) else CloudModule.askUpdate = true
+        }
+    }
+    val v = CloudModule.variant()
+    if (CloudModule.askUpdate) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { CloudModule.askUpdate = false },
+            title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.cmu_ask, CloudModule.installedVersion(ctx).orEmpty(), CloudModule.VERSION), fontSize = 14.sp)
+                    TextButton({ CloudModule.askUpdate = false; CloudModule.setAuto(ctx, true); CloudModule.start(ctx, null, upgrade = true) }) { Text(stringResource(R.string.cmu_auto)) }
+                }
+            },
+            confirmButton = { TextButton({ CloudModule.askUpdate = false; CloudModule.start(ctx, null, upgrade = true) }) { Text(stringResource(R.string.cmu_update)) } },
+            dismissButton = { TextButton({ CloudModule.askUpdate = false }) { Text(stringResource(R.string.cmu_later)) } },
+        )
+    }
+    // ход скачивания/проверки, если обновление запущено не из окна «Файлов»
+    if (Fm.dlg !is FmDlg.CloudModule && CloudModule.confirm == null && CloudModule.runDlg == null) {
+        if (CloudModule.phase in 1..2) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { },
+                title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text(stringResource(if (CloudModule.phase == 1) R.string.cm_downloading else R.string.cm_verifying) + if (CloudModule.phase == 1 && CloudModule.progress > 0) " ${CloudModule.progress} %" else "", Modifier.padding(start = 12.dp), fontSize = 14.sp)
+                        }
+                        if (CloudModule.phase == 1) ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp))
+                    }
+                },
+                confirmButton = { },
+                dismissButton = { TextButton({ CloudModule.cancel(ctx) }) { Text(stringResource(R.string.btn_cancel)) } },
+            )
+        } else if (CloudModule.phase == 4) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { CloudModule.reset() },
+                title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(stringResource(R.string.cm_failed), fontSize = 14.sp)
+                        if (CloudModule.error.isNotBlank()) Text(CloudModule.error.take(200), fontSize = 12.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                    }
+                },
+                confirmButton = { TextButton({ CloudModule.reset(); CloudModule.start(ctx, null, upgrade = true) }) { Text(stringResource(R.string.cm_install)) } },
+                dismissButton = { TextButton({ CloudModule.reset() }) { Text(stringResource(R.string.btn_close)) } },
+            )
+        }
+    }
+    CloudModule.confirm?.let { d -> InstallConfirmDialog(d) { CloudModule.confirm = null } }
+    CloudModule.runDlg?.let { d -> InstallRunDialog(d) { CloudModule.runDlg = null } }
+    @Suppress("UNUSED_VARIABLE") val unused = v
 }

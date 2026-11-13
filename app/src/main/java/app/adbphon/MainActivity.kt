@@ -155,10 +155,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
     override fun onPause() { super.onPause(); Invites.stopUi() }
+    /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) Fm.closeSimpleDialogsOnLeave() }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         PermFlow.onPermissionResult(this, requestCode, grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("inst_bg", false)) InstBg.openFromNotification()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -171,6 +179,7 @@ class MainActivity : ComponentActivity() {
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
         setContent { AdbPhonApp() }
+        if (intent?.getBooleanExtra("inst_bg", false) == true) InstBg.openFromNotification()
     }
 
 }
@@ -388,6 +397,9 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 }
             }
             InviteDialogHost()
+            ViaAskHost()
+            InstBgHost()
+            ModuleHost()
             vm.updateRelease?.let { r ->
                 LAlertDialog(
                     onDismissRequest = { vm.dismissUpdate() },

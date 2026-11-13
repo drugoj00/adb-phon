@@ -64,18 +64,36 @@ fun InstallHub(onClose: () -> Unit) {
     val vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var stage by remember { mutableStateOf("menu") }
     var files by remember { mutableStateOf<List<ApkFile>?>(null) }
+    // найденные файлы ждут выбора установщика («Установить через…»); после выбора ADB-phon открывается окно «Установка»
+    var pending by remember { mutableStateOf<List<ApkFile>?>(null) }
     var busy by remember { mutableStateOf(false) }
     val pickTree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) files = Batch.listApks(ctx, uri)
+        if (uri != null) pending = Batch.listApks(ctx, uri)
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch { busy = true; files = runCatching { pickedToApks(ctx, uri) }.getOrDefault(emptyList()); busy = false }
+        if (uri != null) scope.launch { busy = true; pending = runCatching { pickedToApks(ctx, uri) }.getOrDefault(emptyList()); busy = false }
     }
     when {
         files != null -> InstallDialog(files!!) { files = null; onClose() }
-        stage == "browser" -> FileBrowser(onApks = { files = it; stage = "menu" }, onClose = { stage = "menu" })
-        stage == "wifi" -> UploadDialog(onApks = { files = it; stage = "menu" }, onClose = { stage = "menu" })
-        stage == "net" -> NetDialog { stage = "menu" }
+        pending != null -> {
+            val list = pending!!
+            androidx.compose.runtime.LaunchedEffect(list) {
+                if (list.isEmpty()) { files = list; pending = null; return@LaunchedEffect }
+                val o = ViaAsk.ask(ctx, list.size)
+                pending = null
+                when {
+                    o == null -> {}
+                    o.id == "adb" -> files = list
+                    else -> {
+                        val f = withContext(Dispatchers.IO) { runCatching { Batch.materialize(list.first()).file }.getOrNull() }
+                        Toast.makeText(ctx, ctx.getString(if (f != null && ViaAsk.launchExternal(ctx, f, o)) R.string.via_started else R.string.fm_no_app), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+        stage == "browser" -> FileBrowser(onApks = { pending = it; stage = "menu" }, onClose = { stage = "menu" })
+        stage == "wifi" -> UploadDialog(onApks = { pending = it; stage = "menu" }, onClose = { stage = "menu" })
+        stage == "net" -> NetDialog(onFiles = { pending = it; stage = "menu" }) { stage = "menu" }
         else -> HDialog(onDismissRequest = onClose) {
             Column(
                 Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth()
@@ -150,16 +168,21 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
                     Chip(stringResource(R.string.ii_close), true) { Hooks.reloadApps(); onClose() }
                 } else {
                     if (!showProgress) Chip(stringResource(R.string.btn_cancel), false) { onClose() }
-                    if (!showProgress) Chip(stringResource(R.string.install_go, chosen.size), true) {
+                    fun go(bg: Boolean) {
                         val picked = files.filter { it.name in chosen }
-                        if (picked.isEmpty() || busy) return@Chip
+                        if (picked.isEmpty() || busy) return
                         busy = true
-                        scope.launch {
+                        // ход ведёт общий поток программы: закрытие окна («В фоне») установку не обрывает
+                        Fm.scope.launch {
                             if (!AutoAdb.ensure()) { busy = false; Toast.makeText(ctx, AutoAdb.hint(), Toast.LENGTH_LONG).show(); return@launch }
+                            if (bg) { InstBg.begin(ctx, run); onClose() }
                             installWithProgress(ctx, picked, metas, run)
                             busy = false
                         }
                     }
+                    if (!showProgress) Chip(stringResource(R.string.install_go, chosen.size), true) { go(false) }
+                    if (!showProgress) Chip(stringResource(R.string.ii_bg), false) { go(true) }
+                    if (showProgress && run.running) Chip(stringResource(R.string.ii_bg), false) { InstBg.begin(ctx, run); onClose() }
                 }
             }
         }

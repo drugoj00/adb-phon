@@ -32,7 +32,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Folder
@@ -568,7 +570,8 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if ("pc" in p.rootOpen) {
             val devKeys = pcs.joinToString(",") { it.ip } + "|" + ands.joinToString(",") { it.addr + it.alt }
             LaunchedEffect(devKeys, FmRootCfg.ver) { pcs.forEach { h -> launch { PcStatus.probe(h.ip) } }; ands.forEach { d -> launch { AdbStatus.probe(d) } } }
-            val filesTxt = stringResource(R.string.dev_files); val videoTxt = stringResource(R.string.dev_video)
+            val filesTxt = stringResource(R.string.dev_files); val videoTxt = stringResource(R.string.dev_window)
+            val callVTxt = stringResource(R.string.dev_call_video); val callATxt = stringResource(R.string.dev_call_audio)
             val onTxt = stringResource(R.string.pc_online); val offTxt = stringResource(R.string.pc_offline); val chkTxt = stringResource(R.string.pc_checking)
             val all = pcs.map { it.name.ifBlank { it.ip } to (it as Any) } + ands.map { it.title to (it as Any) }
             all.sortedBy { it.first.lowercase() }.forEach { (_, dv) ->
@@ -577,16 +580,20 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                     rows += RR("pc:" + h.ip, h.name.ifBlank { h.ip }, Icons.Filled.Computer, if (up == true) Color(0xFF26A69A) else Color(0xFF9E9E9E), level = 1, pc = h, expandKey = ek,
                         subText = h.ip + "  ·  " + (if (up == true) onTxt else if (up == false) offTxt else chkTxt))
                     if (ek in p.rootOpen) {
-                        rows += RR("pcf:" + h.ip, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { fmLeaveRoot(p); Fm.connectNet(p, h.conn(ctx)) })
+                        rows += RR("pcc:" + h.ip, callVTxt, Icons.Filled.Videocam, Color(0xFF26A69A), level = 2, act = { devCall(ctx, h.name.ifBlank { h.ip }, listOf(h.ip), h.code, false) })
+                        rows += RR("pca:" + h.ip, callATxt, Icons.Filled.Call, Color(0xFF26A69A), level = 2, act = { devCall(ctx, h.name.ifBlank { h.ip }, listOf(h.ip), h.code, true) })
                         rows += RR("pcv:" + h.ip, videoTxt, Icons.Filled.DesktopWindows, Color(0xFF42A5F5), level = 2, act = { Fm.dlg = FmDlg.PcScreen(h) })
+                        rows += RR("pcf:" + h.ip, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { fmLeaveRoot(p); Fm.connectNet(p, h.conn(ctx)) })
                     }
                 } else if (dv is AdbDev) {
                     val d = dv; val up = AdbStatus.up[d.key]; val ek = "dev:" + d.key
                     rows += RR(d.key, d.title, Icons.Filled.PhoneAndroid, if (up == true) Color(0xFF9CCC65) else Color(0xFF9E9E9E), level = 1, adev = d, expandKey = ek,
                         subText = (AdbStatus.via[d.key] ?: d.addr) + "  ·  " + (if (up == true) onTxt else if (up == false) offTxt else chkTxt))
                     if (ek in p.rootOpen) {
-                        rows += RR("andf:" + d.addr, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { fmLeaveRoot(p); Fm.connectNet(p, d.conn()) })
+                        rows += RR("andc:" + d.addr, callVTxt, Icons.Filled.Videocam, Color(0xFF26A69A), level = 2, act = { devCall(ctx, d.title, d.callIps(), null, false) })
+                        rows += RR("anda:" + d.addr, callATxt, Icons.Filled.Call, Color(0xFF26A69A), level = 2, act = { devCall(ctx, d.title, d.callIps(), null, true) })
                         rows += RR("andv:" + d.addr, videoTxt, Icons.Filled.DesktopWindows, Color(0xFF9CCC65), level = 2, act = { Fm.dlg = FmDlg.AndroidScreen(d) })
+                        rows += RR("andf:" + d.addr, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { fmLeaveRoot(p); Fm.connectNet(p, d.conn()) })
                     }
                 }
             }
@@ -1224,14 +1231,18 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     DropdownMenuItem({ Text((if (WifiExplorer.mode == m) "✓ " else "") + stringResource(res), fontSize = 14.sp) }, { menu = false; WifiExplorer.setMode(ctx, m) })
             }
             r.pc?.let { h ->
+                item(R.string.dev_call_video) { devCall(ctx, h.name.ifBlank { h.ip }, listOf(h.ip), h.code, false) }
+                item(R.string.dev_call_audio) { devCall(ctx, h.name.ifBlank { h.ip }, listOf(h.ip), h.code, true) }
+                item(R.string.dev_window) { Fm.dlg = FmDlg.PcScreen(h) }
                 item(R.string.dev_files) { fmLeaveRoot(p); Fm.connectNet(p, h.conn(ctx)) }
-                item(R.string.dev_video) { Fm.dlg = FmDlg.PcScreen(h) }
                 item(R.string.rt_edit) { Fm.dlg = FmDlg.DevAdd(h, null) }
                 item(R.string.rt_forget) { saveHosts(ctx, loadHosts(ctx).filter { it.ip != h.ip }); FmRootCfg.ver++ }
             }
             r.adev?.let { d ->
+                item(R.string.dev_call_video) { devCall(ctx, d.title, d.callIps(), null, false) }
+                item(R.string.dev_call_audio) { devCall(ctx, d.title, d.callIps(), null, true) }
+                item(R.string.dev_window) { Fm.dlg = FmDlg.AndroidScreen(d) }
                 item(R.string.dev_files) { fmLeaveRoot(p); Fm.connectNet(p, d.conn()) }
-                item(R.string.dev_video) { Fm.dlg = FmDlg.AndroidScreen(d) }
                 item(R.string.dev_console) { Fm.dlg = FmDlg.AndroidConsole(d) }
                 item(R.string.dev_ts) {
                     val ts = d.tsAddr

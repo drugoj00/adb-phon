@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -197,7 +198,7 @@ private fun Modifier.sbar(state: ScrollableState, leftIgnored: Boolean, metrics:
  * Пока на ней фокус, стрелки вверх и вниз прокручивают список, влево и вправо уводят фокус дальше. Подсвечивается, когда на ней фокус.
  */
 @Composable
-fun ScrollbarHandle(state: ScrollableState, modifier: Modifier = Modifier) {
+fun ScrollbarHandle(state: ScrollableState, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
     val step = with(density) { 220.dp.toPx() }
@@ -205,6 +206,8 @@ fun ScrollbarHandle(state: ScrollableState, modifier: Modifier = Modifier) {
     androidx.compose.foundation.layout.Box(
         modifier.width(16.dp).fillMaxHeight()
             .onFocusChanged { SbFocus.focused[state] = it.isFocused }
+            // 7.6: пока фокус не внутри вкладки, опорная точка полосы фокус не берёт: иначе первая стрелка вниз с панели вкладок попадала на неё и прокручивала страницу вместо перехода к первому пункту
+            .focusProperties { canFocus = enabled || SbFocus.focused[state] == true }
             .onKeyEvent { e ->
                 val down = e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown
                 when (e.key) {
@@ -253,8 +256,9 @@ fun TabColumn(key: String, modifier: Modifier = Modifier.fillMaxSize(), contentP
               verticalArrangement: Arrangement.Vertical = Arrangement.Top, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     val st = rememberSavedScroll(key)
     val left = scrollbarLeft()
+    var inside by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(modifier) {
-        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().tabScroll(st).padding(contentPadding), verticalArrangement = verticalArrangement, content = content)
-        ScrollbarHandle(st, Modifier.align(if (left) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd))
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().onFocusChanged { inside = it.hasFocus }.tabScroll(st).padding(contentPadding), verticalArrangement = verticalArrangement, content = content)
+        ScrollbarHandle(st, Modifier.align(if (left) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd), enabled = inside)
     }
 }

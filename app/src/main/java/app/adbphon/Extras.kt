@@ -1053,6 +1053,7 @@ fun SettingsScreen(vm: MainViewModel) {
         SettingSwitch(srvAuto.value, { srvAuto.value = it; AdbServer.auto = it }, stringResource(R.string.srv_auto), stringResource(R.string.srv_auto_hint))
         SettingSwitch(srvOff.value, { srvOff.value = it; AdbServer.offAfter = it }, stringResource(R.string.srv_off), stringResource(R.string.srv_off_hint))
         androidx.compose.material3.OutlinedButton({ Thread { AdbServer.stop() }.start() }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.srv_stop)) }
+        CallPicSettings()
         ShizukuSection()
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)

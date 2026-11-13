@@ -240,7 +240,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                 val f = Batch.materialize(f0).file ?: return@run ctx.getString(R.string.ver_failed)
                 val copy = withContext(Dispatchers.IO) { AppBackups.importApk(ctx, f) } ?: return@run ctx.getString(R.string.ver_not_apk)
                 if (copy.pkg != pkg) return@run ctx.getString(R.string.ver_other_app, copy.pkg)
-                resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode))
+                ViaAsk.installOrAsk(ctx, copy.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode)) }
             }
         },
         onClose = { browser = false },
@@ -281,7 +281,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                             Text("${when_(c.savedAt)} · ${mb(c.size)} " + stringResource(R.string.mb), color = t.hint, fontSize = 12.sp)
                         }
                         Chip(stringResource(R.string.ver_install), installed?.second == c.versionCode) {
-                            run { resultText(ctx, AppBackups.installFiles(ctx, pkg, c.files, c.versionCode)) }
+                            run { ViaAsk.installOrAsk(ctx, c.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, c.files, c.versionCode)) } }
                         }
                         Chip(stringResource(R.string.ver_delete_copy), false) { AppBackups.delete(c); tick++ }
                     }
@@ -300,7 +300,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                                     val apk = NetSearch.download(ctx, v.url) { mbDone -> status = ctx.getString(R.string.net_downloading, v.name, mbDone.toInt()) }?.file
                                         ?: return@run ctx.getString(R.string.net_failed)
                                     val copy = withContext(Dispatchers.IO) { AppBackups.importApk(ctx, apk) } ?: return@run ctx.getString(R.string.ver_not_apk)
-                                    resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode))
+                                    ViaAsk.installOrAsk(ctx, copy.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode)) }
                                 }
                             }
                         }

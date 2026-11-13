@@ -107,8 +107,21 @@ fun rememberSavedTreeList(key: String, rowKeys: List<String>, selKey: String?): 
         while (sel.value == null && w2 < 2000) { delay(100); w2 += 100 }
         delay(150)
         val ks = keys.value; val si = sel.value?.let { ks.indexOf(it) } ?: -1
-        if (si >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == si }) state.scrollToItem((si - 2).coerceAtLeast(0))
-        android.util.Log.i("FocusRestore", "tree restored: keyMode=" + FocusRestore.keyMode(ctx) + " sel=" + sel.value)
+        val needScroll = si >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == si }
+        if (needScroll) state.scrollToItem((si - 2).coerceAtLeast(0))
+        // 7.6: строки дерева подгружаются ещё несколько секунд (облака, устройства, сеть): когда их число перестало меняться, выбранная строка проверяется ещё раз
+        // (раньше при выборе нижней строки «Показать/Скрыть» после загрузки облачных строк она уходила за нижний край, а дерево оставалось не там)
+        var lastN = ks.size; var stable = 0; var w3 = 0
+        while (stable < 6 && w3 < 5000 && !state.isScrollInProgress) {
+            delay(150); w3 += 150
+            val n = keys.value.size
+            if (n != lastN) { lastN = n; stable = 0 } else stable++
+        }
+        if (!state.isScrollInProgress) {
+            val ks2 = keys.value; val si2 = sel.value?.let { ks2.indexOf(it) } ?: -1
+            if (si2 >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == si2 }) state.scrollToItem((si2 - 2).coerceAtLeast(0))
+        }
+        android.util.Log.i("FocusRestore", "tree restored: keyMode=" + FocusRestore.keyMode(ctx) + " sel=" + sel.value + " si=" + si + " n=" + ks.size + "->" + keys.value.size + " first=" + state.firstVisibleItemIndex)
         if (FocusRestore.keyMode(ctx) && sel.value != null) FocusRestore.key = sel.value
         restored = true
     }

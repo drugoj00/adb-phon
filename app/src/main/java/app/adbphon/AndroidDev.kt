@@ -37,6 +37,8 @@ data class AdbDev(val name: String, val addr: String, val alt: String = "") {
     val tsAddr: String? get() = listOf(addr, alt).firstOrNull { it.startsWith("100.") }
     val lanAddr: String? get() = listOf(addr, alt).firstOrNull { it.isNotBlank() && !it.startsWith("100.") }
     val key: String get() = "andr:" + norm(addr)
+    /** Адреса (без порта), по которым устройство могли записать в «Люди» (адрес Tailscale и адрес сети). */
+    fun callIps(): List<String> = listOfNotNull(tsAddr, lanAddr).map { it.substringBefore(':') }.distinct()
     val addrs: List<String> get() = listOf(addr, alt).filter { it.isNotBlank() }.map { norm(it) }.distinct()
     /** Подключение для файлового менеджера: в «user» ездит запасной адрес. */
     fun conn(): NetConn = NetConn("andr", host, port, if (alt.isBlank()) "" else norm(alt), "", "", "", title)

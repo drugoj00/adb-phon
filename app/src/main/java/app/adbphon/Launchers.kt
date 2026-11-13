@@ -72,7 +72,7 @@ object Launchers {
     }.getOrDefault(FALLBACK)
 
     /** Скачивает Меню приложений с GitHub и ставит на подключённое устройство. Возвращает итоговое сообщение. */
-    suspend fun installMenu(ctx: Context): String {
+    suspend fun installMenu(ctx: Context, via: InstOpt? = null): String {
         val tmp = File(ctx.cacheDir, "appmenu.apk")
         val ok = withContext(Dispatchers.IO) {
             runCatching {
@@ -88,6 +88,7 @@ object Launchers {
         // перед установкой убеждаемся, что скачан именно пакет Меню приложений
         val pkg = ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.packageName
         if (pkg != MENU_PKG) { tmp.delete(); return ctx.getString(R.string.lg_bad_file) }
+        if (via != null && via.id != "adb") return ctx.getString(if (ViaAsk.launchExternal(ctx, tmp, via)) R.string.via_started else R.string.fm_no_app)
         val r = tmp.inputStream().use { Adb.installApk(it, tmp.length(), "-r") }
         tmp.delete()
         return if (r.contains("Success", true)) ctx.getString(R.string.lg_done) else ctx.getString(R.string.lg_failed, r.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(120))

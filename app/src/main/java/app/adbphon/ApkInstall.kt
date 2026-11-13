@@ -182,20 +182,26 @@ object ApkInstall {
         return if (installGroup) out.sortedBy { it.rank } else out
     }
 
-    /** Нажатие на APK/APKS/XAPK: запомненный способ, единственный доступный способ или окно выбора. */
+    /**
+     * Нажатие на APK/APKS/XAPK. Спрашивать включено (по умолчанию): окно «Установить через…» всегда, запомненный выбор не применяется.
+     * Выключено: запомненный способ, иначе способ по умолчанию без окна (ADB-phon при ADB/root, иначе системный).
+     * Файл в панели «ADB» (оболочка) ставится только нашим способом: файл забирается во временную папку.
+     */
     fun start(p: FmPane, item: FmItem) {
         val ctx = Fm.sctx
-        val canAdb = Adb.isConnected && !FmIo.remote && p.src == "local"
-        val opts = options(ctx, item.ext, canAdb)
-        val saved = saved(ctx, item.ext)
-        if (saved != null) opts.firstOrNull { it.id == saved && it.enabled }?.let { run(p, item, it); return }
-        // без окна только когда доступен ровно один способ (пункт «Открыть как архив» не считается установкой; серый наш способ считается показанным)
-        val usable = opts.filter { it.id != "archive" && it.enabled }
+        val adbPane = p.src == "adb"
+        val canAdb = Adb.isConnected && (adbPane || (!FmIo.remote && p.src == "local"))
+        var opts = options(ctx, item.ext, canAdb)
+        if (adbPane) opts = opts.map { o -> if (o.id == "adb" || o.id == "archive") o else InstOpt(o.id, o.label, ctx.getString(R.string.via_adb_pane_only), o.pkg, o.icon, o.ai, o.rank, false, o.recommended) }
         val shown = opts.filter { it.id != "archive" }
-        if (usable.size == 1 && shown.size == 1) {
-            run(p, item, usable[0]); return
-        }
         if (shown.isEmpty()) { Fm.openArchiveFor(p, item); return }
+        if (!UiPrefs.askInstaller) {
+            val saved = saved(ctx, item.ext)
+            val o = saved?.let { s -> opts.firstOrNull { it.id == s && it.enabled } }
+                ?: opts.firstOrNull { it.id == (if (Adb.isConnected || isBundle(item.ext)) "adb" else "system") && it.enabled }
+                ?: shown.firstOrNull { it.enabled }
+            if (o != null) { run(p, item, o); return }
+        }
         Fm.dlg = FmDlg.InstallPick(p, item, opts)
     }
 
@@ -307,7 +313,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().clickable { remember = !remember }.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!UiPrefs.askInstaller) Row(Modifier.fillMaxWidth().clickable { remember = !remember }.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(remember, { remember = it }); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp)
                 }
             }

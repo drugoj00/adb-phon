@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -132,6 +134,10 @@ class InstRun {
     var ok by mutableIntStateOf(0)
     var bad by mutableIntStateOf(0)
     val fails = mutableStateListOf<String>()
+    /** 7.6: установка уехала «В фоне» (ход ведёт служба, окно можно открыть из уведомления). */
+    var background by mutableStateOf(false)
+    /** 7.6: «Остановить»: оставшиеся файлы не ставятся (текущий файл дожимается). */
+    @Volatile var stop = false
 }
 
 private fun mbText(b: Long): String = String.format(Locale.US, "%.1f", b / 1048576.0)
@@ -337,6 +343,7 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
             for ((i, f0) in files.withIndex()) {
                 val meta = metas[f0.name]
                 run.index = i + 1; run.name = meta?.label ?: f0.name; run.phase = 0
+                if (run.stop) { run.bad++; run.fails.add((meta?.label ?: f0.name) + ": " + ctx.getString(R.string.ii_stopped)); base += f0.size.coerceAtLeast(1L); run.done = base; continue }
                 val sz = f0.size.coerceAtLeast(1L)
                 var reason: String? = null
                 try {
@@ -388,11 +395,20 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
 /** Окно хода тихой установки в «Файлах»: полоска и итог; закрыть можно, когда установка закончилась. */
 @Composable
 fun InstallRunDialog(d: FmDlg.InstallRunDlg, close: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val bgFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(d.run.finished) { kotlinx.coroutines.delay(150); runCatching { bgFocus.requestFocus() } }
     LAlertDialog(
         onDismissRequest = { if (!d.run.running) close() },
         title = null,
         text = { InstProgressView(d.run) },
-        confirmButton = { if (d.run.finished) androidx.compose.material3.TextButton(close) { Text(stringResource(R.string.ii_close)) } },
+        confirmButton = {
+            if (d.run.finished) androidx.compose.material3.TextButton(close, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_close)) }
+            else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (d.run.total > 1 && !d.run.stop) androidx.compose.material3.TextButton({ d.run.stop = true }) { Text(stringResource(R.string.ii_stop)) }
+                androidx.compose.material3.TextButton({ InstBg.begin(ctx, d.run); close() }, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_bg)) }
+            }
+        },
     )
 }
 
@@ -400,6 +416,9 @@ fun InstallRunDialog(d: FmDlg.InstallRunDlg, close: () -> Unit) {
 @Composable
 fun InstallConfirmDialog(d: FmDlg.InstallConfirm, close: () -> Unit) {
     val t = LocalTh.current
+    androidx.compose.runtime.LaunchedEffect(Unit) { InstBg.nextBackground = false }
+    val goFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { goFocus.requestFocus() } }
     LAlertDialog(
         onDismissRequest = close,
         title = { Text(stringResource(R.string.ii_confirm_title), maxLines = 1) },
@@ -414,7 +433,10 @@ fun InstallConfirmDialog(d: FmDlg.InstallConfirm, close: () -> Unit) {
             when {
                 one != null && one.curPlainSystem && one.kind == ApkMeta.Kind.DOWNGRADE -> {}
                 one != null && one.downgradeNeedsWipe -> androidx.compose.material3.TextButton({ close(); d.go(true) }) { Text(stringResource(if (one.downgradeKeepsData) R.string.ii_confirm_keep else R.string.ii_confirm_wipe)) }
-                else -> androidx.compose.material3.TextButton({ close(); d.go(false) }) { Text(stringResource(R.string.ii_confirm_go)) }
+                else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    androidx.compose.material3.TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
+                    androidx.compose.material3.TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
+                }
             }
         },
         dismissButton = { androidx.compose.material3.TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },

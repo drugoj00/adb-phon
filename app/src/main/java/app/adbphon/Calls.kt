@@ -95,7 +95,8 @@ object Calls {
     const val NOTIF_LISTEN = 4441
     private const val TAG = "TvoCall"
 
-    class Call(val id: String, val outgoing: Boolean, val peerName: String, val peerCode: String, var peerIp: String, val offer: String?, val expires: Long) {
+    /** voice = голосовой звонок (камера выключена, включается кнопкой посреди звонка); в сообщении offer это поле «vo»:1, как у Windows-версии 4.0. */
+    class Call(val id: String, val outgoing: Boolean, val peerName: String, val peerCode: String, var peerIp: String, val offer: String?, val expires: Long, val voice: Boolean = false) {
         @Volatile var state = "ring"   // ring | active | over
         internal val queue = ArrayList<Pair<String, String>>()
         internal var listener: ((String, String) -> Unit)? = null
@@ -106,6 +107,13 @@ object Calls {
     @Volatile var fakeMedia = ""
     /** Только для проверок: «answer» / «decline» = входящий звонок обрабатывается сам. */
     @Volatile var auto = ""
+    /** Только для проверок: звук собеседника в звонке выключен с самого начала (тесты без звука). */
+    @Volatile var spkOff = false
+    /** Только для проверок: кодек видео vp8 | vp9 | h264. */
+    @Volatile var vcodec = ""
+    @Volatile var lowForce = false
+    @Volatile var fakeW = 0
+    @Volatile var fakeH = 0
 
     private val seen = LinkedHashMap<String, Long>()
     private val main = Handler(Looper.getMainLooper())
@@ -174,6 +182,7 @@ object Calls {
                 val o = JSONObject().put("v", 1).put("t", "call").put("k", kind).put("id", c.id).put("n", myName(app)).put("e", now() + 90)
                     .put("fc", Invites.myCode(app)).put("fi", myIp().ifEmpty { if (testGate(app)) lanIp() else "" })
                 if (!sdp.isNullOrEmpty()) o.put("s", sdp)
+                if (kind == "offer" && c.voice) o.put("vo", 1)
                 val t0 = System.currentTimeMillis()
                 val env = seal(c.peerCode, o.toString())
                 android.util.Log.i(TAG, "seal ${System.currentTimeMillis() - t0} ms")
@@ -203,7 +212,7 @@ object Calls {
             val left = o.optLong("e") - now()
             if (left < 5 || s.isEmpty() || !CallPeople.validCode(fc)) return
             val busy = current != null
-            val c = Call(id, false, n, fc, fi, s, now() + minOf(45L, left))
+            val c = Call(id, false, n, fc, fi, s, now() + minOf(45L, left), o.optInt("vo") == 1)
             if (busy) { send(app, c, "busy"); return }
             current = c
             ring(app, c)
@@ -227,12 +236,12 @@ object Calls {
 
     // ---------------------------------------------------------------- исходящий
     /** → «ok», «busy» или «fail». */
-    fun dial(ctx: Context, p: CallPeople.Person): String {
+    fun dial(ctx: Context, p: CallPeople.Person, voice: Boolean = false): String {
         val app = ctx.applicationContext
         if (current != null) return "busy"
         if (!CallPeople.validCode(p.code)) return "fail"
         val id = (1..12).map { "0123456789abcdef"[SecureRandom().nextInt(16)] }.joinToString("")
-        val c = Call(id, true, p.name, p.code, p.ip, null, now() + 70)
+        val c = Call(id, true, p.name, p.code, p.ip, null, now() + 70, voice)
         current = c
         c.state = "active"
         return runCatching {
@@ -245,12 +254,13 @@ object Calls {
     // ---------------------------------------------------------------- входящий: уведомление и окно
     private fun ringChannel(app: Context): String {
         val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val ch = NotificationChannel("call_ring_v1", app.getString(R.string.call_title), NotificationManager.IMPORTANCE_HIGH)
-        ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-            AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+        // 7.6: мелодию звонка играет сама программа (выбор в «Мелодия звонка…»), поэтому у канала своего звука нет, остаётся вибрация
+        runCatching { nm.deleteNotificationChannel("call_ring_v1") }
+        val ch = NotificationChannel("call_ring_v2", app.getString(R.string.call_title), NotificationManager.IMPORTANCE_HIGH)
+        ch.setSound(null, null)
         ch.enableVibration(true); ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         nm.createNotificationChannel(ch)
-        return "call_ring_v1"
+        return "call_ring_v2"
     }
 
     private fun ring(app: Context, c: Call) {
@@ -261,15 +271,15 @@ object Calls {
             val ans = PendingIntent.getActivity(app, 4441, Intent(app, CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("answer", true), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val dec = PendingIntent.getBroadcast(app, 4442, Intent(app, CallReceiver::class.java).setAction("app.adbphon.CALL_DECLINE"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val n = NotificationCompat.Builder(app, ch).setSmallIcon(android.R.drawable.sym_call_incoming)
-                .setContentTitle(app.getString(R.string.call_notif_ring, c.peerName)).setContentText(app.getString(R.string.call_in_hint))
+                .setContentTitle(app.getString(if (c.voice) R.string.call_notif_ring_voice else R.string.call_notif_ring, c.peerName)).setContentText(app.getString(if (c.voice) R.string.call_in_hint_voice else R.string.call_in_hint))
                 .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setTimeoutAfter(maxOf(5L, c.expires - now()) * 1000)
                 .setFullScreenIntent(full, true).setContentIntent(full)
                 .addAction(android.R.drawable.sym_action_call, app.getString(R.string.call_answer), ans)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, app.getString(R.string.call_decline), dec).build()
-            n.flags = n.flags or Notification.FLAG_INSISTENT
             nm.notify(NOTIF_RING, n)
         }.onFailure { android.util.Log.w(TAG, "ring notify: $it") }
+        Ringtones.playRing(app, c.voice)
         // приложение на экране или есть право «поверх других окон»: окно открывается сразу (из фона Android иначе показывает только уведомление)
         runCatching {
             if (Invites.uiActive || Settings.canDrawOverlays(app)) app.startActivity(Intent(app, CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -277,7 +287,7 @@ object Calls {
         main.postDelayed({ if (current === c && c.state == "ring") { over(app, c); cancelRing(app); c.listener?.invoke("timeout", "") ?: synchronized(c.queue) { c.queue.add("timeout" to "") } } }, maxOf(5L, c.expires - now()) * 1000)
     }
 
-    fun cancelRing(app: Context) { runCatching { (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_RING) } }
+    fun cancelRing(app: Context) { Ringtones.stop(); runCatching { (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_RING) } }
 
     /** Человек нажал «Ответить» (в окне или в уведомлении). */
     fun answered(app: Context, c: Call) { c.state = "active"; cancelRing(app); CallListen.begin(app) }
@@ -347,7 +357,7 @@ class CallListenService : Service() {
         val open = PendingIntent.getActivity(this, 4443, Intent(this, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val b = NotificationCompat.Builder(this, "call_listen").setSmallIcon(R.drawable.ic_stat_call).setOngoing(true).setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN).setContentIntent(open)
-        if (inCall) b.setContentTitle(getString(R.string.call_incall_notif, Calls.current?.peerName ?: ""))
+        if (inCall) b.setContentTitle(getString(if (Calls.current?.voice == true) R.string.call_incall_notif_voice else R.string.call_incall_notif, Calls.current?.peerName ?: ""))
         else {
             b.setContentTitle(getString(R.string.call_listen_notif))
             val off = PendingIntent.getService(this, 4444, Intent(this, CallListenService::class.java).setAction("off"), PendingIntent.FLAG_IMMUTABLE)
@@ -361,7 +371,7 @@ class CallListenService : Service() {
         var t = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
         if (inCall && Build.VERSION.SDK_INT >= 30) {
             if (granted(android.Manifest.permission.RECORD_AUDIO)) t = t or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            if (granted(android.Manifest.permission.CAMERA)) t = t or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            if (granted(android.Manifest.permission.CAMERA) && Calls.current?.voice != true) t = t or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
         runCatching { ServiceCompat.startForeground(this, Calls.NOTIF_LISTEN, n, t) }.onFailure {
             android.util.Log.w("TvoCall", "startForeground type=$t: $it")

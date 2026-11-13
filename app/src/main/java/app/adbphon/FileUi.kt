@@ -61,6 +61,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
@@ -73,6 +74,8 @@ object UiPrefs {
     var narrow by mutableStateOf(true)
     /** Миниатюры фото и видео вместо значков (по умолчанию включены). */
     var thumbs by mutableStateOf(true)
+    /** 7.6: спрашивать, чем устанавливать (окно «Установить через…» во всех точках установки); по умолчанию включено. */
+    var askInstaller by mutableStateOf(true)
     var folderDefault by mutableStateOf(0)
     /** Цвет конкретной папки: ключ «источник|путь» → номер цвета палитры. */
     val folderColors = mutableStateMapOf<String, Int>()
@@ -86,6 +89,7 @@ object UiPrefs {
         val p = sp(ctx)
         narrow = true   // узкий шрифт в списках всегда (настройка убрана по слову владелицы 08.11.2026)
         thumbs = p.getBoolean("thumbs", true)
+        askInstaller = p.getBoolean("ask_installer", true)
         folderDefault = p.getInt("folder_default", 0).coerceIn(0, FOLDER_COLORS.size - 1)
         folderColors.clear()
         p.getString("folder_colors", "").orEmpty().split('\n').forEach { l -> val i = l.lastIndexOf('='); if (i > 0) l.substring(i + 1).toIntOrNull()?.let { folderColors[l.substring(0, i)] = it } }
@@ -101,6 +105,7 @@ object UiPrefs {
         listOf("apk", "apks", "apkm", "xapk").forEach { e -> p.getString("inst_$e", "ask")?.takeIf { it != "ask" }?.let { instMode[e] = it } }
     }
 
+    fun setAskInstaller(ctx: Context, v: Boolean) { askInstaller = v; sp(ctx).edit().putBoolean("ask_installer", v).apply() }
     fun setThumbs(ctx: Context, v: Boolean) { thumbs = v; sp(ctx).edit().putBoolean("thumbs", v).apply() }
     fun setNarrow(ctx: Context, v: Boolean) { narrow = v; sp(ctx).edit().putBoolean("narrow_font", v).apply() }
     fun setFolderDefault(ctx: Context, i: Int) { folderDefault = i; sp(ctx).edit().putInt("folder_default", i).apply() }
@@ -407,6 +412,24 @@ fun FilesLookSection() {
     var wa by remember { mutableStateOf(WifiAuto.enabled(ctx)) }
     SettingSwitch(wa, { wa = it; WifiAuto.setEnabled(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_wifi_auto), androidx.compose.ui.res.stringResource(R.string.set_wifi_auto_hint))
     SettingSwitch(UiPrefs.thumbs, { UiPrefs.setThumbs(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_thumbs), androidx.compose.ui.res.stringResource(R.string.set_thumbs_hint))
+    SettingSwitch(UiPrefs.askInstaller, { UiPrefs.setAskInstaller(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_ask_installer), androidx.compose.ui.res.stringResource(R.string.set_ask_installer_hint))
+    // 7.6: модуль «ADB-phon Облака»: версия, автообновление и удаление
+    @Suppress("UNUSED_VARIABLE") val cmTick = CloudModule.ver
+    val cmV = CloudModule.installedVersion(ctx)
+    var cmAuto by remember(CloudModule.autoTick) { mutableStateOf(CloudModule.auto(ctx)) }
+    var cmDel by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        androidx.compose.material3.Text(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.weight(1f))
+        if (cmV != null) androidx.compose.material3.TextButton({ cmDel = true }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_cmod_remove)) }
+    }
+    SettingSwitch(cmAuto, { cmAuto = it; CloudModule.setAuto(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_cmod_auto), androidx.compose.ui.res.stringResource(R.string.set_cmod_auto_hint))
+    if (cmDel) LAlertDialog(
+        onDismissRequest = { cmDel = false },
+        title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove_title)) },
+        text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove_text), fontSize = 14.sp) },
+        confirmButton = { androidx.compose.material3.TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
+        dismissButton = { androidx.compose.material3.TextButton({ cmDel = false }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
+    )
     androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_open_files), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     var remTick by remember { mutableStateOf(0) }
     val remembered = remember(remTick, UiPrefs.openAs.size) {

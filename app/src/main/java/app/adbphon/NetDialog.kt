@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 
 /** Поиск приложений в сети (F-Droid, GitHub) и установка по прямой ссылке. */
 @Composable
-fun NetDialog(onClose: () -> Unit) {
+fun NetDialog(onFiles: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val t = LocalTh.current
     val scope = rememberCoroutineScope()
@@ -51,7 +51,16 @@ fun NetDialog(onClose: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    // скачивает файлы по очереди и ставит первый, который встал (для приложений с несколькими сборками под процессоры)
+    // скачивает файлы по очереди и передаёт первый подходящий по процессору в выбор установщика и окно «Установка»
+    fun abiOk(f: java.io.File?): Boolean {
+        if (f == null) return true
+        return runCatching {
+            java.util.zip.ZipFile(f).use { z ->
+                val abis = z.entries().asSequence().map { it.name }.filter { it.startsWith("lib/") }.map { it.removePrefix("lib/").substringBefore('/') }.toSet()
+                abis.isEmpty() || abis.any { it in android.os.Build.SUPPORTED_ABIS }
+            }
+        }.getOrDefault(true)
+    }
     fun installFrom(urls: List<String>) {
         scope.launch {
             busy = true
@@ -60,10 +69,12 @@ fun NetDialog(onClose: () -> Unit) {
                 status = ctx.getString(R.string.net_downloading, u.substringAfterLast('/'), 0)
                 val f = NetSearch.download(ctx, u) { mb -> status = ctx.getString(R.string.net_downloading, u.substringAfterLast('/'), mb) }
                 if (f == null) continue
-                if (!AutoAdb.ensure()) { status = AutoAdb.hint(); busy = false; return@launch }
-                status = ctx.getString(R.string.net_installing)
-                val (ok, _) = Batch.installViaAdb(ctx, listOf(f))
-                if (ok > 0) { status = ctx.getString(R.string.net_done); done = true; Hooks.reloadApps(); break }
+                if (!abiOk(f.file)) continue
+                status = ""
+                done = true
+                busy = false
+                onFiles(listOf(f))
+                break
             }
             if (!done) status = ctx.getString(R.string.net_failed)
             busy = false
