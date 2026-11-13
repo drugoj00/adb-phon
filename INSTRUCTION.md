@@ -1,6 +1,6 @@
 [English](INSTRUCTION.md) · [Русский](INSTRUCTION.ru.md) · [Українська](INSTRUCTION.uk.md) · [README](README.md)
 
-# ADB-phon 8.0: user guide
+# ADB-phon 8.1: user guide
 
 A guide to everything in the program. Button and section names are taken from the program itself. If a step does not work, see “Limits” at the end of the section.
 
@@ -434,7 +434,7 @@ Limits: the other person must have the program running (on Windows an icon in th
 
 ### The call window, the small window and “Hide, the call goes on”
 
-During a call the buttons are at the bottom; on a wide screen they are a column on the left or on the right (set by the “Control panel” setting). Rarely needed items are under “More”: mirrored self view, rotation, view, video and audio recording, screenshot, quality, microphone and speaker choice.
+During a call the whole window scrolls: “End call” stays pinned at the top, below it the main buttons, then the level meters and “More”; on a wide screen the picture and one column with the buttons stand side by side. Rarely needed items are under “More”: mirrored self view, rotation, view, video and audio recording, screenshot, quality, microphone and speaker choice.
 
 - “Full screen” removes all buttons. “Back” brings the buttons back, the call does not end.
 - “Small window” (and the “Home” button) turn the call into a small window over the screen: picture in picture. It has buttons: end the call, record, screenshot (the system gives a small window up to three buttons; the system shows “Expand” itself). Ending from the small window stops the recording.

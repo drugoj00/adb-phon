@@ -16,23 +16,17 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 8.0.** [ADB-phon-8.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 8.1.** [ADB-phon-8.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `85b000f51ca04ae436ddff3bd500739c87744b299a49a155fffe074be70a8bef`
+SHA-256: `6989d45be30fb490b2b35e299a91a68d4420eac4cbfe6e0343f4977e37236335`
 
-## What's new in 8.0
+## What's new in 8.1
 
-- Install: the installer choice everywhere (Files, clouds, network folders, archives, the ADB shell), the “Ask what to install with” switch; the “Install” window can go to the background, progress and result in a notification
-- The “ADB-phon Clouds” module 1.2 without an icon in the app list; update and removal through the “Install” window
-- Devices: “Video call”, “Audio call”, “Device window”, “Files” rows, the same in the long-press menu
-- Call: mirrored self view, rotation, video and audio recording, screenshot, window fitting, microphone and speaker choice
-- Call window on a wide screen: the picture and a button column, the column on the left or right as set in “Control panel”; “Full screen” without buttons
-- A small window (picture in picture) by a button and by “Home” with end, record and screenshot buttons; “Hide, the call goes on”
-- Ringtones: 8 built-in, “Silent”, volume, preview, a ring-back tone
-- “My avatar”: the contact’s avatar or a letter instead of video
-- Weak set-top boxes: the receiver itself asks the other side for 320×240 when no frames get decoded
-- Root certificates for old Android added
-- root is requested once per session: a persistent shell instead of launching su for every command
+- The call window scrolls as a whole (portrait and landscape): the video is shown in full with its proportions, «End call» is pinned at the top, then the main buttons, then the level meters and «More» (it expands in the same column)
+- Landscape: a single column to the right of the video instead of two, the video gets more room
+- Captions of the meters and lists in the call window are readable in full on narrow screens
+- The call window closes together with its task: no hidden entry left in the recent tasks list after a call
+- «Video quality»: when the resolution is lowered automatically for a weak receiver, the «Weak receiver 240p» item is selected (the list used to be empty); a microphone without a name is labelled «Default microphone»
 
 ## Features
 
