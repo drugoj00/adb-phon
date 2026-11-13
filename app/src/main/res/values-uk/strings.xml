@@ -20,12 +20,12 @@
     <string name="btn_connect_tcp">Підключитись до %1$s:5555</string>
     <string name="btn_disconnect">Відключитись</string>
     <string name="msg_paired">Спарено. Тепер натисни «Підключитись».</string>
-    <string name="root_on">Підключено через root (Magisk)</string>
-    <string name="root_title">Root (Magisk)</string>
-    <string name="root_connect_btn">Підключити через root (Magisk)</string>
+    <string name="root_on">Підключено через root</string>
+    <string name="root_title">Root</string>
+    <string name="root_connect_btn">Підключити через root</string>
     <string name="root_use_title">Використовувати root для цього телефона автоматично</string>
-    <string name="root_fail">Root недоступний: дозвольте root цьому застосунку в Magisk</string>
-    <string name="root_hint">Якщо на цьому пристрої є root (Magisk), ADB і комп\'ютер не потрібні: усі дії на ЦЬОМУ пристрої йдуть через root. Інші пристрої, як і раніше, підключаються по ADB. Під час першого запуску дозвольте root цьому застосунку в Magisk. Що використовувати під час запуску, вирішує перемикач; кнопки підключення ADB перемикають на ADB.</string>
+    <string name="root_fail">Root недоступний: дозвольте root цьому застосунку</string>
+    <string name="root_hint">Якщо на цьому пристрої є root, ADB і комп\'ютер не потрібні: усі дії на ЦЬОМУ пристрої йдуть через root. Інші пристрої, як і раніше, підключаються по ADB. Під час першого запуску дозвольте root цьому застосунку. Що використовувати під час запуску, вирішує перемикач; кнопки підключення ADB перемикають на ADB.</string>
     <string name="msg_connected">Підключено</string>
     <string name="msg_failed">Не вдалося: %1$s</string>
     <string name="search_hint">Пошук застосунків</string>
@@ -362,7 +362,7 @@
     <string name="fb_user">Ім’я користувача</string>
     <string name="install_go">Встановити (%1$d)</string>
     <string name="install_none">APK-файлів там немає.</string>
-    <string name="install_silent">Їх буде встановлено тихо через ADB.</string>
+    <string name="install_silent">Встановлення через ADB, хід видно по кожному файлу.</string>
     <string name="install_title">Знайдено файлів APK: %1$d</string>
     <string name="mb">МБ</string>
     <string name="net_done">Встановлено</string>
@@ -1016,7 +1016,7 @@
     <string name="inst_remember_ext">Запам’ятати для .%1$s</string>
     <string name="inst_adb_phon">ADB-phon</string>
     <string name="reset_all">Скинути все</string>
-    <string name="inst_quiet">тихо</string>
+    <string name="inst_quiet">з версіями та ходом встановлення</string>
     <string name="inst_confirm">з підтвердженням</string>
     <string name="inst_failed_title">Не вдалося встановити</string>
     <string name="inst_connect_btn">Підключити ADB/root</string>
@@ -1725,7 +1725,7 @@
     <string name="dev_kind_andr">Android: телефон, планшет, приставка</string>
     <string name="dev_addr_andr">Адреса в мережі (192.168.x.x або 100.x), порт ADB за замовчуванням 5555</string>
     <string name="dev_alt">Друга адреса (необов’язково)</string>
-    <string name="dev_hint_andr">На пристрої увімкни налагодження по мережі (ADB, порт 5555) або «Бездротове налагодження» і вкажи адресу з її портом. Під час першого підключення пристрій запитає «Дозволити налагодження?»: познач «Завжди». Android-версія Tailscale не пропускає вхідне підключення до пристрою, тому надійно працює адреса тієї самої мережі (192.168…); адреса 100.x підходить, якщо підмережу пристрою оголошує ПК.</string>
+    <string name="dev_hint_andr">На пристрої увімкни налагодження по мережі (ADB, порт 5555) або «Бездротове налагодження» і вкажи адресу з її портом. Під час першого підключення пристрій запитає «Дозволити налагодження?»: познач «Завжди». Адреса Tailscale (100.x) працює, коли Tailscale запущено і на пристрої, і на цьому телефоні; якщо Tailscale запустити не можна (Android тримає один VPN за раз), вкажи другою адресою адресу пристрою в тій самій мережі (192.168…).</string>
     <string name="dev_invite">Запрошення і мій код…</string>
     <string name="dev_need_addr">Вкажи адресу пристрою, наприклад 192.168.1.50 або 192.168.1.50:5555</string>
     <string name="dev_console">Консоль</string>
@@ -1733,7 +1733,7 @@
     <string name="dev_ts">Підключити через Tailscale</string>
     <string name="dev_ts_none">У пристрою немає адреси Tailscale (100.x): задай її в «Змінити» (друга адреса).</string>
     <string name="adbd_err_unreach">Немає зв’язку з %1$s: порт ADB не відповідає. Перевір, що пристрій увімкнено, він у тій самій мережі й на ньому ввімкнено налагодження по мережі (порт 5555).</string>
-    <string name="adbd_err_ts">Немає зв’язку з %1$s через Tailscale: Android-версія Tailscale не пропускає вхідне підключення до пристрою. Використай адресу тієї самої мережі (192.168…) або підмережу, яку оголошує ПК.</string>
+    <string name="adbd_err_ts">Немає зв’язку з %1$s через Tailscale: перевір, що Tailscale запущено і на пристрої, і на цьому телефоні, і що на пристрої ввімкнено налагодження по мережі. Якщо Tailscale запустити не можна, використай адресу тієї самої мережі (192.168…).</string>
     <string name="adbd_err_auth">Пристрій %1$s не підтвердив підключення: на ньому потрібно натиснути «Дозволити налагодження» і позначити «Завжди».</string>
     <string name="adbd_err_short">Файл записано не повністю: %1$s з %2$s байт</string>
     <string name="asc_back">Назад</string>

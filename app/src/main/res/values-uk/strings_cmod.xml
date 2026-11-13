@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cmu_title">Оновлення модуля хмар</string>
+    <string name="cmu_ask">Доступне оновлення модуля «ADB-phon Хмари» %1$s → %2$s. Оновити зараз?</string>
+    <string name="cmu_update">Оновити</string>
+    <string name="cmu_later">Пізніше</string>
+    <string name="cmu_auto">Оновлювати автоматично</string>
+    <string name="set_cmod_auto">Оновлювати модуль хмар автоматично</string>
+    <string name="set_cmod_auto_hint">Під час запуску програма сама завантажить нову версію модуля «ADB-phon Хмари». Вікно «Встановлення» з версіями та ходом показується завжди.</string>
+    <string name="set_cmod_ver">Модуль хмар: %1$s, %2$s</string>
+    <string name="set_cmod_none">Модуль хмар не встановлено</string>
+    <string name="set_cmod_remove">Видалити модуль</string>
+    <string name="cmu_remove_title">Видалити модуль хмар?</string>
+    <string name="cmu_remove_text">Хмарні диски перестануть працювати, доки модуль не встановлено. Облікові записи та налаштування хмар зберігаються в самій програмі (файл clouds.conf) і залишаться: після повторного встановлення модуля все повернеться.</string>
+    <string name="cmu_remove">Видалити</string>
+    <string name="cmu_removed">Модуль хмар видалено</string>
+    <string name="cmu_remove_fail">Не вдалося видалити модуль: %1$s</string>
+</resources>

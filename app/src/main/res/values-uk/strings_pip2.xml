@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_pip_rec_v">Запис відео: почати або зупинити</string>
+    <string name="call_pip_rec_a">Запис звуку: почати або зупинити</string>
+    <string name="call_pip_shot">Знімок екрана</string>
+    <string name="call_pip_rec_v_stop">Зупинити запис відео</string>
+    <string name="call_pip_rec_a_stop">Зупинити запис звуку</string>
+</resources>

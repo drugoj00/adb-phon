@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_ask_installer">Питати, чим встановлювати</string>
+    <string name="set_ask_installer_hint">Вікно «Встановити через…» показується в усіх точках встановлення (файли, хмари, мережа, посилання, оновлення, відкат). Вимкнено: одразу запамʼятований або основний встановлювач (ADB-phon з ADB/root, інакше системний); вікно з версіями та хід встановлення ADB-phon лишаються.</string>
+    <string name="via_one_by_one">Кілька файлів за раз ставить лише ADB-phon</string>
+    <string name="via_adb_pane_only">Файл лежить на пристрої: ставить лише ADB-phon</string>
+    <string name="via_started">Запущено вибраний встановлювач</string>
+    <string name="via_cancelled">Встановлення скасовано</string>
+</resources>

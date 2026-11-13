@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cp_avatar">Моя аватарка</string>
+    <string name="cp_avatar_hint">Показується в співрозмовника замість літери, коли в нього немає відео. Картинка обрізається по центру до квадрата й стискається до 128 × 128.</string>
+    <string name="cp_pick">Вибрати</string>
+    <string name="cp_remove">Прибрати</string>
+    <string name="cp_pic_mode">Картинка замість відео</string>
+    <string name="cp_mode_peer">Аватарка співрозмовника</string>
+    <string name="cp_mode_own">Своя картинка</string>
+    <string name="cp_mode_letter">Лише літера</string>
+    <string name="cp_pic_pick">Вибрати картинку…</string>
+    <string name="cp_pic_hint">Лише для себе: показується у вікні дзвінка, поки в співрозмовника немає відео. Вписується без розтягування на темному тлі.</string>
+    <string name="cp_bad">Картинка не відкрилась.</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ii_bg">У фоні</string>
+    <string name="ii_stop">Зупинити</string>
+    <string name="ii_stopped">зупинено</string>
+    <string name="ib_channel">Встановлення застосунків</string>
+</resources>
