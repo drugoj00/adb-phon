@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cmu_title">Clouds module update</string>
+    <string name="cmu_ask">An update of the “ADB-phon Clouds” module is available: %1$s → %2$s. Update now?</string>
+    <string name="cmu_update">Update</string>
+    <string name="cmu_later">Later</string>
+    <string name="cmu_auto">Update automatically</string>
+    <string name="set_cmod_auto">Update the clouds module automatically</string>
+    <string name="set_cmod_auto_hint">On start the program downloads the new version of the “ADB-phon Clouds” module by itself. The Install window with versions and progress is always shown.</string>
+    <string name="set_cmod_ver">Clouds module: %1$s, %2$s</string>
+    <string name="set_cmod_none">The clouds module is not installed</string>
+    <string name="set_cmod_remove">Remove module</string>
+    <string name="cmu_remove_title">Remove the clouds module?</string>
+    <string name="cmu_remove_text">Cloud drives stop working until the module is installed. Cloud accounts and settings are kept in the program itself (clouds.conf) and stay: after installing the module again everything comes back.</string>
+    <string name="cmu_remove">Remove</string>
+    <string name="cmu_removed">Clouds module removed</string>
+    <string name="cmu_remove_fail">Could not remove the module: %1$s</string>
+</resources>

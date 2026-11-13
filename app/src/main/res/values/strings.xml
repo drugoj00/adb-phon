@@ -21,12 +21,12 @@
     <string name="btn_connect_tcp">Connect to %1$s:5555</string>
     <string name="btn_disconnect">Disconnect</string>
     <string name="msg_paired">Paired. Now press \"Connect\".</string>
-    <string name="root_on">Connected via root (Magisk)</string>
-    <string name="root_title">Root (Magisk)</string>
-    <string name="root_connect_btn">Connect via root (Magisk)</string>
+    <string name="root_on">Connected via root</string>
+    <string name="root_title">Root</string>
+    <string name="root_connect_btn">Connect via root</string>
     <string name="root_use_title">Use root automatically for this phone</string>
-    <string name="root_fail">Root is not available: allow root for this app in Magisk</string>
-    <string name="root_hint">If this device has root (Magisk), ADB and a computer are not needed: all actions on THIS device run through root. Other devices are still connected by ADB. On first start allow root for this app in Magisk. The switch decides what is used at start; the ADB connect buttons switch to ADB.</string>
+    <string name="root_fail">Root is not available: allow root for this app</string>
+    <string name="root_hint">If this device has root, ADB and a computer are not needed: all actions on THIS device run through root. Other devices are still connected by ADB. On first start allow root for this app. The switch decides what is used at start; the ADB connect buttons switch to ADB.</string>
     <string name="msg_connected">Connected</string>
     <string name="msg_failed">Failed: %1$s</string>
     <string name="search_hint">Search apps</string>
@@ -363,7 +363,7 @@
     <string name="fb_user">User name</string>
     <string name="install_go">Install (%1$d)</string>
     <string name="install_none">No APK files found there.</string>
-    <string name="install_silent">They will be installed silently through ADB.</string>
+    <string name="install_silent">Installed through ADB, the progress of every file is shown.</string>
     <string name="install_title">APK files found: %1$d</string>
     <string name="mb">MB</string>
     <string name="net_done">Installed</string>
@@ -1017,7 +1017,7 @@ User: %3$s</string>
     <string name="inst_remember_ext">Remember for .%1$s</string>
     <string name="inst_adb_phon">ADB-phon</string>
     <string name="reset_all">Reset all</string>
-    <string name="inst_quiet">silent</string>
+    <string name="inst_quiet">with versions and progress</string>
     <string name="inst_confirm">with confirmation</string>
     <string name="inst_failed_title">Installation failed</string>
     <string name="inst_connect_btn">Connect ADB/root</string>
@@ -1737,7 +1737,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="dev_kind_andr">Android: phone, tablet, set-top box</string>
     <string name="dev_addr_andr">Network address (192.168.x.x or 100.x), ADB port defaults to 5555</string>
     <string name="dev_alt">Second address (optional)</string>
-    <string name="dev_hint_andr">On the device turn on network debugging (ADB, port 5555) or Wireless debugging and enter the address with its port. On the first connection the device asks Allow debugging?: tick Always. The Android Tailscale app does not pass incoming connections to the device, so an address on the same network (192.168…) is the reliable one; a 100.x address works only if a PC advertises the device subnet.</string>
+    <string name="dev_hint_andr">On the device turn on network debugging (ADB, port 5555) or Wireless debugging and enter the address with its port. On the first connection the device asks Allow debugging?: tick Always. A Tailscale address (100.x) works when Tailscale runs on the device and on this phone; if Tailscale cannot run (Android allows one VPN at a time), enter the device address on the same network (192.168…) as the second address.</string>
     <string name="dev_invite">Invitation and my code…</string>
     <string name="dev_need_addr">Enter the device address, for example 192.168.1.50 or 192.168.1.50:5555</string>
     <string name="dev_console">Console</string>
@@ -1745,7 +1745,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="dev_ts">Connect via Tailscale</string>
     <string name="dev_ts_none">The device has no Tailscale address (100.x): set it in Edit (second address).</string>
     <string name="adbd_err_unreach">No connection to %1$s: the ADB port does not answer. Check that the device is on, on the same network, and network debugging (port 5555) is enabled.</string>
-    <string name="adbd_err_ts">No connection to %1$s over Tailscale: the Android Tailscale app does not pass incoming connections to the device. Use an address on the same network (192.168…) or a subnet advertised by a PC.</string>
+    <string name="adbd_err_ts">No connection to %1$s over Tailscale: check that Tailscale runs on the device and on this phone and that network debugging is on at the device. If Tailscale cannot run, use an address on the same network (192.168…).</string>
     <string name="adbd_err_auth">Device %1$s did not confirm the connection: tap Allow debugging on it and tick Always.</string>
     <string name="adbd_err_short">The file was written incompletely: %1$s of %2$s bytes</string>
     <string name="asc_back">Back</string>

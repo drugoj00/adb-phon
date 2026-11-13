@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cp_avatar">My avatar</string>
+    <string name="cp_avatar_hint">Shown to the other person instead of a letter when there is no video. The picture is cropped to a centered square and shrunk to 128 × 128.</string>
+    <string name="cp_pick">Choose</string>
+    <string name="cp_remove">Remove</string>
+    <string name="cp_pic_mode">Picture instead of video</string>
+    <string name="cp_mode_peer">The other person avatar</string>
+    <string name="cp_mode_own">Own picture</string>
+    <string name="cp_mode_letter">Letter only</string>
+    <string name="cp_pic_pick">Choose a picture…</string>
+    <string name="cp_pic_hint">For yourself only: shown in the call window while the other person has no video. Fitted without stretching on a dark background.</string>
+    <string name="cp_bad">The picture did not open.</string>
+</resources>

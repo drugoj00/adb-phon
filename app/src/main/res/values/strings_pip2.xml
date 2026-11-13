@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_pip_rec_v">Video recording: start or stop</string>
+    <string name="call_pip_rec_a">Audio recording: start or stop</string>
+    <string name="call_pip_shot">Screenshot</string>
+    <string name="call_pip_rec_v_stop">Stop video recording</string>
+    <string name="call_pip_rec_a_stop">Stop audio recording</string>
+</resources>
