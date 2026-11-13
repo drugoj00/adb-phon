@@ -16,20 +16,23 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 7.5.** [ADB-phon-7.5.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 8.0.** [ADB-phon-8.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `4793bf0d9c543b0c279e06c725391269fb4f7883c7060a03fd22ff95dffd989e`
+SHA-256: `85b000f51ca04ae436ddff3bd500739c87744b299a49a155fffe074be70a8bef`
 
-## What's new in 7.5
+## What's new in 8.0
 
-- Color settings: “Main color” and “Bar color” as a color bar with the “Like the theme” button. “Bar contrast” from the previous look to a fully transparent free part
-- “Install” window after choosing ADB-phon: icon, name, package, kind (new, update, same version, downgrade), a “Now / New” table with highlighted differences, added and removed permissions
-- Different signature: a warning, the install is not attempted
-- Install progress bar by bytes and by files, a summary and failure reasons
-- Downgrade: without root on Android 14 and newer with data removal (a copy of the current version, rollback on failure), with root with data kept; system apps cannot be downgraded
-- Long name scrolling: “On” and “Off”
-- Files side panel buttons: larger icons, rearranging by long press, on a remote by holding OK and arrow keys
-- Files: list position and focus are remembered
+- Install: the installer choice everywhere (Files, clouds, network folders, archives, the ADB shell), the “Ask what to install with” switch; the “Install” window can go to the background, progress and result in a notification
+- The “ADB-phon Clouds” module 1.2 without an icon in the app list; update and removal through the “Install” window
+- Devices: “Video call”, “Audio call”, “Device window”, “Files” rows, the same in the long-press menu
+- Call: mirrored self view, rotation, video and audio recording, screenshot, window fitting, microphone and speaker choice
+- Call window on a wide screen: the picture and a button column, the column on the left or right as set in “Control panel”; “Full screen” without buttons
+- A small window (picture in picture) by a button and by “Home” with end, record and screenshot buttons; “Hide, the call goes on”
+- Ringtones: 8 built-in, “Silent”, volume, preview, a ring-back tone
+- “My avatar”: the contact’s avatar or a letter instead of video
+- Weak set-top boxes: the receiver itself asks the other side for 320×240 when no frames get decoded
+- Root certificates for old Android added
+- root is requested once per session: a persistent shell instead of launching su for every command
 
 ## Features
 
@@ -52,7 +55,8 @@ SHA-256: `4793bf0d9c543b0c279e06c725391269fb4f7883c7060a03fd22ff95dffd989e`
 - **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
 - **Devices and Video window.** The Files tree has one “Devices” group: computers and Android devices together, each with Files and Video window folders. Video window shows and controls the screen of a computer or another Android device: auto-rotation, text input in any language.
-- **Video call.** Video call between Android devices and computers (the Windows program “Phone in Window with Sound” 3.0). How to call: open Connection → Video calls, tap “Add person…”, enter a name and the code of their program (XXXX-XXXX-XXXX; it is shown in the other program: on Windows in “Connection over the internet”, on Android in this same section), then tap “Call”. The other person sees the “Calling…” window; the camera and microphone turn on only when they tap “Answer”. During the call: Sound, Speaker, Camera, End. Receiving calls is on by default (a small icon in the notification shade); the switch is in the same section.
+- **Video call.** Video call between Android devices and computers (the Windows program “Phone in Window with Sound” 4.0). How to call: open Connection → Video calls, tap “Add person…”, enter a name and the code of their program (XXXX-XXXX-XXXX; it is shown in the other program: on Windows in “Connection over the internet”, on Android in this same section), then tap “Call”. The other person sees the “Calling…” window; the camera and microphone turn on only when they tap “Answer”. During the call: Sound, Speaker, Camera, End. Receiving calls is on by default (a small icon in the notification shade); the switch is in the same section.
+- **Small window, ringtones, avatars.** During a call a “Small window” (picture in picture) and “Hide, the call goes on”, the choice of an incoming ringtone, “My avatar”, the “Video call”, “Audio call”, “Device window” and “Files” rows for every device.
 - **Invitations.** Join a Tailscale network by an invitation from a PC. Another VPN is turned off for the duration of a session and restored afterwards.
 - **Shizuku compatibility.** Apps that support Shizuku get shell permissions through ADB-phon.
 - **Console.** Live terminal: any shell command, history, Ctrl+C, Tab, “My commands”.

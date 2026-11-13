@@ -1,6 +1,6 @@
 [English](INSTRUCTION.md) · [Русский](INSTRUCTION.ru.md) · [Українська](INSTRUCTION.uk.md) · [README](README.md)
 
-# ADB-phon 7.5: user guide
+# ADB-phon 8.0: user guide
 
 A guide to everything in the program. Button and section names are taken from the program itself. If a step does not work, see “Limits” at the end of the section.
 
@@ -89,9 +89,9 @@ What it is: ADB-phon connects to the ADB of this phone or of another device on t
 2. **Step 2.** In ADB-phon on the Link tab tap the connect button (“Android 8–10: ADB over network”) and allow debugging on the phone.
 3. **Step 3.** After the phone reboots, repeat the command.
 
-### Root (Magisk)
+### Root
 
-If the device has root, neither ADB nor a computer is needed. Tap “Connect via root (Magisk)” and allow root for the app in Magisk. On screen: “Connected via root (Magisk)”. Other devices still connect over ADB.
+If the device has root, neither ADB nor a computer is needed. Tap “Connect via root” and allow root for the app. On screen: “Connected via root”. Other devices still connect over ADB. root is requested once per session, at the first action that needs it; the program does not launch su in the background.
 
 ### Another device on the network
 
@@ -123,6 +123,7 @@ What it is: after ADB-phon is chosen as the installer, the program shows the “
 2. **Step 2.** Choose ADB-phon. The “Install” window opens: icon, name, package and the kind: “New install”, “Update”, “Same version (reinstall)” or “Version downgrade”.
 3. **Step 3.** If the app is already installed, a “Now” / “New” table follows: “Version”, “Code”, “Signature”, “Size”, “Min API”. Differences are highlighted. Below are the lists “New permissions” and “Removed permissions”.
 4. **Step 4.** Tap “Install”. The install progress bar shows bytes (“123.6 of 300 MB”) and files (“1 of 3”), with the stages “Preparing the file…”, “Sending the file…”, “Installing…”. At the end: “Done: all packages installed” or “Not installed:” with the reason.
+5. **Step 5.** The “In the background” button closes the window and the install goes on: the notification shows the progress (“Install · n of N”, MB) and the result; with several files the notification has “Stop”.
 
 A different signature: the window warns that the version will not install over the installed one; the installed app has to be uninstalled first (its data is lost). The install is not attempted, and the result shows the reason.
 
@@ -350,7 +351,7 @@ What it is: connecting two devices to each other through a Tailscale network so 
 
 ### How to get an invitation on Android
 
-The invitation is sent from a Windows computer (the “Phone in Window with Sound” program 3.0).
+The invitation is sent from a Windows computer (the “Phone in Window with Sound” program 4.0).
 
 1. **Step 1.** On Android: Link → card “Connection over the internet”. On screen: the line “Program code: XXXX-XXXX-XXXX” and the button “Copy”. Give the code to the person who connects you (by voice or any way, once).
 2. **Step 2.** On the PC: the launch panel “Phone in Window with Sound” → “Connection over the internet” → “Give a person access…”.
@@ -404,7 +405,7 @@ Limits: if you see “No screen service at this address.” or “Access was den
 
 ## Video call
 
-What it is: a video call between Android devices and computers (the Windows program “Phone in Window with Sound” 3.0). The call goes directly between the devices; no browser is needed.
+What it is: a video call between Android devices and computers (the Windows program “Phone in Window with Sound” 4.0). The call goes directly between the devices; no browser is needed.
 
 ### How to call
 
@@ -430,6 +431,26 @@ Causes: another program sends sound or the microphone (for example AnyDesk, Team
 Receiving calls is on by default in ADB-phon 7.0: a small icon “Receiving video calls” sits in the notification shade. The switch “Receive calls in the background (a small icon stays in the notification shade)” is in the same card “Video calls”. If a call is not answered: “Call cancelled” or “Missed call”.
 
 Limits: the other person must have the program running (on Windows an icon in the tray) and call receiving on. If the call did not start you see “The call did not start.” If another call is in progress: “A call is already in progress.” A connection over the internet between the devices is needed (a common network or Tailscale).
+
+### The call window, the small window and “Hide, the call goes on”
+
+During a call the buttons are at the bottom; on a wide screen they are a column on the left or on the right (set by the “Control panel” setting). Rarely needed items are under “More”: mirrored self view, rotation, view, video and audio recording, screenshot, quality, microphone and speaker choice.
+
+- “Full screen” removes all buttons. “Back” brings the buttons back, the call does not end.
+- “Small window” (and the “Home” button) turn the call into a small window over the screen: picture in picture. It has buttons: end the call, record, screenshot (the system gives a small window up to three buttons; the system shows “Expand” itself). Ending from the small window stops the recording.
+- “Hide, the call goes on” closes the window completely: the call and the sound go on, you can come back from the notification.
+
+### Ringtones and the ring-back tone
+
+Connection → the “Video calls” card → “Ringtone…”. Separately for an incoming video call and a voice call: 8 built-in ringtones, “Your own file…”, “Silent”, volume, “▶ Preview”. The ring-back tone is heard only by the caller.
+
+### Avatar
+
+The “Video calls” card → “My avatar”: “Choose” (the picture is cropped to a square at the center and shrunk to 128×128) or “Remove”. The avatar is shown to the other side instead of a letter when they have no video. The “Picture instead of video” switch (for yourself only): “Contact’s avatar”, “Your own picture”, “Letter only”.
+
+### A call and the window from the device list
+
+In “Files” → the “Devices” group every device has the rows “Video call”, “Audio call”, “Device window” and “Files” (the same in the long-press menu). If the device has no “Program code” yet, the program asks for it.
 
 ## Shizuku
 
