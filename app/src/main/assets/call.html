@@ -20,13 +20,21 @@ header { background: var(--teal); color: #fff; text-align: center; padding: 9px 
 #warnX { position: absolute; right: 6px; top: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1; color: var(--warn-text); border-radius: 6px; cursor: pointer; user-select: none; }
 #warnX:hover { background: rgba(255,255,255,.14); }
 #warnX:focus-visible { outline: 3px solid #5eead4; outline-offset: 1px; }
-#wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-main { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; background: #000; display: flex; align-items: center; justify-content: center; }
-#rv { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+/* 8.1: в портрете окно целиком прокручивается (видео целиком по пропорциям, под ним основные кнопки, ниже индикаторы и «Ещё»); «Завершить» закреплена сверху (#pbar) */
+#wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+#pbar { flex: 0 0 auto; display: flex; padding: 5px 8px; background: var(--panel); border-bottom: 1px solid rgba(255,255,255,.1); }
+#pbar button { flex: 1 1 auto; max-width: none; min-height: 40px; justify-content: center; }
+main { position: relative; flex: 0 0 auto; min-height: 56.25vw; min-width: 0; background: #000; display: flex; align-items: center; justify-content: center; }
+#rv { width: 100%; height: auto; max-height: 72vh; object-fit: contain; background: #000; display: none; }
 #rv.live { display: block; }
 /* 7.6: редко нужное (зеркало, поворот, вид, запись, качество, выбор устройств) спрятано под «Ещё», чтобы на телефоне хватало места видео */
-#dock { position: relative; flex: 0 0 auto; }
-#more { display: none; position: absolute; left: 0; right: 0; bottom: 100%; z-index: 6; max-height: 62vh; overflow-y: auto; background: var(--vu-bg); color: var(--vu-text); font-size: 12px; border-top: 2px solid var(--teal); box-shadow: 0 -6px 14px rgba(0,0,0,.45); }
+#dock { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; }
+/* 8.1: #mid — прокручиваемая область (в портрете без своего бокса, раскладка прежняя); #lbar — закреплённая строка «Завершить» + «Ещё/Меньше» (только в широком ландшафте) */
+#mid { display: contents; }
+#mainRow { order: 1; } #vu { order: 2; } #more { order: 3; }
+#mainRow #bEnd { display: none; }
+#lbar { display: none; }
+#more { display: none; position: static; background: var(--vu-bg); color: var(--vu-text); font-size: 12px; border-top: 2px solid var(--teal); }
 #more.open { display: block; }
 #more #dev { padding: 6px 12px 10px; }
 #more footer { background: var(--panel); }
@@ -73,7 +81,7 @@ button svg { flex: 0 0 auto; width: 19px; height: 19px; fill: currentColor; }
   button.more { flex: 1 1 45%; min-width: 0; max-width: none; }
   button:not(.sm) svg { display: none; }
   #capRow { flex-wrap: nowrap; } #capRow button.sm { flex: 0 0 auto; min-width: 38px; padding: 6px 4px; }
-  #vu .vl { flex-basis: 104px; } #vu .vn { flex-basis: 92px; white-space: nowrap; font-size: 11px; } #vu .vw { padding-left: 0; }
+  #vu .vrow { flex-wrap: wrap; gap: 1px 8px; } #vu .vl { order: 1; flex: 1 1 0; min-width: 0; } #vu .vn { order: 2; flex: 0 0 auto; white-space: nowrap; font-size: 11px; } #vu .vbar { order: 3; flex: 1 0 100%; } #vu .vw { padding-left: 0; }
   #dev select { max-width: 100%; min-width: 0; width: 100%; }
   #dev label { width: 100%; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; }
 }
@@ -90,27 +98,42 @@ button.off { text-decoration: none; }
   header { padding: 4px 8px; } #title { font-size: 15px; } #sub { font-size: 12px; min-height: 14px; }
   #vu { padding: 2px 12px; } #vu .vw { min-height: 0; } #vu .vrow { margin: 0; }
   footer { padding: 4px 6px; } button { min-height: 32px; padding: 4px 6px; }
-  #more { max-height: 72vh; } #av { width: 64px; height: 64px; font-size: 30px; } #phn { font-size: 16px; }
+  #av { width: 64px; height: 64px; font-size: 30px; } #phn { font-size: 16px; }
 }
+body.pip #pbar, body.full #pbar { display: none !important; }
+body.pip #wrap, body.full #wrap { overflow: hidden; } body.pip main, body.full main { flex: 1 1 auto; min-height: 0; } body.pip #rv, body.full #rv { height: 100%; max-height: none; }
 body.pip header, body.pip #dock, body.pip #warn, body.pip #lv, body.pip #rec, body.pip #peerRec, body.pip #toast { display: none !important; }
 body.pip #av { width: 56px; height: 56px; font-size: 26px; } body.pip #phn { font-size: 13px; } body.pip #pht { display: none; } body.pip #ph { gap: 6px; padding: 6px; }
-/* 7.6: широкий экран (ТВ, планшет, телефон в альбоме): картинка слева, колонка кнопок сбоку (справа или слева, настройка «Кнопки звонка») */
+/* 7.6/8.1: широкий экран (ТВ, планшет, телефон в альбоме): картинка слева (≈58 % ширины и больше), СПРАВА ОДНА колонка (справа или слева, настройка «Кнопки звонка»).
+   Сверху закреплённая строка «Завершить»; ниже прокручиваемая область #mid: основные кнопки, затем индикаторы уровня, затем «Ещё» (раскрывается тут же) */
 @media (orientation: landscape) and (min-width: 560px) {
-  #wrap { flex-direction: row; } body.btnL #wrap { flex-direction: row-reverse; }
-  #dock { flex: 0 0 300px; width: 300px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; background: var(--panel); }
-  #vu { padding: 6px 8px 2px; } #vu .vrow { flex-wrap: wrap; gap: 2px 6px; } #vu .vl { flex: 1 0 100%; } #vu .vbar { flex: 1 1 0; } #vu .vn { flex: 0 0 auto; white-space: nowrap; text-align: right; } #vu .vw { padding-left: 0; }
-  #mainRow { flex-direction: column; flex-wrap: nowrap; padding: 6px 8px; gap: 6px; }
-  #mainRow button { flex: 0 0 auto; width: 100%; max-width: none; min-height: 40px; justify-content: flex-start; padding: 6px 12px; font-size: 14px; }
+  #wrap { flex-direction: row; overflow: hidden; } body.btnL #wrap { flex-direction: row-reverse; }
+  main { flex: 1 1 auto; min-height: 0; } #rv { height: 100%; max-height: none; } #pbar { display: none; }
+  #dock { flex: 0 0 min(300px, 42vw); width: min(300px, 42vw); min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--panel); }
+  #lbar { order: 0; display: flex; flex: 0 0 auto; padding: 6px 8px; background: var(--panel); border-bottom: 1px solid rgba(255,255,255,.12); }
+  #lbar button { flex: 1 1 auto; max-width: none; min-height: 38px; justify-content: center; padding: 6px 8px; font-size: 14px; }
+  #mid { order: 1; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  #mid > * { flex: 0 0 auto; }
+  #mainRow { order: 1; flex-direction: column; flex-wrap: nowrap; padding: 6px 8px; gap: 6px; }
+  #vu { order: 2; padding: 6px 8px 2px; border-top: 1px solid rgba(255,255,255,.1); } #vu .vrow { flex-wrap: wrap; gap: 2px 6px; } #vu .vl, #vu .vn, #vu .vbar { order: 0; } #vu .vl { flex: 1 0 100%; } #vu .vbar { flex: 1 1 0; } #vu .vn { flex: 0 0 auto; white-space: nowrap; text-align: right; } #vu .vw { padding-left: 0; }
+  #more { order: 3; }
+  #mainRow button, #mainRow button:not(.more) { flex: 0 0 auto; width: 100%; max-width: none; min-height: 40px; justify-content: flex-start; padding: 6px 12px; font-size: 14px; }
   #mainRow button svg { display: inline-block; }
-  #more { position: static; display: none; max-height: none; box-shadow: none; border-top: 1px solid rgba(255,255,255,.1); }
+  #mainRow #bEnd { display: none; }
+  #more { position: static; display: none; max-height: none; overflow: visible; box-shadow: none; border-top: 1px solid rgba(255,255,255,.1); }
   #more.open { display: block; } #more footer { padding: 6px 8px; } #more button { min-width: 0; flex: 1 1 40%; justify-content: center; }
-  #more #capRow button.sm { flex: 0 0 auto; }
-  #dev label { width: 100%; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; } #dev select { width: 100%; max-width: none; }
+  #more #capRow { flex-wrap: wrap; } #more #capRow button:not(.sm) { flex: 1 1 calc(100% - 56px); } #more #capRow button.sm { flex: 0 0 auto; }
+  #more #dev { padding: 6px 8px 8px; gap: 5px 0; }
+  #dev label { width: 100%; flex-direction: column; align-items: stretch; gap: 1px; text-align: left; } #dev label span { font-size: 11px; line-height: 1.1; } #dev select { width: 100%; max-width: none; min-width: 0; font-size: 12px; }
 }
 @media (orientation: landscape) and (min-width: 560px) and (max-height: 520px) {
-  #mainRow { display: grid; grid-template-columns: 1fr 1fr; } #mainRow button { min-height: 34px; padding: 4px 8px; font-size: 13px; } #mainRow button svg { display: none; }
-  #dock { flex-basis: 330px; width: 330px; }
+  #mainRow { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: row dense; } #mainRow button, #mainRow button:not(.more) { min-height: 34px; padding: 4px 8px; font-size: 13px; } #mainRow button svg { display: none; }
+  #bMic { order: 1; } #bSpk { order: 2; } #bCam { order: 3; } #bPip { order: 4; } #bBg { order: 5; grid-column: 1 / -1; } #bFull { order: 6; } #bMore { order: 7; }
+  #lbar button { min-height: 34px; font-size: 13px; }
 }
+/* очень узкие экраны: чуть мельче шрифт, чтобы подписи не обрезались */
+@media (max-width: 380px) { #capRow button:not(.sm) { font-size: 11.5px; padding: 6px 1px; } #capRow button.sm { min-width: 32px; padding: 6px 2px; } }
+@media (max-width: 340px) { button { font-size: 11px; } #capRow button:not(.sm) { font-size: 10.5px; padding: 6px 0; } #capRow button.sm { min-width: 28px; padding: 6px 1px; } }
 /* 7.6: «На весь экран»: только картинка (значки записи и всплывающее сообщение остаются) */
 body.full header, body.full #dock, body.full #warn { display: none !important; }
 /* 7.6: аватарки: у собеседника без видео крупно по центру (вписана, без растяжения), при видео маленькая у названия; режим «Картинка вместо видео» */
@@ -126,6 +149,7 @@ body.pip #av.img { width: min(78vmin, 100%); height: min(78vmin, 100%); } body.p
 <body>
 <header><div id="hav"></div><div id="title"></div><div id="sub"></div></header>
 <div id="warn" hidden role="status"><span id="warnTxt"></span><span id="warnX" role="button" tabindex="0">✕</span></div>
+<div id="pbar"><button id="bEnd3" class="end"></button></div>
 <div id="wrap">
 <main>
   <video id="rv" autoplay playsinline poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
@@ -134,6 +158,7 @@ body.pip #av.img { width: min(78vmin, 100%); height: min(78vmin, 100%); } body.p
   <video id="lv" class="off" autoplay playsinline muted poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
 </main>
 <div id="dock">
+<div id="mid">
 <div id="vu" role="group">
   <div class="vrow" id="vrIn"><span class="vl" id="vlIn"></span><div class="vbar"><i id="vIn"></i><b id="vInPk"></b></div><span class="vn" id="vInN"></span></div>
   <div class="vw" id="vwIn"></div>
@@ -169,6 +194,7 @@ body.pip #av.img { width: min(78vmin, 100%); height: min(78vmin, 100%); } body.p
   <div id="dev"><label><span id="dlMic"></span><select id="selMic"></select></label><label><span id="dlSpk"></span><select id="selSpk"></select></label><label><span id="dlVq"></span><select id="selVq"></select></label><label><span id="dlRq"></span><select id="selRq"></select></label><label><span id="dlRf"></span><select id="selRf"></select></label></div>
 </div>
 </div>
+<div id="lbar"><button id="bEnd2" class="end"></button></div>
 </div>
 <div id="toast" hidden></div>
 <script>
@@ -177,7 +203,7 @@ const L = {
   ru: {
     title: 'Видеозвонок', calling: 'Звоним: ', waitAnswer: 'Ждём, пока ответят…', incoming: 'Разговор: ', connecting: 'Соединяем…',
     connected: 'На связи', lost: 'Связь пропала, пробуем восстановить…', failed: 'Связь не получилась', ended: 'Звонок завершён',
-    mic: 'Звук: вкл', micOff: 'Звук: выкл', spk: 'Динамик: вкл', spkOff: 'Динамик: выкл', cam: 'Камера: вкл', camOff: 'Камера: выкл', end: 'Завершить', dirShot: 'Папка скриншотов (фото)…', dirVideo: 'Папка видео записей…', dirAudio: 'Папка записей звука…', dirBtn: 'Папка…', dirNow: 'Папка записей: ', tipDir: 'Выбрать папку для записей и скриншотов', vqLbl: 'Качество видео: ', vqAuto: 'Авто', vqEco: 'Эконом 360p · 0,7 Мбит', vqNorm: 'Обычное 480p · 1,2 Мбит', vqHigh: 'Высокое 720p · 2,5 Мбит', vqMax: 'Максимум 1080p · 5 Мбит', tipVq: 'Чем выше, тем больше нагрузка на сеть; слабая камера или канал могут не дать максимум; «Авто» само снижает качество при потерях', rqLbl: 'Качество записи: ', rqLow: 'Низкое 1 Мбит', rqMid: 'Среднее 2 Мбит', rqHigh: 'Высокое 4 Мбит', rqMax: 'Максимум 8 Мбит', mbMin: 'МБ/мин', rfLbl: 'Формат: ', quality: 'качество', shot: 'Скриншот', rec: 'Запись', recStop: 'Стоп', recA: 'Запись звука', openDir: 'Открыть запись', saved: 'Сохранено: ', recOn: 'Идёт запись', peerRecTxt: 'Собеседник записывает', recFail: 'Запись не получилась', noShot: 'Нет картинки собеседника для скриншота', tipShot: 'Сохранить кадр видео собеседника', tipRec: 'Записать видео и звук обеих сторон (собеседник увидит «Собеседник записывает»)', tipRecA: 'Записать только звук обеих сторон (собеседник увидит «Собеседник записывает»)', viewFit: 'Вид: вписать', viewFill: 'Вид: заполнить', viewWin: 'Подогнать экран', tipView: 'Вписать: видео целиком (возможны чёрные поля). Заполнить: без полей, края обрезаются. Подогнать экран: поворот экрана под пропорции видео', devMic: 'Микрофон: ', devSpk: 'Выход звука: ', vuNoMic: 'Микрофон не слышно: выбери другой в списке или проверь его в настройках звука', micAuto: 'Подбираем микрофон: скажите что-нибудь…', vuIn: 'Собеседника слышно', vuOut: 'Вас слышно', vuPk: 'пик', vuNoIn: 'Собеседник молчит или у него нет микрофона/микрофон отключён', vuNoOut: 'Вас не слышно: проверьте микрофон', oth: 'Звук других: вкл', othOff: 'Звук других: откл', tipOth: 'Звук других программ (AnyDesk и т. п.) на этом компьютере: отключить на время звонка или вернуть', rot: 'Поворот: ', tipRot: 'Повернуть видео собеседника на 90° по кругу (0, 90, 180, 270); свой экран не меняется', mir: 'Зеркало: вкл', mirOff: 'Зеркало: выкл', mirAll: 'Зеркало: всем', tipMir: 'Зеркальное отражение своей камеры. Вкл: зеркально только у тебя (как в зеркале). Выкл: как снимает камера. Всем: зеркально и у тебя, и у собеседника',
+    mic: 'Звук: вкл', micOff: 'Звук: выкл', spk: 'Динамик: вкл', spkOff: 'Динамик: выкл', cam: 'Камера: вкл', camOff: 'Камера: выкл', end: 'Завершить', dirShot: 'Папка скриншотов (фото)…', dirVideo: 'Папка видео записей…', dirAudio: 'Папка записей звука…', dirBtn: 'Папка…', dirNow: 'Папка записей: ', tipDir: 'Выбрать папку для записей и скриншотов', vqLbl: 'Качество видео: ', vqAuto: 'Авто', micDef: 'Микрофон по умолчанию', vqLow: 'Слабый приёмник 240p · 0,3 Мбит', vqEco: 'Эконом 360p · 0,7 Мбит', vqNorm: 'Обычное 480p · 1,2 Мбит', vqHigh: 'Высокое 720p · 2,5 Мбит', vqMax: 'Максимум 1080p · 5 Мбит', tipVq: 'Чем выше, тем больше нагрузка на сеть; слабая камера или канал могут не дать максимум; «Авто» само снижает качество при потерях', rqLbl: 'Качество записи: ', rqLow: 'Низкое 1 Мбит', rqMid: 'Среднее 2 Мбит', rqHigh: 'Высокое 4 Мбит', rqMax: 'Максимум 8 Мбит', mbMin: 'МБ/мин', rfLbl: 'Формат: ', quality: 'качество', shot: 'Скриншот', rec: 'Запись', recStop: 'Стоп', recA: 'Запись звука', openDir: 'Открыть запись', saved: 'Сохранено: ', recOn: 'Идёт запись', peerRecTxt: 'Собеседник записывает', recFail: 'Запись не получилась', noShot: 'Нет картинки собеседника для скриншота', tipShot: 'Сохранить кадр видео собеседника', tipRec: 'Записать видео и звук обеих сторон (собеседник увидит «Собеседник записывает»)', tipRecA: 'Записать только звук обеих сторон (собеседник увидит «Собеседник записывает»)', viewFit: 'Вид: вписать', viewFill: 'Вид: заполнить', viewWin: 'Подогнать экран', tipView: 'Вписать: видео целиком (возможны чёрные поля). Заполнить: без полей, края обрезаются. Подогнать экран: поворот экрана под пропорции видео', devMic: 'Микрофон: ', devSpk: 'Выход звука: ', vuNoMic: 'Микрофон не слышно: выбери другой в списке или проверь его в настройках звука', micAuto: 'Подбираем микрофон: скажите что-нибудь…', vuIn: 'Собеседника слышно', vuOut: 'Вас слышно', vuPk: 'пик', vuNoIn: 'Собеседник молчит или у него нет микрофона/микрофон отключён', vuNoOut: 'Вас не слышно: проверьте микрофон', oth: 'Звук других: вкл', othOff: 'Звук других: откл', tipOth: 'Звук других программ (AnyDesk и т. п.) на этом компьютере: отключить на время звонка или вернуть', rot: 'Поворот: ', tipRot: 'Повернуть видео собеседника на 90° по кругу (0, 90, 180, 270); свой экран не меняется', mir: 'Зеркало: вкл', mirOff: 'Зеркало: выкл', mirAll: 'Зеркало: всем', tipMir: 'Зеркальное отражение своей камеры. Вкл: зеркально только у тебя (как в зеркале). Выкл: как снимает камера. Всем: зеркально и у тебя, и у собеседника',
     noCam: 'Камеры нет или она занята. Звонок идёт только со звуком.', noMic: 'Микрофона нет или он занят. Ты слышишь собеседника, он тебя нет.',
     noMedia: 'Нет ни камеры, ни микрофона: звонок только на приём.', testTitle: 'Проверка камеры и микрофона', testSub: 'Говори: полоска ниже показывает уровень микрофона', testNote: 'Это только проверка: картинка и звук никуда не передаются.', peerCamOff: 'Камера у собеседника выключена',
     failHint: 'Обычно причина в том, что устройства не в одной сети: нужен Tailscale на обоих.', declined: 'Собеседник отклонил звонок', busy: 'Собеседник уже говорит', noAnswer: 'Нет ответа. Возможно, у собеседника старая версия программы без звонков или программа не запущена.', gone: 'Собеседник завершил звонок',
@@ -187,7 +213,7 @@ const L = {
   uk: {
     title: 'Відеодзвінок', calling: 'Дзвонимо: ', waitAnswer: 'Чекаємо, поки відповідять…', incoming: 'Розмова: ', connecting: 'Зʼєднуємо…',
     connected: 'На звʼязку', lost: 'Звʼязок зник, пробуємо відновити…', failed: 'Звʼязок не вдався', ended: 'Дзвінок завершено',
-    mic: 'Звук: увімк', micOff: 'Звук: вимк', spk: 'Динамік: увімк', spkOff: 'Динамік: вимк', cam: 'Камера: увімк', camOff: 'Камера: вимк', end: 'Завершити', dirShot: 'Тека знімків (фото)…', dirVideo: 'Тека відеозаписів…', dirAudio: 'Тека записів звуку…', dirBtn: 'Тека…', dirNow: 'Тека записів: ', tipDir: 'Вибрати теку для записів і знімків', vqLbl: 'Якість відео: ', vqAuto: 'Авто', vqEco: 'Економ 360p · 0,7 Мбіт', vqNorm: 'Звичайна 480p · 1,2 Мбіт', vqHigh: 'Висока 720p · 2,5 Мбіт', vqMax: 'Максимум 1080p · 5 Мбіт', tipVq: 'Чим вище, тим більше навантаження на мережу; слабка камера або канал можуть не дати максимум; «Авто» саме знижує якість за втрат', rqLbl: 'Якість запису: ', rqLow: 'Низька 1 Мбіт', rqMid: 'Середня 2 Мбіт', rqHigh: 'Висока 4 Мбіт', rqMax: 'Максимум 8 Мбіт', mbMin: 'МБ/хв', rfLbl: 'Формат: ', quality: 'якість', shot: 'Знімок екрана', rec: 'Запис', recStop: 'Стоп', recA: 'Запис звуку', openDir: 'Відкрити запис', saved: 'Збережено: ', recOn: 'Іде запис', peerRecTxt: 'Співрозмовник записує', recFail: 'Запис не вдався', noShot: 'Немає картинки співрозмовника для знімка', tipShot: 'Зберегти кадр відео співрозмовника', tipRec: 'Записати відео й звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', tipRecA: 'Записати лише звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', viewFit: 'Вигляд: вписати', viewFill: 'Вигляд: заповнити', viewWin: 'Підігнати екран', tipView: 'Вписати: відео повністю (можливі чорні поля). Заповнити: без полів, краї обрізаються. Підігнати екран: поворот екрана під пропорції відео', devMic: 'Мікрофон: ', devSpk: 'Вихід звуку: ', vuNoMic: 'Мікрофон не чутно: вибери інший у списку або перевір його в налаштуваннях звуку', micAuto: 'Підбираємо мікрофон: скажіть щось…', vuIn: 'Співрозмовника чутно', vuOut: 'Вас чутно', vuPk: 'пік', vuNoIn: 'Співрозмовник мовчить або в нього немає мікрофона/мікрофон вимкнено', vuNoOut: 'Вас не чутно: перевірте мікрофон', oth: 'Звук інших: увімк', othOff: 'Звук інших: вимк', tipOth: 'Звук інших програм (AnyDesk тощо) на цьому комп’ютері: вимкнути на час дзвінка або повернути', rot: 'Поворот: ', tipRot: 'Повернути відео співрозмовника на 90° по колу (0, 90, 180, 270); свій екран не змінюється', mir: 'Дзеркало: увімк', mirOff: 'Дзеркало: вимк', mirAll: 'Дзеркало: всім', tipMir: 'Дзеркальне відображення своєї камери. Увімк: дзеркально лише в тебе (як у дзеркалі). Вимк: як знімає камера. Всім: дзеркально і в тебе, і в співрозмовника',
+    mic: 'Звук: увімк', micOff: 'Звук: вимк', spk: 'Динамік: увімк', spkOff: 'Динамік: вимк', cam: 'Камера: увімк', camOff: 'Камера: вимк', end: 'Завершити', dirShot: 'Тека знімків (фото)…', dirVideo: 'Тека відеозаписів…', dirAudio: 'Тека записів звуку…', dirBtn: 'Тека…', dirNow: 'Тека записів: ', tipDir: 'Вибрати теку для записів і знімків', vqLbl: 'Якість відео: ', vqAuto: 'Авто', micDef: 'Мікрофон за замовчуванням', vqLow: 'Слабкий приймач 240p · 0,3 Мбіт', vqEco: 'Економ 360p · 0,7 Мбіт', vqNorm: 'Звичайна 480p · 1,2 Мбіт', vqHigh: 'Висока 720p · 2,5 Мбіт', vqMax: 'Максимум 1080p · 5 Мбіт', tipVq: 'Чим вище, тим більше навантаження на мережу; слабка камера або канал можуть не дати максимум; «Авто» саме знижує якість за втрат', rqLbl: 'Якість запису: ', rqLow: 'Низька 1 Мбіт', rqMid: 'Середня 2 Мбіт', rqHigh: 'Висока 4 Мбіт', rqMax: 'Максимум 8 Мбіт', mbMin: 'МБ/хв', rfLbl: 'Формат: ', quality: 'якість', shot: 'Знімок екрана', rec: 'Запис', recStop: 'Стоп', recA: 'Запис звуку', openDir: 'Відкрити запис', saved: 'Збережено: ', recOn: 'Іде запис', peerRecTxt: 'Співрозмовник записує', recFail: 'Запис не вдався', noShot: 'Немає картинки співрозмовника для знімка', tipShot: 'Зберегти кадр відео співрозмовника', tipRec: 'Записати відео й звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', tipRecA: 'Записати лише звук обох сторін (співрозмовник побачить «Співрозмовник записує»)', viewFit: 'Вигляд: вписати', viewFill: 'Вигляд: заповнити', viewWin: 'Підігнати екран', tipView: 'Вписати: відео повністю (можливі чорні поля). Заповнити: без полів, краї обрізаються. Підігнати екран: поворот екрана під пропорції відео', devMic: 'Мікрофон: ', devSpk: 'Вихід звуку: ', vuNoMic: 'Мікрофон не чутно: вибери інший у списку або перевір його в налаштуваннях звуку', micAuto: 'Підбираємо мікрофон: скажіть щось…', vuIn: 'Співрозмовника чутно', vuOut: 'Вас чутно', vuPk: 'пік', vuNoIn: 'Співрозмовник мовчить або в нього немає мікрофона/мікрофон вимкнено', vuNoOut: 'Вас не чутно: перевірте мікрофон', oth: 'Звук інших: увімк', othOff: 'Звук інших: вимк', tipOth: 'Звук інших програм (AnyDesk тощо) на цьому комп’ютері: вимкнути на час дзвінка або повернути', rot: 'Поворот: ', tipRot: 'Повернути відео співрозмовника на 90° по колу (0, 90, 180, 270); свій екран не змінюється', mir: 'Дзеркало: увімк', mirOff: 'Дзеркало: вимк', mirAll: 'Дзеркало: всім', tipMir: 'Дзеркальне відображення своєї камери. Увімк: дзеркально лише в тебе (як у дзеркалі). Вимк: як знімає камера. Всім: дзеркально і в тебе, і в співрозмовника',
     noCam: 'Камери немає або вона зайнята. Дзвінок іде лише зі звуком.', noMic: 'Мікрофона немає або він зайнятий. Ти чуєш співрозмовника, він тебе ні.',
     noMedia: 'Немає ні камери, ні мікрофона: дзвінок лише на прийом.', testTitle: 'Перевірка камери й мікрофона', testSub: 'Говори: смужка нижче показує рівень мікрофона', testNote: 'Це лише перевірка: картинка й звук нікуди не передаються.', peerCamOff: 'Камеру співрозмовника вимкнено',
     failHint: 'Зазвичай причина в тому, що пристрої не в одній мережі: потрібен Tailscale на обох.', declined: 'Співрозмовник відхилив дзвінок', busy: 'Співрозмовник уже говорить', noAnswer: 'Немає відповіді. Можливо, у співрозмовника стара версія програми без дзвінків або програму не запущено.', gone: 'Співрозмовник завершив дзвінок',
@@ -197,7 +223,7 @@ const L = {
   en: {
     title: 'Video call', calling: 'Calling: ', waitAnswer: 'Waiting for an answer…', incoming: 'Talking with ', connecting: 'Connecting…',
     connected: 'Connected', lost: 'Connection lost, trying to restore…', failed: 'Could not connect', ended: 'Call ended',
-    mic: 'Sound: on', micOff: 'Sound: off', spk: 'Speaker: on', spkOff: 'Speaker: off', cam: 'Camera: on', camOff: 'Camera: off', end: 'End call', dirShot: 'Screenshots (photo) folder…', dirVideo: 'Video recordings folder…', dirAudio: 'Audio recordings folder…', dirBtn: 'Folder…', dirNow: 'Recordings folder: ', tipDir: 'Choose the folder for recordings and screenshots', vqLbl: 'Video quality: ', vqAuto: 'Auto', vqEco: 'Economy 360p · 0.7 Mbit', vqNorm: 'Normal 480p · 1.2 Mbit', vqHigh: 'High 720p · 2.5 Mbit', vqMax: 'Maximum 1080p · 5 Mbit', tipVq: 'The higher, the heavier the load on the network; a weak camera or link may not give the maximum; “Auto” lowers the quality itself on losses', rqLbl: 'Recording quality: ', rqLow: 'Low 1 Mbit', rqMid: 'Medium 2 Mbit', rqHigh: 'High 4 Mbit', rqMax: 'Maximum 8 Mbit', mbMin: 'MB/min', rfLbl: 'Format: ', quality: 'quality', shot: 'Screenshot', rec: 'Record', recStop: 'Stop', recA: 'Record audio', openDir: 'Open recording', saved: 'Saved: ', recOn: 'Recording', peerRecTxt: 'The other person is recording', recFail: 'Recording failed', noShot: 'No picture from the other person for a screenshot', tipShot: 'Save a frame of the other person video', tipRec: 'Record video and sound of both sides (the other person sees “The other person is recording”)', tipRecA: 'Record only the sound of both sides (the other person sees “The other person is recording”)', viewFit: 'View: fit', viewFill: 'View: fill', viewWin: 'Fit screen', tipView: 'Fit: the whole picture (black bars are possible). Fill: no bars, the edges are cropped. Fit screen: rotate the screen to the video proportions', devMic: 'Microphone: ', devSpk: 'Sound output: ', vuNoMic: 'The microphone is not heard: choose another in the list or check it in the sound settings', micAuto: 'Choosing a microphone: say something…', vuIn: 'Hearing the other person', vuOut: 'You are heard', vuPk: 'peak', vuNoIn: 'The other person is silent or has no microphone / the microphone is off', vuNoOut: 'You are not heard: check your microphone', oth: 'Sound of others: on', othOff: 'Sound of others: off', tipOth: 'Sound of other programs (AnyDesk and the like) on this computer: turn it off for the call or restore it', rot: 'Rotate: ', tipRot: 'Rotate the other person video by 90° in a circle (0, 90, 180, 270); your own picture is not changed', mir: 'Mirror: on', mirOff: 'Mirror: off', mirAll: 'Mirror: all', tipMir: 'Mirror image of your camera. On: mirrored only for you (like a mirror). Off: as the camera films. All: mirrored for you and for the other person',
+    mic: 'Sound: on', micOff: 'Sound: off', spk: 'Speaker: on', spkOff: 'Speaker: off', cam: 'Camera: on', camOff: 'Camera: off', end: 'End call', dirShot: 'Screenshots (photo) folder…', dirVideo: 'Video recordings folder…', dirAudio: 'Audio recordings folder…', dirBtn: 'Folder…', dirNow: 'Recordings folder: ', tipDir: 'Choose the folder for recordings and screenshots', vqLbl: 'Video quality: ', vqAuto: 'Auto', micDef: 'Default microphone', vqLow: 'Weak receiver 240p · 0.3 Mbit', vqEco: 'Economy 360p · 0.7 Mbit', vqNorm: 'Normal 480p · 1.2 Mbit', vqHigh: 'High 720p · 2.5 Mbit', vqMax: 'Maximum 1080p · 5 Mbit', tipVq: 'The higher, the heavier the load on the network; a weak camera or link may not give the maximum; “Auto” lowers the quality itself on losses', rqLbl: 'Recording quality: ', rqLow: 'Low 1 Mbit', rqMid: 'Medium 2 Mbit', rqHigh: 'High 4 Mbit', rqMax: 'Maximum 8 Mbit', mbMin: 'MB/min', rfLbl: 'Format: ', quality: 'quality', shot: 'Screenshot', rec: 'Record', recStop: 'Stop', recA: 'Record audio', openDir: 'Open recording', saved: 'Saved: ', recOn: 'Recording', peerRecTxt: 'The other person is recording', recFail: 'Recording failed', noShot: 'No picture from the other person for a screenshot', tipShot: 'Save a frame of the other person video', tipRec: 'Record video and sound of both sides (the other person sees “The other person is recording”)', tipRecA: 'Record only the sound of both sides (the other person sees “The other person is recording”)', viewFit: 'View: fit', viewFill: 'View: fill', viewWin: 'Fit screen', tipView: 'Fit: the whole picture (black bars are possible). Fill: no bars, the edges are cropped. Fit screen: rotate the screen to the video proportions', devMic: 'Microphone: ', devSpk: 'Sound output: ', vuNoMic: 'The microphone is not heard: choose another in the list or check it in the sound settings', micAuto: 'Choosing a microphone: say something…', vuIn: 'Hearing the other person', vuOut: 'You are heard', vuPk: 'peak', vuNoIn: 'The other person is silent or has no microphone / the microphone is off', vuNoOut: 'You are not heard: check your microphone', oth: 'Sound of others: on', othOff: 'Sound of others: off', tipOth: 'Sound of other programs (AnyDesk and the like) on this computer: turn it off for the call or restore it', rot: 'Rotate: ', tipRot: 'Rotate the other person video by 90° in a circle (0, 90, 180, 270); your own picture is not changed', mir: 'Mirror: on', mirOff: 'Mirror: off', mirAll: 'Mirror: all', tipMir: 'Mirror image of your camera. On: mirrored only for you (like a mirror). Off: as the camera films. All: mirrored for you and for the other person',
     noCam: 'No camera or it is busy. The call goes with sound only.', noMic: 'No microphone or it is busy. You hear the other person, they do not hear you.',
     noMedia: 'No camera and no microphone: receive-only call.', testTitle: 'Camera and microphone check', testSub: 'Speak: the bar below shows the microphone level', testNote: 'This is only a check: no picture or sound is sent anywhere.', peerCamOff: 'The other camera is off',
     failHint: 'Usually the devices are not on one network: Tailscale is needed on both.', declined: 'The other person declined', busy: 'The other person is already on a call', noAnswer: 'No answer. The other side may have an old version without calls or the program is not running.', gone: 'The other person ended the call',
@@ -397,6 +423,8 @@ function attachLocal(media, voice) {
   else if (!media.audio && !media.video) $('pht').textContent = S.noMedia; else if (!media.video) $('pht').textContent = S.noCam; else if (!media.audio) $('pht').textContent = S.noMic;
   updBtns();
 }
+// 8.1: закреплённая сверху строка в ландшафте дублирует «Завершить»: подпись и состояние копируются, нажатие передаётся настоящей кнопке
+function syncBar() { for (const [a, b] of [['bEnd', 'bEnd2'], ['bEnd', 'bEnd3']]) { const x = $(a), y = $(b); if (!x || !y) continue; y.innerHTML = x.innerHTML; y.title = x.title || ''; y.disabled = !!x.disabled; } }
 function updBtns() {
   $('bMic').innerHTML = btnHtml('mic', !micOn, micOn ? S.mic : S.micOff); $('bMic').classList.toggle('off', !micOn); $('bMic').title = S.tipMic || '';
   $('bSpk').innerHTML = btnHtml('spk', !spkOn, spkOn ? S.spk : S.spkOff); $('bSpk').classList.toggle('off', !spkOn); $('bSpk').title = S.tipSpk || '';
@@ -413,6 +441,7 @@ function updBtns() {
     if (b4) { b4.innerHTML = btnHtml('folder', false, S.openDir); b4.style.display = recLast ? '' : 'none'; } }
   $('bEnd').innerHTML = btnHtml('end', false, S.end); $('bEnd').title = S.tipEnd || '';
   { const bm = $('bMore'); if (bm) bm.textContent = $('more').classList.contains('open') ? (S.less || '') : (S.more || ''); }
+  try { syncBar(); } catch (e) { }
   { const bb = $('bBg'); if (bb) { bb.innerHTML = btnHtml('hide', false, S.bg || ''); bb.title = S.tipBg || ''; bb.setAttribute('aria-label', (S.bg || '') + '. ' + (S.tipBg || '')); } }
   { const bp = $('bPip'); if (bp) { bp.innerHTML = btnHtml('pip', false, S.pip || ''); bp.title = S.tipPip || ''; bp.setAttribute('aria-label', (S.pip || '') + '. ' + (S.tipPip || '')); bp.style.display = cfg.pip ? '' : 'none'; } }
   { const bf = $('bFull'); if (bf) bf.textContent = S.full || ''; }
@@ -430,16 +459,17 @@ function rqMb(k) { const q = RQ[k]; return Math.round((q.v + q.a) * 60 / 8000); 
 function qualInit() {
   $('dlVq').textContent = S.vqLbl || ''; $('dlRq').textContent = S.rqLbl || ''; $('dlRf').textContent = S.rfLbl || '';
   const sv = $('selVq'), sr = $('selRq'), sf = $('selRf'); if (!sv) return;
-  sv.innerHTML = ''; [['auto', S.vqAuto], ['eco', S.vqEco], ['norm', S.vqNorm], ['high', S.vqHigh], ['max', S.vqMax]].forEach(a => { const o = document.createElement('option'); o.value = a[0]; o.textContent = a[1]; sv.appendChild(o); }); sv.value = vqPick; sv.title = S.tipVq || '';
+  sv.innerHTML = ''; [['auto', S.vqAuto], ['low', S.vqLow], ['eco', S.vqEco], ['norm', S.vqNorm], ['high', S.vqHigh], ['max', S.vqMax]].forEach(a => { const o = document.createElement('option'); o.value = a[0]; o.textContent = a[1]; sv.appendChild(o); }); sv.value = vqPick; sv.title = S.tipVq || '';
   sr.innerHTML = ''; [['low', S.rqLow], ['mid', S.rqMid], ['high', S.rqHigh], ['max', S.rqMax]].forEach(a => { const o = document.createElement('option'); o.value = a[0]; o.textContent = a[1] + ' ≈ ' + rqMb(a[0]) + ' ' + S.mbMin; sr.appendChild(o); }); sr.value = rqPick;
   sf.innerHTML = ''; ['mp4', 'webm'].forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sf.appendChild(o); }); sf.value = rfPick;
 }
-function syncSel() { const sv = $('selVq'); if (sv) sv.value = vqPick; }
+function syncSel() { const sv = $('selVq'); if (sv) { sv.value = vqPick; if (sv.selectedIndex < 0) sv.value = 'auto'; } }
 // слабый приёмник (например приставка Amlogic S905X: её декодер не берёт кадры крупнее 320×240, расшифровано 0 кадров): приёмник просит «lowres:1»,
 // отправитель снижает видео до 320×240, 15 к/с, 300 кбит/с; приёмник запоминает слабость на 14 дней и просит сразу при следующих звонках (потом проверяет заново)
 let lowRes = false, rxBad = 0, lowAsked = false;
 async function setLowRes(why) {
   if (lowRes) return; lowRes = true; vqPick = 'low'; vqCur = 'low'; log('низкое разрешение видео: ' + why);
+  try { syncSel(); } catch (e) { }
   await applyVq();
   try {
     const t = localStream && localStream.video, w = t ? ((t.getSettings && t.getSettings().width) || 640) : 640;
@@ -485,7 +515,7 @@ async function devInit() {
   const mics = await devList('audioinput'), cur = curMicId();
   log('микрофоны: ' + (mics.map(d => '[' + (d.label || '?') + ' | …' + idTail(d.deviceId) + (d.deviceId === cur ? ' | ВЫБРАН' : '') + ']').join(' ') || 'нет'));
   const sm = $('selMic'); if (!sm) return;
-  sm.innerHTML = ''; mics.forEach(d => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('…' + idTail(d.deviceId)); if (d.deviceId === cur) o.selected = true; sm.appendChild(o); });
+  sm.innerHTML = ''; mics.forEach(d => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || (idTail(d.deviceId) ? '…' + idTail(d.deviceId) : (S.micDef || '…')); if (d.deviceId === cur) o.selected = true; sm.appendChild(o); });
   sm.disabled = !mics.length;
 }
 // выходы звука (динамик телефона, разговорный, наушники, Bluetooth) собирает и переключает программа: WebView сам выбрать динамик не умеет
@@ -907,7 +937,8 @@ $('bFull').onclick = () => setFull(true);
 $('bPip').onclick = () => post({ type: 'pip' });
 // «картинка в картинке»: в маленьком окошке только картинка собеседника (или значок) без кнопок и шкал
 window.tvoPip = on => { document.body.classList.toggle('pip', !!on); setTimeout(() => { if (rotDeg % 180) applyRot(); tvoSendSize(true); }, 200); };
-$('bMore').onclick = () => { $('more').classList.toggle('open'); updBtns(); setTimeout(() => tvoSendSize(false), 120); };
+$('bEnd2').onclick = () => $('bEnd').click(); $('bEnd3').onclick = () => $('bEnd').click();
+$('bMore').onclick = () => { $('more').classList.toggle('open'); try { document.body.classList.toggle('moreOn', $('more').classList.contains('open')); if ($('more').classList.contains('open')) setTimeout(() => { try { const sc = getComputedStyle($('mid')).overflowY === 'auto' ? $('mid') : $('wrap'); sc.scrollTop = Math.max(0, $('more').getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 6); } catch (e) { } }, 30); } catch (e) { } updBtns(); setTimeout(() => tvoSendSize(false), 120); };
 window.addEventListener('beforeunload', () => { if (!ended) { try { if (dc && dc.readyState === 'open') dc.send('bye'); } catch (e) { } } });
 
 // снимок удалённой картинки (для проверок): PNG в сообщении хосту
