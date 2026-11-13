@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ii_bg">В фоне</string>
+    <string name="ii_stop">Остановить</string>
+    <string name="ii_stopped">остановлено</string>
+    <string name="ib_channel">Установка приложений</string>
+</resources>

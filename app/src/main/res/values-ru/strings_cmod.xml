@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cmu_title">Обновление модуля облаков</string>
+    <string name="cmu_ask">Доступно обновление модуля «ADB-phon Облака» %1$s → %2$s. Обновить сейчас?</string>
+    <string name="cmu_update">Обновить</string>
+    <string name="cmu_later">Позже</string>
+    <string name="cmu_auto">Обновлять автоматически</string>
+    <string name="set_cmod_auto">Обновлять модуль облаков автоматически</string>
+    <string name="set_cmod_auto_hint">При запуске программа сама скачает новую версию модуля «ADB-phon Облака». Окно «Установка» с версиями и ходом показывается всегда.</string>
+    <string name="set_cmod_ver">Модуль облаков: %1$s, %2$s</string>
+    <string name="set_cmod_none">Модуль облаков не установлен</string>
+    <string name="set_cmod_remove">Удалить модуль</string>
+    <string name="cmu_remove_title">Удалить модуль облаков?</string>
+    <string name="cmu_remove_text">Облачные диски перестанут работать, пока модуль не установлен. Учётные записи и настройки облаков хранятся в самой программе (файл clouds.conf) и останутся: после повторной установки модуля всё вернётся.</string>
+    <string name="cmu_remove">Удалить</string>
+    <string name="cmu_removed">Модуль облаков удалён</string>
+    <string name="cmu_remove_fail">Не удалось удалить модуль: %1$s</string>
+</resources>
