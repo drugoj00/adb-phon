@@ -48,7 +48,7 @@ class InstOpt(val id: String, val label: String, val hint: String?, val pkg: Str
 }
 
 /** Одно действие приложения (активность), умеющее открыть файл. */
-class Handler(val ai: android.content.pm.ActivityInfo, val appLabel: String, val label: String)
+class Handler(val ai: android.content.pm.ActivityInfo, val appLabel: String, val label: String, val specific: Boolean = true)
 
 /**
  * Выбор способа установки APK. Способы собираются при каждом нажатии (сторонние установщики находятся запросом к системе).
@@ -59,6 +59,8 @@ object ApkInstall {
     /** Системные установщики Android: считаются одним пунктом «Системный», в «сторонние» не попадают. */
     /** Магазины приложений: в окне открытия APK их не показываем (Google Play, Galaxy Store и подобные предлагали «открыть в магазине»). */
     val STORES = setOf("com.android.vending", "com.google.android.finsky", "com.sec.android.app.samsungapps", "com.xiaomi.mipicks", "com.xiaomi.market", "com.huawei.appmarket", "com.aurora.store", "org.fdroid.fdroid", "com.amazon.venezia", "com.heytap.market", "com.oppo.market", "com.bbk.appstore", "com.apkpure.aegon", "cm.aptoide.pt", "com.lenovo.leos.appstore", "com.tencent.android.qqdownloader")
+    /** 9.3: служебные действия, которые объявляют разные типы, но файл не открывают (Кошелёк: сохранение пропуска, Google ViewerLauncher): в выборе «Открыть через» не показываются. */
+    private val JUNK = listOf("SavePkPass", "ViewerLauncher")
     private val SYSTEM = setOf("com.google.android.packageinstaller", "com.android.packageinstaller", "com.samsung.android.packageinstaller", "com.android.permissioncontroller", "com.google.android.permissioncontroller", "android")
 
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
@@ -116,12 +118,24 @@ object ApkInstall {
         val pm = ctx.packageManager
         val mimes = if (ext == "apk") listOf(APK_MIME) else if (ext == "apks" || ext == "xapk" || ext == "apkm") listOf("application/x-apks", "application/vnd.apkm", "application/xapk-package-archive") else listOf(mimeFor(ext))
         val seen = LinkedHashMap<String, Handler>()
-        for (m in mimes) {
-            val i = Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://x/installer.$ext"), m)
+        // 9.3: «всеядные» обработчики (фильтр на */*: Кошелёк, ViewerLauncher и подобные) отзываются даже на несуществующий тип: такие в выборе не показываются
+        val catchAll: Set<String> = runCatching {
+            pm.queryIntentActivities(Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://x/installer.$ext"), "application/x-adbphon-no-such-type"), PackageManager.MATCH_ALL)
+                .mapNotNull { r -> r.activityInfo?.let { it.packageName + "/" + it.name } }.toSet()
+        }.getOrDefault(emptySet())
+        // 9.3: у текстовых файлов (.sh, .txt, .log, .conf, .json, .xml и других) предлагаются и установленные текстовые редакторы: просмотр и правка text/plain
+        val textLike = DocKind.of(ext) == "text" || ext.isEmpty()
+        val mimeList = if (textLike) (mimes + "text/plain").distinct() else mimes
+        for (m in mimeList) for (act in (if (textLike) listOf(Intent.ACTION_VIEW, Intent.ACTION_EDIT) else listOf(Intent.ACTION_VIEW))) {
+            val i = Intent(act).setDataAndType(android.net.Uri.parse("content://x/installer.$ext"), m)
             for (r in pm.queryIntentActivities(i, PackageManager.MATCH_ALL)) {
                 val ai = r.activityInfo ?: continue
                 val k = ai.packageName + "/" + ai.name
-                if (k !in seen) seen[k] = Handler(ai, runCatching { pm.getApplicationLabel(pm.getApplicationInfo(ai.packageName, 0)).toString() }.getOrDefault(ai.packageName), r.loadLabel(pm).toString())
+                // «настоящий» обработчик: фильтр называет конкретный тип (image/*, text/plain), а не «любые файлы» (*/*): такие (Кошелёк, Google ViewerLauncher) открывают не этот тип
+                val f = r.filter
+                val specific = k !in catchAll && !JUNK.any { j -> ai.name.contains(j, true) } && (f == null || (0 until f.countDataTypes()).any { n -> val t = f.getDataType(n); t != "*/*" && t != "*" })
+                if (k !in seen) seen[k] = Handler(ai, runCatching { pm.getApplicationLabel(pm.getApplicationInfo(ai.packageName, 0)).toString() }.getOrDefault(ai.packageName), r.loadLabel(pm).toString(), specific)
+                else if (specific && seen[k]?.specific == false) seen[k] = Handler(ai, seen[k]!!.appLabel, seen[k]!!.label, true)
             }
         }
         seen.values.toList()
@@ -166,7 +180,7 @@ object ApkInstall {
                 out += listOf(ours, system)
             } else out += ours          // системный установщик пакеты из нескольких частей не умеет: не предлагается
         }
-        val cand: List<Handler> = if (!installGroup) all.filter { it.ai.packageName !in SYSTEM && it.ai.packageName != ctx.packageName } else {
+        val cand: List<Handler> = if (!installGroup) all.filter { it.ai.packageName !in SYSTEM && it.ai.packageName != ctx.packageName && it.specific } else {
             // окно установки: одно приложение = одна строка и только его действие «Установить»
             all.filter { it.ai.packageName !in SYSTEM && it.ai.packageName !in STORES && it.ai.packageName != ctx.packageName }.groupBy { it.ai.packageName }.mapNotNull { (pkg, hs) ->
                 hs.firstOrNull { classify(it).second == "inst" } ?: if (isApk && hs.size == 1 && isInstaller(ctx, pkg)) hs.firstOrNull { classify(it).first == 5 } else null
@@ -210,9 +224,12 @@ object ApkInstall {
     fun optionsFor(p: FmPane, item: FmItem): List<InstOpt> {
         val ctx = Fm.sctx; val e = item.ext
         if (e == "apk" || isBundle(e)) return options(ctx, e, Adb.isConnected && !FmIo.remote && p.src == "local")
-        val builtin = openCat(e) != null || DocKind.of(e) != null
+        val textLike = DocKind.of(e) == "text" || e.isEmpty()
+        val builtin = openCat(e) != null || DocKind.of(e) != null || e.isEmpty()
         val out = ArrayList<InstOpt>()
-        if (builtin) out += InstOpt("builtin", ctx.getString(R.string.oa_builtin), null, null, Icons.Filled.Android)
+        // 9.3: у текстовых файлов встроенный просмотр и редактор называется «Блокнот ADB-phon», со значком программы и первым в списке
+        if (builtin) out += if (textLike) InstOpt("builtin", ctx.getString(R.string.oa_notepad), ctx.getString(R.string.oa_notepad_hint), ctx.packageName, null)
+            else InstOpt("builtin", ctx.getString(R.string.oa_builtin), null, null, Icons.Filled.Android)
         out += options(ctx, e, false).filter { it.ai != null }.sortedBy { it.label.lowercase() }
         if (Arc.kindOf(item.name) != null && !Arc.opensAsFolder(item.name)) out += InstOpt("archive", ctx.getString(R.string.arc_open_as_archive), null, null, Icons.Filled.FolderZip)
         return out
@@ -307,7 +324,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val sz = if (tv) 44.dp else 36.dp
                             val bmp = remember(o.id) { o.ai?.let { ai -> runCatching { val d = ai.loadIcon(ctx.packageManager); android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888).also { b -> d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(b)) } }.getOrNull() } }
-                            if (bmp != null) androidx.compose.foundation.Image(bmp.asImageBitmap(), null, Modifier.size(sz)) else if (o.pkg != null && o.id == "system") AppIcon(o.pkg, sz) else if (o.icon != null) Icon(o.icon, null, Modifier.size(if (tv) 44.dp else 36.dp), tint = MaterialTheme.colorScheme.primary)
+                            if (bmp != null) androidx.compose.foundation.Image(bmp.asImageBitmap(), null, Modifier.size(sz)) else if (o.pkg != null && (o.id == "system" || o.id == "builtin")) AppIcon(o.pkg, sz) else if (o.icon != null) Icon(o.icon, null, Modifier.size(if (tv) 44.dp else 36.dp), tint = MaterialTheme.colorScheme.primary)
                             Column(Modifier.weight(1f)) {
                                 Text(o.label, fontSize = if (tv) 18.sp else 15.sp, maxLines = 2)
                                 if (o.recommended) Text(stringResource(R.string.inst_recommended), fontSize = if (tv) 13.sp else 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

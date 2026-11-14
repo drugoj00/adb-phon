@@ -200,12 +200,82 @@ object FmRootCfg {
     @Volatile var lastVisKey: String? = null
 
     /** Дерево папок на «домике»: дочерние папки узла (по идентификатору узла), ошибки и кэш подключений. Загружаются лениво при раскрытии. */
-    class TK(val name: String, val id: String, val path: String, val isDir: Boolean = true, val size: Long = 0L)
+    class TK(val name: String, val id: String, val path: String, val isDir: Boolean = true, val size: Long = 0L, val date: String = "", val count: Int = -1)
 
     /** Отмеченная строка дерева «домика»: ключ = id узла (путь целиком), источник (net = null: память телефона), папка-родитель, для «Корзины» ещё элемент корзины. */
     class SelE(val key: String, val net: NetConn?, val parentId: String, val parentPath: String, val name: String, val path: String, val isDir: Boolean, val ti: CloudTrash.TItem?, val fi: FmTrash.FItem? = null)
     val sel = androidx.compose.runtime.mutableStateMapOf<String, SelE>()
     fun toggleSel(e: SelE) { if (sel.containsKey(e.key)) sel.remove(e.key) else sel[e.key] = e }
+    /**
+     * Порядок дочерних узлов «домика» по настройке «Сортировка» панели (раньше был зашит «папки, потом имя», и сортировка в этом дереве не действовала).
+     * Корзина и служебные узлы остаются как есть. Дата есть только у локальных файлов.
+     */
+    fun sortKids(p: FmPane, id: String, ks: List<TK>): List<TK> {
+        if (ks.size < 2 || ks.any { it.id.startsWith("Ti|") || it.id.startsWith("Ki|") || it.id.startsWith("Aitem|") || it.id.startsWith("T|") }) return ks
+        val dir = if (id.startsWith("L|")) id.removePrefix("L|") else id
+        val cfg = runCatching { Fm.cfgFor(p, dir) }.getOrNull() ?: p.sortCfg
+        val map = LinkedHashMap<FmItem, TK>()
+        for (k in ks) map[FmItem(k.name, k.isDir, k.size, k.date)] = k
+        if (map.size != ks.size) return ks
+        val needColor = cfg.keyOf(SGroup.DIR) == SKey.COLOR
+        val ctx = SortCtx({ null }, { map[it]?.count ?: -1 }, { if (needColor) map[it]?.let { k -> UiPrefs.folderColors[folderKey(p, k.path)] } ?: UiPrefs.folderDefault else 0 })
+        return SortEngine.sort(map.keys.toList(), cfg, ctx).mapNotNull { map[it] }
+    }
+    /** Узлы, содержимое которых нужно перечитать «на месте» (без «Загрузки…» и без схлопывания списка): после удаления и копирования. */
+    val stale: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
+    /** Ключи и уровни видимых строк дерева по панелям (обновляются при каждой отрисовке): нужны, чтобы после удаления передать фокус соседней строке. */
+    private val rowsByPane = java.util.concurrent.ConcurrentHashMap<Int, Pair<List<String>, List<Int>>>()
+    fun setRows(paneId: Int, keys: List<String>, levels: List<Int>) { rowsByPane[paneId] = keys to levels }
+    /**
+     * Ключ строки, которой отдать фокус после удаления строк [deleted]: следующий сосед того же уровня, иначе предыдущий сосед или родитель.
+     * Считается ДО удаления, пока строки ещё в списке; ищется в той панели, где эти строки есть.
+     */
+    fun neighborOf(deleted: Set<String>): String? {
+        val (keys, lv) = rowsByPane.values.firstOrNull { (k, _) -> k.any { it in deleted } } ?: return null
+        if (keys.isEmpty() || keys.size != lv.size) return null
+        val idx = keys.indices.filter { keys[it] in deleted }
+        if (idx.isEmpty()) return null
+        val hi = idx.max(); val lo = idx.min(); val lvl = lv[lo]
+        var i = hi + 1
+        while (i < keys.size && keys[i] in deleted) i++
+        if (i < keys.size && lv[i] == lvl) return keys[i]
+        var j = lo - 1
+        while (j >= 0 && keys[j] in deleted) j--
+        if (j >= 0 && lv[j] >= lvl - 1) return keys[j]
+        return if (i < keys.size && lv[i] >= lvl - 1) keys[i] else null
+    }
+    /**
+     * Общее правило для ЛЮБОГО обновления дерева (удаление, переименование, перенос, копирование, создание, «Обновить», раскрытие и свёртывание):
+     * строка, у которой был фокус, исчезла из списка → фокус получает соседняя строка на том же месте (следующая того же уровня, иначе предыдущая, иначе родитель);
+     * при нескольких удалённых строках берётся строка после последней удалённой. Положение прокрутки держит сам список (строки с постоянными ключами).
+     * Вызывается из строки, которая освобождается, пока на ней фокус.
+     */
+    fun focusedRowGone(paneId: Int, key: String) {
+        val old = rowsByPane[paneId] ?: return
+        Fm.scope.launch {
+            kotlinx.coroutines.delay(350)
+            val now = rowsByPane[paneId] ?: return@launch
+            if (key in now.first) return@launch     // строка только ушла за край экрана, она по-прежнему в списке
+            val gone = old.first.filter { it !in now.first }.toSet()
+            val keys = old.first; val lv = old.second
+            if (keys.size != lv.size) return@launch
+            val idx = keys.indices.filter { keys[it] in gone }
+            if (idx.isEmpty()) return@launch
+            val hi = idx.max(); val lo = idx.min(); val lvl = lv[lo]
+            var nb: String? = null
+            var i = hi + 1
+            while (i < keys.size && keys[i] in gone) i++
+            if (i < keys.size && lv[i] == lvl && keys[i] in now.first) nb = keys[i]
+            if (nb == null) { var j = lo - 1; while (j >= 0 && keys[j] in gone) j--; if (j >= 0 && lv[j] >= lvl - 1 && keys[j] in now.first) nb = keys[j] }
+            if (nb == null && i < keys.size && lv[i] >= lvl - 1 && keys[i] in now.first) nb = keys[i]
+            if (nb != null) { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = nb }
+        }
+    }
+    /** Отдать фокус строке [key] (через FocusRestore: строка сама просит фокус, как только появится в списке). */
+    fun focusRowLater(key: String?) {
+        if (key == null) return
+        Fm.scope.launch { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = key }
+    }
     val kids = mutableStateMapOf<String, List<TK>>()
     val kidErr = mutableStateMapOf<String, String>()
     /** Тип облака у узла, ошибку которого лечит «свой ключ» (лимит общего ключа, API выключен, не тот scope). */
@@ -267,12 +337,13 @@ object FmRootCfg {
                     FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                     val all = AdbFs.list(path).filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
-                    all.take(LIMIT).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path) else TK(it.name, "F|" + it.path, it.path, false, it.size) }
+                    all.take(LIMIT).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "F|" + it.path, it.path, false, it.size, it.date) }
                 } else
                 withContext(Dispatchers.IO) {
                     val all = File(path).listFiles().orEmpty().filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
-                    all.take(LIMIT).map { if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length()) }
+                    val df = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                    all.take(LIMIT).map { val dt = df.format(java.util.Date(it.lastModified())); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt, it.list()?.size ?: -1) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
                 }
             } else {
                 val a = id.split('|', limit = 5)
@@ -343,6 +414,14 @@ fun fmShowRoot(p: FmPane) {
     Fm.sctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("root_p${p.id}", true).apply()
 }
 
+/** Кнопка «Дом» (9.3): корневой экран, все раскрытые узлы свёрнуты, список наверху, фокус на первой строке; повторное нажатие ничего не ломает. */
+fun fmHome(p: FmPane) {
+    fmShowRoot(p)
+    p.rootOpen.clear(); p.rootPending.clear(); p.rootSel = null
+    FmRootCfg.sel.clear()
+    p.homeTick++
+}
+
 fun fmLeaveRoot(p: FmPane) {
     if (!p.root) return
     p.root = false
@@ -407,12 +486,16 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val rows = ArrayList<RR>()
     rows += RR("h:mem", stringResource(R.string.rt_group_storage), Icons.Filled.PhoneAndroid, prim, header = 1)
     val treeOn = FmRootCfg.treeOn
+    @Suppress("UNUSED_VARIABLE") val sortTickNow = Fm.sortTick   // перерисовка дерева при смене настройки «Сортировка»
     val openIds = p.rootOpen.toList()
     // 14.11.2026 (владелица: «зачем в LAN корзина? убери»): у сетевых подключений (LAN, WebDAV, Wi-Fi) строк «Корзина» и «диск» нет; корзина осталась у облаков (их своя) и у локальной памяти (наша); облака с корзиной показывают две виртуальные папки («Корзина» и «Облачный диск»), сам узел облака папок не грузит
     val virtIds = favs.filter { it.kind == "cloud" && CloudTrash.supported(CloudTrash.typeFor(ctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
     val trRowTxt = stringResource(R.string.tr_row); val trDriveTxt = stringResource(R.string.tr_drive); val ntDriveTxt = stringResource(R.string.nt_drive)
     LaunchedEffect(openIds.joinToString(",") + "#" + CloudTrash.ver + "#" + FmTrash.ver, favs) {
-        for (id in openIds) if ((id.startsWith("L|") || id == "K|" || id.startsWith("N|") || id.startsWith("A|") || id.startsWith("D|") || id.startsWith("T|") || id == "H|") && id !in virtIds && FmRootCfg.kids[id] == null && FmRootCfg.kidErr[id] == null) launch { FmRootCfg.loadKids(id, favs) }
+        for (id in openIds) if ((id.startsWith("L|") || id == "K|" || id.startsWith("N|") || id.startsWith("A|") || id.startsWith("D|") || id.startsWith("T|") || id == "H|") && id !in virtIds) {
+            if (FmRootCfg.kids[id] == null && FmRootCfg.kidErr[id] == null) launch { FmRootCfg.loadKids(id, favs) }
+            else if (FmRootCfg.stale.remove(id)) launch { FmRootCfg.loadKids(id, favs) }
+        }
     }
     // запомненные сетевые и ADB-узлы раскрываются лениво: только когда строка уже видна (родитель раскрыт) и есть связь
     val online = remember(p.root, favs) { FmRootCfg.hasNetwork(ctx) }
@@ -427,7 +510,8 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     }
     fun addKids(id: String, level: Int, c: NetConn?) {
         if (!treeOn || id !in p.rootOpen) return
-        val ks = FmRootCfg.kids[id]
+        val ks0 = FmRootCfg.kids[id]
+        val ks = ks0?.let { FmRootCfg.sortKids(p, id, it) }
         if (ks == null) {
             val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
             // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
@@ -710,6 +794,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             (8 + TREE_IND * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 10)).toFloat()
         }
     }
+    androidx.compose.runtime.SideEffect { val vis = rows.filter { it.header == 0 }; FmRootCfg.setRows(p.id, vis.map { it.key }, vis.map { it.level }) }
     val rootCtx = LocalContext.current
     Column(modifier.then(Modifier.fillMaxWidth()).onPreviewKeyEvent { e ->
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FocusRestore.isDpad(e.nativeKeyEvent.keyCode)) FocusRestore.markKeys(rootCtx)
@@ -717,6 +802,15 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FmRootCfg.sel.isNotEmpty() && (e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU || e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_INFO)) { runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess } else false
     }) {
         val rootState = rememberSavedTreeList("files.root." + p.id, rows.map { it.key }, p.rootSel)
+        // «Дом»: список наверх и фокус первой строке (если пульт или мышь/клавиатура уже использовались)
+        val firstKey = rows.firstOrNull { it.header == 0 }?.key
+        LaunchedEffect(p.homeTick) {
+            if (p.homeTick > 0) {
+                kotlinx.coroutines.delay(150)
+                rootState.scrollToItem(0)
+                if (firstKey != null && FocusRestore.keyMode(Fm.sctx)) { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = firstKey }
+            }
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxWidth().fillMaxHeight().verticalScrollbar(rootState)
             // пульт: «вниз» с последней строки списка уходит на нижнюю панель значков (если есть отмеченное), а не на нижнюю навигацию
@@ -748,14 +842,25 @@ internal fun RootSelBar(p: FmPane) {
         if (e.net != null) { ps.src = "smb"; ps.smb = FmRootCfg.fsFor(e.net); ps.net = e.net }
     }
     /** После заданий дерево перечитывается: подождать начала и конца задания и сбросить родительские узлы. */
-    fun refreshLater(parents: List<String>, hosts: List<String>) {
+    fun refreshLater(parents: List<String>, hosts: List<String>, focusKey: String? = null, isDelete: Boolean = false) {
         Fm.scope.launch {
-            var started = false; var n = 0
-            while (n < 800) { kotlinx.coroutines.delay(150); n++; if (Fm.jobs.isNotEmpty()) started = true else if (started) break }
+            var started = false; var n = 0; var sawDlg = false
+            while (n < 800) {
+                kotlinx.coroutines.delay(150); n++
+                val asking = Fm.dlg is FmDlg.Delete
+                if (asking) sawDlg = true
+                if (Fm.jobs.isNotEmpty()) started = true
+                else if (started) break
+                // 9.3: маленькое удаление заканчивается быстрее опроса (раньше ждали до двух минут): окно подтверждения закрылось и задания нет, значит всё сделано
+                else if (isDelete && sawDlg && !asking) { kotlinx.coroutines.delay(500); break }
+                else if (isDelete && !sawDlg && n >= 10) break
+            }
             kotlinx.coroutines.delay(800)
-            parents.distinct().forEach { FmRootCfg.kids.remove(it); FmRootCfg.kidErr.remove(it) }
+            // 9.3: список перечитывается на месте (без «Загрузки…»): положение прокрутки не прыгает, а фокус отдаётся соседней строке
+            parents.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }
             hosts.distinct().forEach { CloudTrash.invalidate(it) }
             CloudTrash.ver++
+            FmRootCfg.focusRowLater(focusKey)
         }
     }
     fun transfer(move: Boolean) {
@@ -775,8 +880,9 @@ internal fun RootSelBar(p: FmPane) {
         if (first.net != null && first.net.kind != "cloud" && !NetTrash.supported(first.net)) { Fm.say(Fm.str(R.string.nt_none)); return }
         // одна «тень» панели на корне источника, имена от корня: так удаляется отмеченное из разных папок разом
         val par = files.map { it.parentId }
+        val nb = FmRootCfg.neighborOf(files.map { "t:" + it.key }.toSet())
         Fm.askDelete(pseudo(first, "/"), files.map { it.path.trimStart('/') })
-        FmRootCfg.sel.clear(); refreshLater(par, emptyList())
+        FmRootCfg.sel.clear(); refreshLater(par, emptyList(), nb, true)
     }
     fun doForever() {
         val list = trash.toList(); val hosts = list.mapNotNull { it.net?.let { n -> NetTrash.rid(n) } }
@@ -1019,6 +1125,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val ctx = LocalContext.current
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
+    val focusedNow = androidx.compose.runtime.rememberUpdatedState(focused)
+    androidx.compose.runtime.DisposableEffect(r.key) { onDispose { if (focusedNow.value) FmRootCfg.focusedRowGone(p.id, r.key) } }
     val rowFr = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if (focused) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
     var menu by remember { mutableStateOf(false) }
@@ -1217,7 +1325,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 val rel = tg.map { it.path.trimStart('/') }
                 val dir = if (e.isDir) e.path else e.parentPath
                 if (e.isDir && !multiSel) item(R.string.fc_title) { Fm.dlg = FmDlg.FolderColor(e.path, e.path.trimEnd('/').substringAfterLast('/')) }
-                fun refresh() { val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(2500); ids.distinct().forEach { FmRootCfg.kids.remove(it); FmRootCfg.kidErr.remove(it) }; CloudTrash.ver++ } }
+                fun refresh(focusKey: String? = null) { val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(2500); ids.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }; CloudTrash.ver++; FmRootCfg.focusRowLater(focusKey) } }
                 fun transfer(move: Boolean) {
                     val o = Fm.panes[1 - p.id]
                     if (o.root) { Fm.say(Fm.str(R.string.sel_need_target)); return }
@@ -1229,7 +1337,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 item(if (e.key in FmRootCfg.sel) R.string.fm_unselect else R.string.fm_select) { FmRootCfg.toggleSel(e) }
                 item(R.string.fm_copy) { transfer(false) }
                 item(R.string.fm_move) { transfer(true) }
-                item(R.string.fm_delete) { Fm.askDelete(pane("/"), rel); refresh() }
+                item(R.string.fm_delete) { val nb = FmRootCfg.neighborOf(tg.map { "t:" + it.key }.toSet()); Fm.askDelete(pane("/"), rel); refresh(nb) }
                 if (!multiSel) item(R.string.fm_rename) { Fm.dlg = FmDlg.Rename(pane(e.parentPath), e.name); refresh() }
                 if (!multiSel) item(R.string.fm_duplicate) {
                     val dot = e.name.lastIndexOf('.')

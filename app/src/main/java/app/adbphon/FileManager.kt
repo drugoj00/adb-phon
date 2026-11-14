@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -213,6 +214,8 @@ class FmPane(val id: Int, start: String) {
     var trashErr by mutableStateOf("")
     /** Раскрытые строки корневого экрана («lan», «cloud»). */
     val rootOpen = androidx.compose.runtime.mutableStateListOf<String>()
+    /** Счётчик нажатий «Дом»: корневой список по его изменению прокручивается наверх и отдаёт фокус первой строке. */
+    var homeTick by androidx.compose.runtime.mutableStateOf(0)
     /** Запомненные между запусками сетевые узлы и ADB: раскрываются лениво, когда есть связь. */
     val rootPending = HashSet<String>()
     /** Выбранная строка корневого экрана (последняя нажатая; подсвечивается плашкой и полоской слева). */
@@ -1451,6 +1454,7 @@ object Fm {
     fun openBuiltinForce(p: FmPane, it: FmItem) {
         val f = join(p.path, it.name)
         DocKind.of(it.ext)?.let { k -> openDoc(sctx, p, it, k); return }
+        if (it.ext.isEmpty()) { openDoc(sctx, p, it, "text"); return }   // 9.3: файл без расширения открывается в Блокноте
         if (p.src == "adb") { say(str(R.string.fm_err_unsupported)); return }
         openCat(it.ext)?.let { cat -> openBuiltin(sctx, p, it, cat, f); return }
         openWith(p, it, null)
@@ -1729,7 +1733,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                 } else {
                 // 9.2: боковая панель кнопок телефона в ландшафте стоит по центру между окнами (левое | кнопки | правое), независимо от ведущей руки
                 FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
-                FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
+                FmButtons.load(ctx); FmSideColumn(actions, Modifier.width((FmButtons.sideDp() + 6).dp).fillMaxHeight())
                 FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                 }
             }
@@ -1760,7 +1764,11 @@ object FmButtons {
     var hidden by mutableStateOf(setOf<String>())
     private var loaded = false
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
-    fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet(); loadOrder(ctx) }
+    /** 9.3: размер кнопок боковой колонки телефона в ландшафте: 0 малые (44), 1 обычные (56, по умолчанию), 2 крупные (68). */
+    var sideSize by mutableStateOf(1)
+    fun sideDp(): Int = when (sideSize) { 0 -> 44; 2 -> 68; else -> 56 }
+    fun setSideSize(ctx: Context, v: Int) { sideSize = v.coerceIn(0, 2); sp(ctx).edit().putInt("side_size", sideSize).apply() }
+    fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet(); sideSize = sp(ctx).getInt("side_size", 1).coerceIn(0, 2); loadOrder(ctx) }
     fun key(ctx: Context, label: Int): String {
         val n = runCatching { ctx.resources.getResourceEntryName(label) }.getOrDefault(label.toString())
         return if (n == "fm_mode_tree" || n == "fm_mode_list") "fm_mode" else n
@@ -1815,6 +1823,13 @@ fun FmButtonsDialog(onClose: () -> Unit) {
         title = { HintTitle(stringResource(R.string.sb_title), stringResource(R.string.sb_reorder_note) + "\n\n" + stringResource(R.string.sb_icon_hint)) },
         text = {
             Column(Modifier.barScroll()) {
+                Text(stringResource(R.string.sb_size), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(R.string.sb_size_s, R.string.sb_size_m, R.string.sb_size_l).forEachIndexed { i, r ->
+                        FilterChip(FmButtons.sideSize == i, { FmButtons.setSideSize(ctx, i) }, { Text(stringResource(r), fontSize = 13.sp) })
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
                 all.forEach { a ->
                     val k = FmButtons.key(ctx, a.label)
                     Row(Modifier.fillMaxWidth().clickable { FmButtons.toggle(ctx, k) }, verticalAlignment = Alignment.CenterVertically) {
@@ -1968,11 +1983,11 @@ private fun FmSideColumn(actions: List<FmAction>, modifier: Modifier) {
     val p = Fm.cur
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(if (Fm.active == 0) R.string.fm_pane_left else R.string.fm_pane_right) + "\n" + Fm.shown(p).size + "·" + p.selected.size,
-            fontSize = 9.sp, lineHeight = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            fontSize = (FmButtons.sideDp() * 0.2f).sp, lineHeight = (FmButtons.sideDp() * 0.23f).sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth())
         Column(Modifier.weight(1f).fillMaxWidth().tabScroll(rememberSavedScroll("files.side")), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val ks = actions.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }
-            actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, 44.dp, 21.dp, 8.sp, reorderKeys = ks) } }
+            actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmButtons.sideDp().dp, (FmButtons.sideDp() * 0.48f).dp, (FmButtons.sideDp() * 0.2f).sp, reorderKeys = ks) } }
         }
     }
 }
@@ -2319,7 +2334,7 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
     // 9.0: полоса выше, «домик» и «обновить» крупнее (размер строится от значка «домика», а не от текста), всё растёт вместе с «Размером элементов и значков»
     val h = if (Marq.tv) 48.dp else 40.dp
     Row(Modifier.fillMaxWidth().height(h).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 46.dp).clickable { Fm.active = p.id; fmShowRoot(p) }, contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 46.dp).clickable { Fm.active = p.id; fmHome(p) }, contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Home, stringResource(R.string.fm_root_title), Modifier.size(if (Marq.tv) 30.dp else 26.dp), tint = if (p.root) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
         }
         p.net?.takeIf { p.src == "smb" && !p.root }?.let { NetBrandIcon(it, if (Marq.tv) 24.dp else 20.dp, Modifier.padding(end = 4.dp)) }

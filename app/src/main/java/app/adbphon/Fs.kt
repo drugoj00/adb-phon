@@ -9,7 +9,7 @@ import java.io.File
 import java.util.Properties
 
 /** Запись в списке файлов любого источника: память устройства, флешка через ADB, сетевая папка. */
-data class FsEntry(val name: String, val path: String, val isDir: Boolean, val size: Long)
+data class FsEntry(val name: String, val path: String, val isDir: Boolean, val size: Long, val date: String = "")
 
 /** Источник файлов. Копирование нужно, чтобы поставить файл или распаковать архив. */
 interface Fs {
@@ -75,7 +75,7 @@ object LocalFs : Fs {
 // ---------- флешки и папки через ADB (то, что система приложению не показывает) ----------
 
 object AdbFs : Fs {
-    private val line = Regex("""^(\S{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+(.+)$""")
+    private val line = Regex("""^(\S{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+(.+)$""")
     private fun q(p: String) = "'" + p.replace("'", "'\\''") + "'"
 
     override suspend fun list(path: String): List<FsEntry> {
@@ -85,11 +85,11 @@ object AdbFs : Fs {
         if ((out.contains("Permission denied") || out.contains("No such file")) && out.lines().none { line.find(it.trim()) != null }) error(out.lines().first())
         return out.lines().mapNotNull { l ->
             val m = line.find(l.trim()) ?: return@mapNotNull null
-            val name = m.groupValues[3].substringBefore(" -> ")
+            val name = m.groupValues[4].substringBefore(" -> ")
             if (name.startsWith(".")) return@mapNotNull null
             val p = path.trimEnd('/') + "/" + name
             val t = m.groupValues[1][0]
-            FsEntry(name, p, t == 'd' || (t == 'l' && !isApk(name)), m.groupValues[2].toLongOrNull() ?: 0L)
+            FsEntry(name, p, t == 'd' || (t == 'l' && !isApk(name)), m.groupValues[2].toLongOrNull() ?: 0L, m.groupValues[3].replace(Regex("\\s+"), " "))
         }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     }
 
