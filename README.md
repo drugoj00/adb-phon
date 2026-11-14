@@ -16,11 +16,11 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 9.2.** [ADB-phon-9.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 9.3.** [ADB-phon-9.3.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `5ea287f81b710fd19bd9777047bae17f42b91114dd34e0ebe024d07bf3f94982`
+SHA-256: `db9396c686471b23ea570f44837c9ba7010b0e36e07455ceadacebd8f4cd8096`
 
-## What's new in 9.2
+## What's new in 9.3
 
 - **Yandex Disk:** the “Yandex Disk” tile without your own key opens the “Own key” wizard at once: Yandex rejects the shared sign-in key, so after signing in through the browser the disk did not open; the “Yandex Disk (app password)” option works without a key; after sign-in the connection name shows the login instead of “Account” (the same for Dropbox and Box)
 - **Own cloud key:** the “Own key” wizard for Yandex Disk, Dropbox, OneDrive, Box, pCloud, Zoho, HiDrive and put.io walks through the steps of that exact cloud: which form fields to fill, which rights to enable, which redirect address to enter (the needed address is copied for you), where to take the Client ID and secret from
@@ -29,6 +29,11 @@ SHA-256: `5ea287f81b710fd19bd9777047bae17f42b91114dd34e0ebe024d07bf3f94982`
 - **Mouse:** any list, tab or window scrolls by dragging with the left button held (like a finger), with inertia; the wheel and dragging the scroll bar work, clicking rows and buttons is not affected
 - **Install:** in the “Install with…” window the “Remember choice” checkbox is always there and turns on with the remote and by touch
 - **Keyboard on TV boxes:** focusing an input field does not open the keyboard and the field no longer gets stuck (arrows move on); the keyboard opens with OK on the remote or a touch or click on the field itself, Back closes it
+- **Files:** sorting now works in the Devices tree on every level (by name, size, date, item count, color, ascending and descending)
+- **Tree:** after a delete and other updates the focus moves to the neighbouring row in the same place, the list does not jump or collapse
+- **Home:** the house icon in the panel header collapses all expanded folders and devices, the list returns to the top and the first row gets the focus
+- **Open with…:** “ADB-phon Notepad” comes first (view and edit text files, including files without an extension), then the installed text editors; service entries are removed
+- **Phone in landscape:** the side column buttons are larger; the size is chosen in “Side panel buttons…” (small, medium, large)
 
 **Requirements and limits**
 
