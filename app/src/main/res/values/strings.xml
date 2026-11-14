@@ -1791,4 +1791,8 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="fm_count_sel">Selected: %1$d</string>
     <string name="fm_count_n_s">Obj: %1$d</string>
     <string name="fm_count_sel_s">Sel: %1$d</string>
+    <string name="pk_copy_to">Copy to…</string>
+    <string name="pk_move_to">Move to…</string>
+    <string name="pk_here">Here</string>
+    <string name="pk_pick">Pick a folder (tap its name)</string>
 </resources>
