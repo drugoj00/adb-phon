@@ -16,17 +16,20 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 8.1.** [ADB-phon-8.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 9.0.** [ADB-phon-9.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `6989d45be30fb490b2b35e299a91a68d4420eac4cbfe6e0343f4977e37236335`
+SHA-256: `34eaa7bca4dbc38995d8241cdd1ae5ab899417831becd9313125373ca037fa7e`
 
-## What's new in 8.1
+## What's new in 9.0
 
-- The call window scrolls as a whole (portrait and landscape): the video is shown in full with its proportions, «End call» is pinned at the top, then the main buttons, then the level meters and «More» (it expands in the same column)
-- Landscape: a single column to the right of the video instead of two, the video gets more room
-- Captions of the meters and lists in the call window are readable in full on narrow screens
-- The call window closes together with its task: no hidden entry left in the recent tasks list after a call
-- «Video quality»: when the resolution is lowered automatically for a weak receiver, the «Weak receiver 240p» item is selected (the list used to be empty); a microphone without a name is labelled «Default microphone»
+- **Copying names:** «Copy name» and «Copy address/path» for found devices, for folders and shares at any depth of the Devices tree, in the file and folder menu (also for several selected items), in the Bluetooth list and in the game window
+- **Text files:** the built-in viewer and editor open any text file, including files without an extension and files from Android/data; reading and saving go through root if present, otherwise through ADB
+- **Terminal:** typing and pasting right in the window («Paste» in the corner, Ctrl+V); it opens with a prompt like `a14xm:/sdcard $` and a blinking cursor, with no start-up text and no «Command» line; pasted multi-line text is not run by itself, you are asked to confirm first
+- **LAN:** tapping a device expands its tree at once; if a share or folder is set in the connection, its contents appear right under the device; «Open in panel» and «Up» use the full path; the trash is removed for network connections, deleting there is immediate and permanent after confirmation (the trash stays for clouds and local storage)
+- **Bluetooth:** a paired device can be forgotten in the «PC mouse» list (with confirmation)
+- **APK install:** the window with versions («Now» and «New») is shown without ADB and without root; if neither is available, the system installer is used next
+- **Cloud module:** the «Install» (or «Update») and «Remove» buttons are always there, the one that does not apply is disabled
+- **Passwords:** an «eye» icon (show or hide) in every password field
 
 ## Features
 
