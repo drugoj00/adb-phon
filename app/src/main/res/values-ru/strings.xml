@@ -1271,7 +1271,7 @@
     <string name="tr_drive">Облачный диск</string>
     <string name="ap_need_root">Нет доступа. Нужен root.</string>
     <string name="tr_restore_fail">Не удалось восстановить, файл остался в корзине.</string>
-    <string name="sel_need_target">Сначала открой папку-приёмник в другой панели</string>
+    <string name="sel_need_target">В другой панели раскрой папку, куда копировать</string>
     <string name="sel_one_source">Отмечено из разных источников: действуй с одним источником за раз</string>
     <string name="sb_copy">Копировать</string>
     <string name="sb_move">Перенести</string>
@@ -1783,4 +1783,6 @@
     <string name="pk_move_to">Перенести в…</string>
     <string name="pk_here">Сюда</string>
     <string name="pk_pick">Выбери папку (нажми на имя)</string>
+    <string name="pk_copying_to">Копирую в: %1$s</string>
+    <string name="pk_moving_to">Переношу в: %1$s</string>
 </resources>
