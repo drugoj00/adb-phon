@@ -16,20 +16,23 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 9.0.** [ADB-phon-9.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 9.2.** [ADB-phon-9.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `14699dc757cf1284c02c5331b8e020933f27ffaa9d5ab9fe5cb07f7a58ea3cab`
+SHA-256: `5ea287f81b710fd19bd9777047bae17f42b91114dd34e0ebe024d07bf3f94982`
 
-## What's new in 9.0
+## What's new in 9.2
 
-- **Copying names:** «Copy name» and «Copy address/path» for found devices, for folders and shares at any depth of the Devices tree, in the file and folder menu (also for several selected items), in the Bluetooth list and in the game window
-- **Text files:** the built-in viewer and editor open any text file, including files without an extension and files from Android/data; reading and saving go through root if present, otherwise through ADB
-- **Terminal:** typing and pasting right in the window («Paste» in the corner, Ctrl+V); it opens with a prompt like `a14xm:/sdcard $` and a blinking cursor, with no start-up text and no «Command» line; pasted multi-line text is not run by itself, you are asked to confirm first
-- **LAN:** tapping a device expands its tree at once; if a share or folder is set in the connection, its contents appear right under the device; «Open in panel» and «Up» use the full path; the trash is removed for network connections, deleting there is immediate and permanent after confirmation (the trash stays for clouds and local storage)
-- **Bluetooth:** a paired device can be forgotten in the «PC mouse» list (with confirmation)
-- **APK install:** the window with versions («Now» and «New») is shown without ADB and without root; if neither is available, the system installer is used next
-- **Cloud module:** the «Install» (or «Update») and «Remove» buttons are always there, the one that does not apply is disabled
-- Eye icon in the input field
+- **Yandex Disk:** the “Yandex Disk” tile without your own key opens the “Own key” wizard at once: Yandex rejects the shared sign-in key, so after signing in through the browser the disk did not open; the “Yandex Disk (app password)” option works without a key; after sign-in the connection name shows the login instead of “Account” (the same for Dropbox and Box)
+- **Own cloud key:** the “Own key” wizard for Yandex Disk, Dropbox, OneDrive, Box, pCloud, Zoho, HiDrive and put.io walks through the steps of that exact cloud: which form fields to fill, which rights to enable, which redirect address to enter (the needed address is copied for you), where to take the Client ID and secret from
+- **Key hint:** if after signing in through the browser the cloud does not open or rejects the shared sign-in key, the app itself offers “Connect my own key” for that cloud (before, this offer appeared only on a request limit)
+- **Remote:** settings, tabs and lists scroll with the Up arrow all the way to the start, the first row is visible
+- **Mouse:** any list, tab or window scrolls by dragging with the left button held (like a finger), with inertia; the wheel and dragging the scroll bar work, clicking rows and buttons is not affected
+- **Install:** in the “Install with…” window the “Remember choice” checkbox is always there and turns on with the remote and by touch
+- **Keyboard on TV boxes:** focusing an input field does not open the keyboard and the field no longer gets stuck (arrows move on); the keyboard opens with OK on the remote or a touch or click on the field itself, Back closes it
+
+**Requirements and limits**
+
+- For pCloud and HiDrive the steps follow the documentation and were not checked on a live account: field names on the site may differ
 
 ## Features
 
