@@ -843,6 +843,8 @@
     <string name="set_narrow">Узкий шрифт в списках</string>
     <string name="set_narrow_hint">Названия и подписи в списках набраны узким шрифтом того же размера: в строку помещается больше текста без прокрутки.</string>
     <string name="set_folder_color">Цвет папок по умолчанию</string>
+    <string name="oa_notepad">Блокнот ADB-phon</string>
+    <string name="oa_notepad_hint">Встроенный просмотр и правка</string>
     <string name="oa_builtin">Встроенный</string>
     <string name="oa_pick">Выбери приложение</string>
     <string name="ph_info">Сведения о фото</string>
@@ -1622,6 +1624,10 @@
     <string name="ic_row">Своя иконка…</string>
     <string name="ic_item">Своя иконка файла…</string>
     <string name="sb_icon_hint">Нажми на значок кнопки, чтобы заменить его на свой.</string>
+    <string name="sb_size">Размер кнопок боковой колонки (телефон, ландшафт)</string>
+    <string name="sb_size_s">Малые</string>
+    <string name="sb_size_m">Обычные</string>
+    <string name="sb_size_l">Крупные</string>
     <string name="sb_reset_icons">Сбросить все значки кнопок</string>
     <string name="inv_title">Связь по интернету</string>
     <string name="inv_code">Код программы: %1$s</string>
