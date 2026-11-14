@@ -29,7 +29,7 @@ SHA-256: `34eaa7bca4dbc38995d8241cdd1ae5ab899417831becd9313125373ca037fa7e`
 - **Bluetooth:** a paired device can be forgotten in the «PC mouse» list (with confirmation)
 - **APK install:** the window with versions («Now» and «New») is shown without ADB and without root; if neither is available, the system installer is used next
 - **Cloud module:** the «Install» (or «Update») and «Remove» buttons are always there, the one that does not apply is disabled
-- **Passwords:** an «eye» icon (show or hide) in every password field
+- Eye icon in the input field
 
 ## Features
 
