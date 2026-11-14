@@ -777,15 +777,10 @@
     <string name="fm_mode_tree">Tree</string>
     <string name="fm_mode_list">List</string>
     <string name="fm_vol_ro">read only</string>
-    <string name="fm_vol_body">Path: %1$s
-Space: %2$s
-File system: %3$s
-Type: %4$s</string>
+    <string name="fm_vol_body">Path: %1$s\nSpace: %2$s\nFile system: %3$s\nType: %4$s</string>
     <string name="fm_vol_unsupported">The system did not mount this drive: its file system is not supported (for example NTFS without a driver). Format it as exFAT or FAT32 on a computer, or connect it to a device where NTFS is supported.</string>
     <string name="fm_vol_unsupported_short">File system is not supported by the system (NTFS?)</string>
-    <string name="fm_net_body">Type: %1$s
-Address: %2$s
-User: %3$s</string>
+    <string name="fm_net_body">Type: %1$s\nAddress: %2$s\nUser: %3$s</string>
     <string name="fm_net_lost">Could not reopen %1$s: showing phone storage.</string>
     <string name="set_collapse_all">Collapse all</string>
     <string name="set_marq">Scrolling of long names</string>

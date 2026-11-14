@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tc_type_hint">Tap the output window to type right in it; “Paste” appears in its corner.</string>
+    <string name="ed_empty">The file is empty.</string>
+    <string name="ed_read_failed">Could not read the file: %1$s</string>
+    <string name="fm_package">Package</string>
+    <string name="bt_forget_one">Forget device</string>
+    <string name="bt_forget_one_q">Remove “%1$s” (%2$s) from paired devices?</string>
+    <string name="bt_forget_yes">Forget</string>
+    <string name="set_open_files_hint">The app remembered for a file type (for example .apk) when you ticked “Remember”. “Forget” brings the question back. The item is shown only while something is remembered.</string>
+    <string name="hint_more">More</string>
+    <string name="pw_show">Show password</string>
+    <string name="pw_hide">Hide password</string>
+    <string name="cmod_btn_install">Install</string>
+    <string name="cmod_btn_update">Update</string>
+    <string name="copy_name">Copy name</string>
+    <string name="copy_addr">Copy address</string>
+    <string name="tc_runml_n">Run %1$d lines?</string>
+    <string name="tc_runml_go">Run</string>
+    <string name="tc_runml_cancel">Cancel</string>
+</resources>
