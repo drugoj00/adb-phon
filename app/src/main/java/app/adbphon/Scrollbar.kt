@@ -258,7 +258,7 @@ fun TabColumn(key: String, modifier: Modifier = Modifier.fillMaxSize(), contentP
     val left = scrollbarLeft()
     var inside by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(modifier) {
-        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().onFocusChanged { inside = it.hasFocus }.tabScroll(st).padding(contentPadding), verticalArrangement = verticalArrangement, content = content)
+        SelectableArea { androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().onFocusChanged { inside = it.hasFocus }.tabScroll(st).padding(contentPadding), verticalArrangement = verticalArrangement, content = content) }
         ScrollbarHandle(st, Modifier.align(if (left) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd), enabled = inside)
     }
 }

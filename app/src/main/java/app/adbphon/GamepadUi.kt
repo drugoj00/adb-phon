@@ -1046,7 +1046,7 @@ private fun PadDevices(onClose: () -> Unit) {
                 Column(Modifier.weight(1f, fill = false).barScroll()) {
                     rows.forEach { r ->
                         val isCur = BtHid.hostName != null && cur != null && r.address.uppercase() == cur
-                        Row(Modifier.fillMaxWidth().clickable { if (!isCur) BtAuto.switchHost(ctx, r); onClose() }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().combinedClickable(onClick = { if (!isCur) BtAuto.switchHost(ctx, r); onClose() }, onLongClick = { copyText(ctx, r.name + "  " + r.address) }).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(r.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                 Text(r.address, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))

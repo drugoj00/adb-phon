@@ -161,15 +161,14 @@ fun CallPicSettings() {
     val pickPic = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u -> if (u != null) { if (CallPics.setPic(ctx, u)) { CallPics.setMode(ctx, "own"); mode = "own"; ver++ } else Toast.makeText(ctx, bad, Toast.LENGTH_SHORT).show() } }
     val tick = ver
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.cp_avatar), fontWeight = FontWeight.Medium)
+        HintTitle(stringResource(R.string.cp_avatar), stringResource(R.string.cp_avatar_hint))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val bmp = remember(tick) { CallPics.avatarBitmap(ctx) }
             if (bmp != null) androidx.compose.foundation.Image(bmp.asImageBitmap(), null, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
             OutlinedButton({ pickAv.launch("image/*") }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(R.string.cp_pick), fontSize = 13.sp) }
             if (bmp != null) OutlinedButton({ CallPics.clearAvatar(ctx); ver++ }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(R.string.cp_remove), fontSize = 13.sp) }
         }
-        Text(stringResource(R.string.cp_avatar_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
-        Text(stringResource(R.string.cp_pic_mode), fontWeight = FontWeight.Medium)
+        HintTitle(stringResource(R.string.cp_pic_mode), stringResource(R.string.cp_pic_hint))
         EqChoices(listOf(
             EqChoice(stringResource(R.string.cp_mode_peer), mode == "peer") { mode = "peer"; CallPics.setMode(ctx, "peer") },
             EqChoice(stringResource(R.string.cp_mode_own), mode == "own") { if (CallPics.hasPic(ctx)) { mode = "own"; CallPics.setMode(ctx, "own") } else pickPic.launch("image/*") },
@@ -179,7 +178,6 @@ fun CallPicSettings() {
             OutlinedButton({ pickPic.launch("image/*") }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(R.string.cp_pic_pick), fontSize = 13.sp) }
             if (CallPics.hasPic(ctx)) OutlinedButton({ CallPics.clearPic(ctx); if (mode == "own") { mode = "peer"; CallPics.setMode(ctx, "peer") }; ver++ }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(R.string.cp_remove), fontSize = 13.sp) }
         }
-        Text(stringResource(R.string.cp_pic_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
     }
 }
 
@@ -253,8 +251,10 @@ fun RingtoneDialog(close: () -> Unit) {
                 Text(stringResource(R.string.ring_vol, cfg.vol), fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 Slider(cfg.vol.toFloat(), { cfg.vol = it.toInt(); Ringtones.save(ctx, cfg); ver++ }, valueRange = 0f..100f, steps = 19)
                 if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                Text(stringResource(R.string.ring_wait_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
-                Text(stringResource(R.string.ring_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                Collapsible(stringResource(R.string.hint_more)) {
+                    Text(stringResource(R.string.ring_wait_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                    Text(stringResource(R.string.ring_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                }
             }
         },
         confirmButton = { TextButton({ stopPreview(); close() }) { Text(stringResource(R.string.btn_close)) } },

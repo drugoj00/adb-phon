@@ -54,17 +54,20 @@ fun CField(label: String, value: String, onChange: (String) -> Unit, modifier: M
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
     val prim = MaterialTheme.colorScheme.primary
+    var shown by remember { mutableStateOf(false) }   // 9.0: глазик справа в полосе пароля
     // подпись внутри области поля: касание подписи тоже ставит фокус в это поле (иначе набранный текст уходил в прежнее поле, например в адрес)
     BasicTextField(
         value, onChange, modifier.fillMaxWidth().padding(vertical = 1.dp), singleLine = true, interactionSource = src,
         textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
         cursorBrush = SolidColor(prim),
-        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = if (password && !shown) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else type, imeAction = ImeAction.Next),
         decorationBox = { inner ->
             Column(Modifier.fillMaxWidth()) {
                 Text(label, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (focused) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-                Box(Modifier.fillMaxWidth().heightIn(min = 30.dp).border(BorderStroke(if (focused) 2.dp else 1.dp, if (focused) prim else MaterialTheme.colorScheme.outline), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp), contentAlignment = Alignment.CenterStart) { inner() }
+                Box(Modifier.fillMaxWidth().heightIn(min = 30.dp).border(BorderStroke(if (focused) 2.dp else 1.dp, if (focused) prim else MaterialTheme.colorScheme.outline), RoundedCornerShape(6.dp)).padding(start = 8.dp, end = if (password) 2.dp else 8.dp, top = 4.dp, bottom = 4.dp), contentAlignment = Alignment.CenterStart) {
+                    if (password) Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.weight(1f)) { inner() }; PwEyeIcon(shown) { shown = !shown } } else inner()
+                }
             }
         },
     )

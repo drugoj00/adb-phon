@@ -41,9 +41,16 @@ object FmIo {
      * подключение выполняется само, без перехода во вкладку «Связь». Возвращает null, если связь есть, иначе код единственного шага:
      * «wifi» (включить отладку по Wi-Fi) или «pair» (ввести код сопряжения).
      */
+    @Volatile private var rootFailAt = 0L
+
     suspend fun ensurePriv(): String? {
+        if (Adb.isRoot) return null
+        // 9.0: root первый (на магнитолах он есть), ADB только запасной путь; другое устройство по ADB не трогаем; отказ su не повторяем чаще раза в 5 минут
+        if (!remote && Adb.currentHost.isEmpty() && hasSu() && !Adb.rootSuppressed && System.currentTimeMillis() - rootFailAt > 300_000L) {
+            if (Adb.tryRoot()) { Hooks.refresh(); return null }
+            rootFailAt = System.currentTimeMillis()
+        }
         if (Adb.isConnected) return null
-        if (hasSu() && !Adb.rootSuppressed && Adb.tryRoot()) { Hooks.refresh(); return null }
         val cr = app.contentResolver
         fun wifiOn() = runCatching { android.provider.Settings.Global.getInt(cr, "adb_wifi_enabled", 0) == 1 }.getOrDefault(false)
         if (android.os.Build.VERSION.SDK_INT >= 30 && !wifiOn()) {
@@ -317,7 +324,7 @@ object FmIo {
     suspend fun permStat(p: FmPane, path: String): PermRes {
         if (p.src != "local" && p.src != "adb") return PermRes(err = s(R.string.perm_err_kind))
         if (p.src == "local" && remote) return PermRes(err = s(R.string.perm_err_remote))
-        if (!Adb.isConnected) { val fix = ensurePriv(); if (fix != null) return PermRes(fix = fix) }
+        if (!Adb.isRoot) { val fix = ensurePriv(); if (fix != null) return PermRes(fix = fix) }
         val o = runCatching { sh("stat -c '%a|%U|%G|%F' ${q(path)} 2>&1").trim() }.getOrDefault("")
         val ps = o.split('|')
         if (ps.size < 4) return PermRes(err = o.ifEmpty { s(R.string.perm_err_read) })
@@ -330,7 +337,7 @@ object FmIo {
     suspend fun applyPerms(p: FmPane, paths: List<String>, mode: String, owner: String, group: String, recursive: Boolean): String? {
         if (!Regex("^[0-7]{3,4}$").matches(mode)) return "mode?"
         if (!permName.matches(owner) || !permName.matches(group)) return "name?"
-        if (!Adb.isConnected) { val fix = ensurePriv(); if (fix != null) return s(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text) }
+        if (!Adb.isRoot) { val fix = ensurePriv(); if (fix != null) return s(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text) }
         val r = if (recursive) "-R " else ""
         val own = if (owner.isNotEmpty() || group.isNotEmpty()) (owner + (if (group.isNotEmpty()) ":$group" else "")) else ""
         val cmd = StringBuilder()
@@ -342,9 +349,34 @@ object FmIo {
         return out.ifEmpty { null }
     }
 
+    private val pkgInPath = Regex("^(?:/storage/emulated/\\d+|/sdcard|/storage/self/primary|/data/media/\\d+)/Android/(?:data|obb|media)/([A-Za-z0-9_.]+\\.[A-Za-z0-9_.]+)(?:/.*)?$|^/data/(?:data|user/\\d+|user_de/\\d+)/([A-Za-z0-9_.]+\\.[A-Za-z0-9_.]+)(?:/.*)?$")
+
+    /** 9.0: имя пакета для окна «Свойства»: у APK из самого файла, у папки (и всего внутри) в Android/data, obb, media и /data/data по имени папки. */
+    private suspend fun pkgOf(p: FmPane, path: String): String? {
+        pkgInPath.matchEntire(path.trimEnd('/'))?.let { m -> return m.groupValues[1].ifEmpty { m.groupValues[2] } }
+        if (!path.lowercase().endsWith(".apk")) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                when (p.src) {
+                    "local" -> app.packageManager.getPackageArchiveInfo(path, 0)?.packageName
+                    "adb" -> {
+                        val size = sh("stat -c %s ${q(path)} 2>/dev/null").trim().toLongOrNull() ?: Long.MAX_VALUE
+                        if (size > 120L * 1024 * 1024) null else {
+                            val tmp = File(app.cacheDir, "pkgprobe.apk"); tmp.delete()
+                            Adb.pull(path, tmp)
+                            app.packageManager.getPackageArchiveInfo(tmp.path, 0)?.packageName.also { tmp.delete() }
+                        }
+                    }
+                    else -> null
+                }
+            }.getOrNull()
+        }
+    }
+
     suspend fun props(p: FmPane, path: String): String {
         val sb = StringBuilder()
         sb.append(s(R.string.fm_path)).append(": ").append(path).append('\n')
+        pkgOf(p, path)?.let { sb.append(s(R.string.fm_package)).append(": ").append(it).append('\n') }
         when (p.src) {
             "adb" -> {
                 val st = runCatching { sh("stat -c '%F|%s|%A|%U:%G|%y' ${q(path)} 2>&1").trim() }.getOrDefault("")

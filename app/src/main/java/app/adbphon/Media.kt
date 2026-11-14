@@ -98,12 +98,22 @@ object MediaSrc {
     /** Источник текущей панели на момент открытия: нужен просмотрщикам, которые живут отдельно от списка. */
     @Volatile var fs: RemoteFs? = null
     @Volatile var local = true
+    /** Источник панели: local, adb (устройство или root, файлы копируются в кэш через ADB), smb. */
+    @Volatile var src = "local"
     @Volatile var entries: List<MediaEntry> = emptyList()
     @Volatile var index = 0
 
+    /** Файл надо брать через root/ADB: источник «ADB/root» или папка, которую система не отдаёт приложению. */
+    fun privNeeded(path: String): Boolean = src == "adb" || (local && !FmIo.remote && FmIo.restricted(path) && !File(path).canRead())
+
     /** Файл на диске: свой для локального источника, иначе копия во временной папке. */
     suspend fun file(ctx: Context, e: MediaEntry): File = withContext(Dispatchers.IO) {
-        if (local) File(e.path) else {
+        if (privNeeded(e.path)) {
+            // 9.0: файл недоступен обычному приложению (Android/data, /data, источник «ADB/root»): сначала root (если есть su), запасной путь ADB
+            val d = File(ctx.cacheDir, "play").apply { mkdirs() }
+            FmIo.ensurePriv()
+            File(d, e.name).also { out -> out.delete(); Adb.pull(e.path, out) }
+        } else if (local) File(e.path) else {
             val d = File(ctx.cacheDir, "play").apply { mkdirs() }
             File(d, e.name).also { out -> if (!out.exists() || out.length() == 0L) fs!!.copyTo(e.path, out) }
         }
@@ -120,7 +130,7 @@ object MediaSrc {
 /** Вызов из «Файлов»: открыть файл встроенным просмотрщиком. */
 fun openBuiltin(ctx: Context, p: FmPane, item: FmItem, cat: String, full: String) {
     val list = Fm.shown(p).filter { !it.isDir && openCat(it.ext) == cat }
-    MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"
+    MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"; MediaSrc.src = p.src
     val at = list.indexOfFirst { it.name == item.name }
     // файла нет в списке своей категории (расширение другое, строка из раскрытой папки): играет только он
     MediaSrc.entries = if (at < 0) listOf(MediaEntry(item.name, FmIo.join(p.path, item.name))) else list.map { MediaEntry(it.name, FmIo.join(p.path, it.name)) }

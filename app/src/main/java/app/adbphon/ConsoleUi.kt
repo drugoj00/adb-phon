@@ -20,7 +20,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -40,6 +48,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -110,10 +123,24 @@ fun ConsolePage() {
     var selB by remember { mutableStateOf(-1) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var copiedNote by remember { mutableStateOf("") }
+    // 9.0: печатать и вставлять можно прямо в окне терминала: нажатие на окно даёт фокус скрытому полю, набранное видно после приглашения оболочки
+    val typeFocus = remember { FocusRequester() }
+    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }   // курсор скрытого поля всегда в конце после вставки, истории и кнопок символов
+    // курсор: мигает, когда терминал ждёт ввода; при вводе горит ровно (после каждого нажатия ~0,6 с); пока команда выполняется, курсора нет
+    val idle = running && (text.endsWith("$ ") || text.endsWith("# "))
+    var solid by remember { mutableStateOf(false) }
+    var blinkOn by remember { mutableStateOf(true) }
+    LaunchedEffect(input) { if (input.isNotEmpty()) { solid = true; kotlinx.coroutines.delay(600); solid = false } }
+    LaunchedEffect(idle) { blinkOn = true; while (idle) { kotlinx.coroutines.delay(530); blinkOn = !blinkOn } }
+    LaunchedEffect(input) { if (tfv.text != input) tfv = androidx.compose.ui.text.input.TextFieldValue(input, androidx.compose.ui.text.TextRange(input.length)) }
+    var typing by remember { mutableStateOf(false) }
+    val kbc = LocalSoftwareKeyboardController.current
     LaunchedEffect(text.length) { if (selA >= text.length) { selA = -1; selB = -1 } }
     LaunchedEffect(Unit) { Term.ensure(ctx) }
-    LaunchedEffect(text) { kotlinx.coroutines.delay(30); scroll.scrollTo(scroll.maxValue) }
-    fun send() {
+    LaunchedEffect(text, input) { kotlinx.coroutines.delay(30); scroll.scrollTo(scroll.maxValue) }
+    // 9.0: вставленный многострочный текст не запускается сам: он виден в строке ввода, а по Enter спрашивается подтверждение «Выполнить N строк?»
+    var pendingRun by remember { mutableStateOf(false) }
+    fun doSend() {
         val c = input.trim()
         if (c.isNotEmpty()) {
             hist = (listOf(c) + hist.filter { it != c }).take(30)
@@ -122,13 +149,27 @@ fun ConsolePage() {
         Term.sendLine(input)
         input = ""; histPos = -1
     }
+    fun send() {
+        val n = input.split('\n').count { it.isNotBlank() }
+        if (n > 1) pendingRun = true else doSend()
+    }
     fun histMove(d: Int) {
         if (hist.isEmpty()) return
         histPos = (histPos + d).coerceIn(-1, hist.size - 1)
         input = if (histPos < 0) "" else hist[histPos]
     }
-    fun addTxt(s: String) { input += s }
+    fun addTxt(s: String) { input += s.replace("\r\n", "\n").replace('\r', '\n').trimEnd('\n') }
     val toSave = input.ifBlank { hist.firstOrNull().orEmpty() }
+    if (pendingRun) {
+        val n = input.split('\n').count { it.isNotBlank() }
+        LAlertDialog(
+            onDismissRequest = { pendingRun = false },
+            title = { Text(stringResource(R.string.tc_runml_n, n)) },
+            text = { Text(input.take(400), fontFamily = FontFamily.Monospace, fontSize = 12.sp) },
+            confirmButton = { TextButton({ pendingRun = false; doSend() }) { Text(stringResource(R.string.tc_runml_go)) } },
+            dismissButton = { TextButton({ pendingRun = false }) { Text(stringResource(R.string.tc_runml_cancel)) } },
+        )
+    }
     TabColumn("tab.console", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -138,21 +179,27 @@ fun ConsolePage() {
                     mode == "root" -> R.string.tc_via_root
                     mode == "helper" -> R.string.tc_via_helper
                     else -> R.string.tc_via_adb
-                }) + "\n\n" + stringResource(R.string.tc_select_hint), titleStyle = MaterialTheme.typography.titleSmall, hintStyle = MaterialTheme.typography.labelMedium)
+                }) + "\n\n" + stringResource(R.string.tc_select_hint) + "\n\n" + stringResource(R.string.tc_type_hint), titleStyle = MaterialTheme.typography.titleSmall, hintStyle = MaterialTheme.typography.labelMedium)
                 // окно вывода: фон и текст по настройкам, контур цвета темы; выделение своё: фон выделения = цвет текста, текст в нём = цвет фона
                 val shape = RoundedCornerShape(6.dp)
+                Box(Modifier.fillMaxWidth()) {
                 Box(Modifier.fillMaxWidth().height(if (wide) 420.dp else 300.dp).background(bgC, shape)
-                    .border(2.dp, MaterialTheme.colorScheme.onSurface, shape).clip(shape).verticalScroll(scroll).padding(8.dp)) {
-                    val styled = remember(text, selA, selB, fgC, bgC) {
+                    .border(2.dp, MaterialTheme.colorScheme.onSurface, shape).clip(shape)
+                    .pointerInput(Unit) { detectTapGestures(onTap = { selA = -1; selB = -1; runCatching { typeFocus.requestFocus() }; kbc?.show() }) }
+                    .verticalScroll(scroll).padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 40.dp)) {   // справа место под значок «Вставить»
+                    val curColor = if (bgC.luminance() > 0.6f) Color(0xFF0F766E) else Color(0xFF5EEAD4)   // бирюзовый акцент интерфейса, виден на светлом и тёмном фоне
+                    val curShown = idle && (solid || blinkOn)
+                    val styled = remember(text, selA, selB, fgC, bgC, input, idle, curShown) {
                         buildAnnotatedString {
                             append(text)
+                            append(input)
+                            if (idle) { val st = length; append("█"); addStyle(SpanStyle(color = if (curShown) curColor else Color.Transparent), st, length) }
                             if (selA >= 0 && selB > selA) addStyle(SpanStyle(color = bgC, background = fgC), selA.coerceAtMost(text.length), selB.coerceAtMost(text.length))
                         }
                     }
                     Text(styled, color = fgC, fontFamily = FontFamily.Monospace, fontSize = fontSp.sp, lineHeight = (fontSp + 4).sp,
                         onTextLayout = { layout = it },
                         modifier = Modifier
-                            .pointerInput(Unit) { detectTapGestures(onTap = { selA = -1; selB = -1 }) }
                             .pointerInput(Unit) {
                                 var aS = 0; var aE = 0
                                 detectDragGesturesAfterLongPress(
@@ -162,17 +209,20 @@ fun ConsolePage() {
                                 )
                             })
                 }
+                    BasicTextField(value = tfv, onValueChange = { tfv = it; input = it.text; histPos = -1 }, singleLine = true,
+                        modifier = Modifier.size(1.dp).graphicsLayer { alpha = 0f }.focusRequester(typeFocus).onFocusChanged { typing = it.isFocused }
+                            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter)) { send(); true } else false },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send, autoCorrect = false), keyboardActions = KeyboardActions(onSend = { send() }))
+                    // значок «Вставить» в углу окна (справа от текста: строки кончаются раньше значка)
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.ContentPaste, stringResource(R.string.tc_paste), tint = bgC,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp).background(fgC.copy(alpha = .8f), RoundedCornerShape(6.dp)).clickable { clip.getText()?.text?.let { addTxt(it) }; runCatching { typeFocus.requestFocus() }; kbc?.show() }.padding(4.dp))
+                }
                 if (selA >= 0 && selB > selA) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Button(onClick = { val part = text.substring(selA.coerceAtMost(text.length), selB.coerceAtMost(text.length)); clip.setText(AnnotatedString(part)); copiedNote = ctx.getString(R.string.tc_copied_pv, part.take(40)); selA = -1; selB = -1 }) { Text(stringResource(R.string.tc_copy_sel)) }
                     OutlinedButton(onClick = { selA = -1; selB = -1 }) { Text(stringResource(R.string.tc_unsel)) }
                 }
                 if (copiedNote.isNotEmpty()) Text(copiedNote, style = MaterialTheme.typography.labelMedium)
-                val kbOpts = KeyboardOptions(imeAction = ImeAction.Send, autoCorrect = false)
-                val kbActs = KeyboardActions(onSend = { send() })
-                FieldBtnRow(field = { fm ->
-                    OutlinedTextField(value = input, onValueChange = { input = it; histPos = -1 }, label = { Text(stringResource(R.string.tc_input)) }, singleLine = true,
-                        modifier = fm, keyboardOptions = kbOpts, keyboardActions = kbActs)
-                }) { Button(enabled = running, onClick = { send() }) { Text("⏎ " + stringResource(R.string.tc_run)) } }
+                // 9.0: строки «Команда» с кнопкой «Выполнить» больше нет: команда печатается прямо в окне вывода (нажатие на окно), Enter выполняет
                 // управляющие клавиши
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedButton(enabled = running, onClick = { Term.interrupt(ctx) }) { Text("Ctrl+C") }
@@ -192,7 +242,6 @@ fun ConsolePage() {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedButton(onClick = { clip.setText(AnnotatedString(text)); copiedNote = ctx.getString(R.string.tc_copied_pv, text.trim().take(40)) }) { Text(stringResource(R.string.tc_copy)) }
                     OutlinedButton(onClick = { val o = Term.lastOutput(); if (o.isNotEmpty()) { clip.setText(AnnotatedString(o)); copiedNote = ctx.getString(R.string.tc_copied_pv, o.take(40)) } else copiedNote = ctx.getString(R.string.tc_nothing) }) { Text(stringResource(R.string.tc_copy_last)) }
-                    OutlinedButton(onClick = { clip.getText()?.text?.let { addTxt(it.lineSequence().firstOrNull().orEmpty()) } }) { Text(stringResource(R.string.tc_paste)) }
                     OutlinedButton(onClick = { Term.clear() }) { Text(stringResource(R.string.tc_clear)) }
                     OutlinedButton(onClick = { Term.stop(quiet = true); Term.ensure(ctx) }) { Text(stringResource(R.string.tc_restart)) }
                 }
@@ -244,18 +293,16 @@ fun TermSettings() {
     var bg by remember { mutableStateOf(Term.bg(ctx)) }
     var fg by remember { mutableStateOf(Term.fg(ctx)) }
     var fs by remember { mutableStateOf(Term.fontSp(ctx).toFloat()) }
-    var hexBg by remember { mutableStateOf("") }
-    var hexFg by remember { mutableStateOf("") }
     val bgs = listOf(0xFF1B3F72, 0xFF0B2545, 0xFF10151A, 0xFF000000, 0xFF14532D, 0xFF3B0764, 0xFF475569, 0xFFF8FAFC)
     val fgs = listOf(0xFFFFFFFF, 0xFFEAF2FF, 0xFFFDE68A, 0xFF86EFAC, 0xFF67E8F9, 0xFFFDBA74, 0xFFCBD5E1, 0xFF0F172A)
-    fun parse(h: String): Int? = runCatching { android.graphics.Color.parseColor(if (h.startsWith("#")) h else "#$h") }.getOrNull()?.let { it or 0xFF000000.toInt() }
     @Composable
     fun swatches(list: List<Long>, cur: Int, set: (Int) -> Unit) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+        // 9.0: кружки цветов в одну строку (своего цвета HEX больше нет)
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             for (c in list) {
                 val ci = c.toInt()
-                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(ci))
-                    .border(if (cur == ci) 4.dp else 1.dp, if (cur == ci) MaterialTheme.colorScheme.onSurface else Color.Gray, CircleShape)
+                Box(Modifier.size(30.dp).clip(CircleShape).background(Color(ci))
+                    .border(if (cur == ci) 3.dp else 1.dp, if (cur == ci) MaterialTheme.colorScheme.onSurface else Color.Gray, CircleShape)
                     .clickable { set(ci) })
             }
         }
@@ -269,19 +316,7 @@ fun TermSettings() {
     Slider(value = fs, onValueChange = { fs = it }, onValueChangeFinished = { Term.setFontSp(ctx, fs.toInt()) }, valueRange = 9f..24f, steps = 14)
     Text(stringResource(R.string.tc_set_bg), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
     swatches(bgs, bg) { bg = it; Term.setBg(ctx, it) }
-    Box(Modifier.padding(top = 6.dp)) {
-        val p = parse(hexBg)
-        FieldBtnRow(field = { fm ->
-            OutlinedTextField(value = hexBg, onValueChange = { s -> hexBg = s.filter { it.isLetterOrDigit() || it == '#' }.take(7) }, label = { Text(stringResource(R.string.tc_hex)) }, singleLine = true, modifier = fm)
-        }) { Button(enabled = p != null && hexBg.length >= 6, onClick = { bg = p!!; Term.setBg(ctx, p) }) { Text(stringResource(R.string.tc_apply)) } }
-    }
     Text(stringResource(R.string.tc_set_fg), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
     swatches(fgs, fg) { fg = it; Term.setFg(ctx, it) }
-    Box(Modifier.padding(top = 6.dp)) {
-        val p = parse(hexFg)
-        FieldBtnRow(field = { fm ->
-            OutlinedTextField(value = hexFg, onValueChange = { s -> hexFg = s.filter { it.isLetterOrDigit() || it == '#' }.take(7) }, label = { Text(stringResource(R.string.tc_hex)) }, singleLine = true, modifier = fm)
-        }) { Button(enabled = p != null && hexFg.length >= 6, onClick = { fg = p!!; Term.setFg(ctx, p) }) { Text(stringResource(R.string.tc_apply)) } }
-    }
     OutlinedButton(onClick = { bg = Term.BG_DEFAULT; fg = Term.FG_DEFAULT; fs = 13f; Term.setBg(ctx, bg); Term.setFg(ctx, fg); Term.setFontSp(ctx, 13) }, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.tc_set_reset)) }
 }

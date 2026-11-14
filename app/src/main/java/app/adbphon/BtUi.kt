@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
@@ -237,7 +238,9 @@ private fun BtPairing(ctx: Context, land: Boolean = false, pad: Boolean = false,
         }) { Text(stringResource(R.string.bt_visible)) }
     }
     val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-    val bonded: List<BtRow> = remember(BtAuto.busy, BtHid.hostName, BtPower.on, BtPower.tick) {
+    var bondTick by remember { mutableStateOf(0) }
+    var forgetFor by remember { mutableStateOf<BtRow?>(null) }
+    val bonded: List<BtRow> = remember(BtAuto.busy, BtHid.hostName, BtPower.on, BtPower.tick, bondTick) {
         // последнее подключённое (или недавно появившееся) устройство первым
         BtHid.sortLastFirst(ctx, runCatching { adapter?.bondedDevices?.toList().orEmpty() }.getOrDefault(emptyList())
             .map { d -> BtRow(d, d.address, runCatching { d.name }.getOrNull() ?: d.address) })
@@ -246,11 +249,30 @@ private fun BtPairing(ctx: Context, land: Boolean = false, pad: Boolean = false,
         if (bonded.isNotEmpty()) {
             Text(stringResource(R.string.bt_paired), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 13.sp)
             bonded.forEach { d ->
-                TextButton({ BtAuto.manualConnect(ctx, d) }, Modifier.fillMaxWidth()) {
-                    Text(d.name + "  ·  " + d.address, fontSize = 13.sp, maxLines = 1, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+              NoSelBox {
+                var rowMenu by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // 9.0: нажатие подключает, долгое нажатие даёт «Копировать название / адрес»
+                    Box(Modifier.weight(1f).heightIn(min = 40.dp).pointerInput(d.address) { detectTapGestures(onTap = { BtAuto.manualConnect(ctx, d) }, onLongPress = { rowMenu = true }) }.padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
+                        Text(d.name + "  ·  " + d.address, fontSize = 13.sp, maxLines = 1, color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, textAlign = TextAlign.Start)
+                        LDropdownMenu(rowMenu, { rowMenu = false }) {
+                            androidx.compose.material3.DropdownMenuItem({ Text(stringResource(R.string.copy_name)) }, { rowMenu = false; copyText(ctx, d.name) })
+                            androidx.compose.material3.DropdownMenuItem({ Text(stringResource(R.string.copy_addr)) }, { rowMenu = false; copyText(ctx, d.address) })
+                        }
+                    }
+                    // 9.0: убрать любое сопряжённое устройство из списка
+                    androidx.compose.material3.IconButton({ forgetFor = d }) { androidx.compose.material3.Icon(Icons.Filled.Delete, stringResource(R.string.bt_forget_one), tint = MaterialTheme.colorScheme.error) }
                 }
+              }
             }
         }
+    }
+    forgetFor?.let { d ->
+        LAlertDialog(onDismissRequest = { forgetFor = null },
+            title = { Text(stringResource(R.string.bt_forget_one)) },
+            text = { Text(stringResource(R.string.bt_forget_one_q, d.name, d.address)) },
+            confirmButton = { TextButton({ forgetFor = null; BtAuto.forgetDevice(ctx, d.address) { bondTick++ } }) { Text(stringResource(R.string.bt_forget_yes)) } },
+            dismissButton = { TextButton({ forgetFor = null }) { Text(stringResource(R.string.btn_cancel)) } })
     }
     if (land) {
         // ландшафт (правша): слева список устройств, справа подсказка в одну строку, статус и «Сделать видимым»; левша зеркально

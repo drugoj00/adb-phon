@@ -86,13 +86,9 @@ fun StartupSection(ctx: Context) {
     var pick by remember { mutableStateOf<Int?>(null) }
     var l by remember { mutableStateOf(Startup.customPath(ctx, 0)) }
     var r by remember { mutableStateOf(Startup.customPath(ctx, 1)) }
-    var showSz by remember { mutableStateOf(Fm.showSize) }
-    LaunchedEffect(Unit) { showSz = ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).getBoolean("show_size", true) }
-    SettingSwitch(showSz, { showSz = it; Fm.setShowSize(ctx, it) }, stringResource(R.string.set_show_size), stringResource(R.string.set_show_size_hint))
-    Collapsible(stringResource(R.string.start_title), bold = true) {
-        Text(stringResource(R.string.start_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-    }
-    Text(stringResource(R.string.start_tab), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+    // 9.0: пункт «Показывать размер файлов» убран: размер в списке «Файлов» показывается всегда
+    // 9.0: заголовка «Запуск» нет, пояснение свёрнуто в названии пункта «Открывать при запуске вкладку»
+    HintTitle(stringResource(R.string.start_tab), stringResource(R.string.start_hint), titleSize = 13.sp)
     val tabs = listOf("last" to R.string.start_last, "0" to R.string.tab_connect, "1" to R.string.tab_apps, "2" to R.string.tab_files, "3" to R.string.tab_remote, "4" to R.string.tab_more)
     EqChoices(tabs.map { (k, s) -> EqChoice(stringResource(s), tab == k) { tab = k; Startup.setTabMode(ctx, k) } }, perRow = 3)
     Text(stringResource(R.string.start_folder), fontWeight = FontWeight.Medium, fontSize = 13.sp)

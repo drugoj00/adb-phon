@@ -137,7 +137,8 @@ object CloudTrash {
     /** Тип для корзины по имени источника (облако: тип облака; сеть: «net»). */
     fun typeOfRid(ctx: Context, remote: String): String? = typeOf(ctx, remote)
     /** Тип для корзины у подключения: облако или сетевой источник с корзиной; null: корзины нет. */
-    fun typeFor(ctx: Context, c: NetConn): String? = if (c.kind == "cloud") CloudIcons.typeOf(ctx, c) else if (NetTrash.supported(c)) "net" else null
+    // 14.11.2026 (владелица: «зачем в LAN корзина?»): корзина только у облаков; у LAN, WebDAV и прочих сетевых подключений удаление сразу и навсегда, после подтверждения
+    fun typeFor(ctx: Context, c: NetConn): String? = if (c.kind == "cloud") CloudIcons.typeOf(ctx, c) else null
     /** Удалить навсегда файл или папку по пути внутри источника. */
     suspend fun purgeRel(ctx: Context, remote: String, rel: String, isDir: Boolean): String? {
         val r = lrun(ctx, remote, listOf(if (isDir) "purge" else "deletefile", spec(remote, rel)) + Rclone.common, 60 * 60_000L)

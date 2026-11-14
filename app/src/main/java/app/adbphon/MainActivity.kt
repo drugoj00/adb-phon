@@ -156,7 +156,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
     override fun onPause() { super.onPause(); Invites.stopUi() }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) Fm.closeSimpleDialogsOnLeave() }
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -621,7 +621,7 @@ fun ConnectScreen(vm: MainViewModel) {
                         var menu by remember { mutableStateOf(false) }
                         val haptic = LocalHapticFeedback.current
                         val cur = vm.isCurrent(vm.favAsFound(f))   // подключённое: чёрный фон, белый текст
-                        Box {
+                        NoSelBox {
                         Row(Modifier.fillMaxWidth().then(if (cur) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
                             .combinedClickable(onClick = { vm.connectFav(f) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true })
                             .padding(vertical = 4.dp, horizontal = if (cur) 6.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -633,7 +633,7 @@ fun ConnectScreen(vm: MainViewModel) {
                             }
                             IconButton({ vm.removeFav(f) }) { Icon(Icons.Filled.Delete, stringResource(R.string.fav_remove), tint = if (cur) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current) }
                         }
-                        DeviceMenu(vm, vm.favAsFound(f), menu) { menu = false }
+                        DeviceMenu(vm, vm.favAsFound(f), menu, name = f.name) { menu = false }
                         }
                     }
                 }
@@ -746,7 +746,7 @@ fun FoundRow(vm: MainViewModel, f: Found, onStar: (Found) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val cur = vm.isCurrent(f)   // подключённое устройство: чёрный фон, белый текст
     val fg = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
-    Box {
+    NoSelBox {
     Row(
         Modifier.fillMaxWidth().then(if (cur) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
             .combinedClickable(onClick = { vm.connectFound(f) }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true })
@@ -771,7 +771,8 @@ private fun Modifier.connectedRowStyle(dark: Boolean): Modifier = this
 
 /** Меню долгого нажатия на устройство: «Отключить», если оно подключено, иначе «Подключить». */
 @Composable
-fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, onDismiss: () -> Unit) {
+fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, name: String? = null, onDismiss: () -> Unit) {
+    val dctx = LocalContext.current
     var pickDevIcon by remember { mutableStateOf(false) }
     if (pickDevIcon) CustomIconPicker(f.host, "v:" + f.host) { pickDevIcon = false }
     LDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
@@ -783,6 +784,11 @@ fun DeviceMenu(vm: MainViewModel, f: Found, expanded: Boolean, onDismiss: () -> 
             text = { Text(stringResource(R.string.menu_connect)) }, onClick = { onDismiss(); vm.connectFound(f) })
         androidx.compose.material3.DropdownMenuItem(
             text = { Text(stringResource(R.string.gpi_menu)) }, onClick = { onDismiss(); vm.installGamepadTest(f) })
+        // 9.0: копирование названия и адреса устройства
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.copy_name)) }, onClick = { onDismiss(); copyText(dctx, name?.takeIf { it.isNotBlank() } ?: vm.names[f.host] ?: f.host) })
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(stringResource(R.string.copy_addr)) }, onClick = { onDismiss(); copyText(dctx, f.host + if (f.kind == "wifi") ":" + f.port else "") })
     }
 }
 

@@ -118,7 +118,7 @@ object FmRootCfg {
 
     /** Повторное раскрытие узла: старый список виден сразу, но поверх всегда читается заново (так же для раскрытых внутри него узлов). */
     fun refresh(p: FmPane, id: String, favs: List<NetConn>) {
-        val virt = favs.filter { CloudTrash.supported(CloudTrash.typeFor(Fm.sctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
+        val virt = favs.filter { it.kind == "cloud" && CloudTrash.supported(CloudTrash.typeFor(Fm.sctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
         for (x in (p.rootOpen.toList() + id).distinct()) if (x.startsWith(id) && x !in virt && kids[x] != null) Fm.scope.launch { loadKids(x, favs) }
     }
     val optional = listOf("root", "recent", "lan", "cloud", "wifi", "pc", "apps", "tree", "adb")
@@ -166,7 +166,35 @@ object FmRootCfg {
     }
     /** Подключение к найденному по LAN устройству: лучший протокол по открытым портам, гость; в избранное не сохраняется, пока владелица не сохранит сама. */
     private fun lanFilter(l: List<NetHost>): List<NetHost> { val k = lanKind; return if (k == null) l else l.filter { k in it.kinds } }
-    fun lanConn(h: NetHost): NetConn { val k = lanKind?.takeIf { it in h.kinds } ?: h.kinds.firstOrNull() ?: "smb"; return NetConn(k, if (k == "dav") davUrlOf(h) else h.ip, 0, "", "", "", "", h.name) }
+    /** Начальная папка подключения из поля «Общий ресурс или папка» (для SMB: smb://хост/ресурс/путь/), null: поле пусто или облако. Содержимое этой папки показывается сразу под устройством. */
+    fun ownPath(c: NetConn?): String? {
+        if (c == null || c.kind == "cloud") return null
+        val saved = NetStore.list(Fm.sctx).firstOrNull { it.kind == c.kind && it.host == c.host && it.user == c.user } ?: c
+        val q = saved.path.trim().trim('/').takeIf { it.isNotEmpty() } ?: return null
+        return if (c.kind == "smb") "smb://" + c.host.trim().trim('/') + "/" + q + "/" else "/" + q
+    }
+    /** Запасной протокол найденного устройства: когда SMB не открылся, дерево пробует FTP, WebDAV, SFTP (запоминается на время работы). */
+    val lanKindOver = HashMap<String, String>()
+    val lanPref = listOf("smb", "ftp", "dav", "sftp")
+    /** 14.11.2026 (владелица): нажатие на устройство в LAN раскрывает его дерево сразу; если в подключении указан общий ресурс или папка, под устройством сразу её содержимое (loadKids берёт ownPath), иначе корень (список ресурсов). Протокол: SMB, при неудаче FTP, WebDAV, SFTP, без вопросов. */
+    suspend fun lanAutoOpen(p: FmPane, tid0: String, c0: NetConn, h: NetHost?) {
+        suspend fun waitKids(id: String) { kotlinx.coroutines.withTimeoutOrNull(30000L) { while (kids[id] == null && kidErr[id] == null) kotlinx.coroutines.delay(200) } }
+        var tid = tid0; var c = c0
+        waitKids(tid)
+        if (kidErr[tid] != null && h != null) {
+            val order = (listOf(c.kind) + h.kinds.sortedBy { k -> lanPref.indexOf(k).let { if (it < 0) 9 else it } }).distinct()
+            for (k in order.drop(1)) {
+                lanKindOver[h.ip] = k
+                val c2 = lanConn(h); val tid2 = "N|" + c2.kind + "|" + c2.host + "|" + c2.user + "|"
+                p.rootOpen.remove(tid); kidErr.remove(tid)
+                p.rootOpen.add(tid2)
+                waitKids(tid2)
+                tid = tid2; c = c2
+                if (kids[tid2] != null) break
+            }
+        }
+    }
+    fun lanConn(h: NetHost, kind: String? = null): NetConn { val k = kind ?: lanKindOver[h.ip]?.takeIf { it in h.kinds } ?: lanKind?.takeIf { it in h.kinds } ?: h.kinds.firstOrNull() ?: "smb"; return NetConn(k, if (k == "dav") davUrlOf(h) else h.ip, 0, "", "", "", "", h.name) }
     /** Фокус пульта: первый значок нижней панели выбора и ключ последней видимой строки списка (стрелка «вниз» на ней уходит на панель). */
     val barFocus = androidx.compose.ui.focus.FocusRequester()
     @Volatile var lastVisKey: String? = null
@@ -252,7 +280,7 @@ object FmRootCfg {
                 cSel = c
                 val fs = fsCache.getOrPut(a[1] + "|" + a[2] + "|" + a[3]) { c.fs() }
                 (fs as? KeepFs)?.connect(); (fs as? CloudFs)?.connect()
-                val path = if (a.getOrNull(4) == NetTrash.ROOT_MARK) NetTrash.rootPath(c, fs) else a.getOrNull(4)?.takeIf { it.isNotEmpty() } ?: fs.root
+                val path = if (a.getOrNull(4) == NetTrash.ROOT_MARK) NetTrash.rootPath(c, fs) else a.getOrNull(4)?.takeIf { it.isNotEmpty() } ?: ownPath(c) ?: fs.root
                 pSel = path
                 withContext(Dispatchers.IO) {
                     val all = fs.list(path)
@@ -380,8 +408,8 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     rows += RR("h:mem", stringResource(R.string.rt_group_storage), Icons.Filled.PhoneAndroid, prim, header = 1)
     val treeOn = FmRootCfg.treeOn
     val openIds = p.rootOpen.toList()
-    // облака с корзиной показывают две виртуальные папки («Корзина» и «Облачный диск»), сам узел облака папок не грузит
-    val virtIds = favs.filter { CloudTrash.supported(CloudTrash.typeFor(ctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
+    // 14.11.2026 (владелица: «зачем в LAN корзина? убери»): у сетевых подключений (LAN, WebDAV, Wi-Fi) строк «Корзина» и «диск» нет; корзина осталась у облаков (их своя) и у локальной памяти (наша); облака с корзиной показывают две виртуальные папки («Корзина» и «Облачный диск»), сам узел облака папок не грузит
+    val virtIds = favs.filter { it.kind == "cloud" && CloudTrash.supported(CloudTrash.typeFor(ctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
     val trRowTxt = stringResource(R.string.tr_row); val trDriveTxt = stringResource(R.string.tr_drive); val ntDriveTxt = stringResource(R.string.nt_drive)
     LaunchedEffect(openIds.joinToString(",") + "#" + CloudTrash.ver + "#" + FmTrash.ver, favs) {
         for (id in openIds) if ((id.startsWith("L|") || id == "K|" || id.startsWith("N|") || id.startsWith("A|") || id.startsWith("D|") || id.startsWith("T|") || id == "H|") && id !in virtIds && FmRootCfg.kids[id] == null && FmRootCfg.kidErr[id] == null) launch { FmRootCfg.loadKids(id, favs) }
@@ -394,7 +422,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val loadingTxt = stringResource(R.string.rt_loading)
     /** Квадратик выбора для файла или папки узла [parent]: путь родителя берётся из идентификатора узла. */
     fun selOf(k: FmRootCfg.TK, parent: String, c: NetConn?): FmRootCfg.SelE? {
-        val pp = if (parent.startsWith("L|")) parent.removePrefix("L|") else if (parent.startsWith("N|")) parent.split('|', limit = 5).getOrNull(4).orEmpty().let { if (it == NetTrash.ROOT_MARK && c != null) NetTrash.rootPath(c, FmRootCfg.fsFor(c)) else it }.ifEmpty { "/" } else return null
+        val pp = if (parent.startsWith("L|")) parent.removePrefix("L|") else if (parent.startsWith("N|")) parent.split('|', limit = 5).getOrNull(4).orEmpty().let { if (it == NetTrash.ROOT_MARK && c != null) NetTrash.rootPath(c, FmRootCfg.fsFor(c)) else it }.ifEmpty { FmRootCfg.ownPath(c) ?: "/" } else return null
         return FmRootCfg.SelE(k.id, if (parent.startsWith("N|")) c else null, parent, pp, k.name, k.path, k.isDir, null)
     }
     fun addKids(id: String, level: Int, c: NetConn?) {
@@ -502,7 +530,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if ("lan" in p.rootOpen) {
             lan.forEach { c ->
                 val tid = "N|" + c.kind + "|" + c.host + "|" + c.user + "|"
-                rows += RR("net:" + c.kind + c.host + c.user, c.title, Icons.Filled.Dns, Color(0xFF42A5F5), net = c, level = 1, act = { fmLeaveRoot(p); Fm.connectNet(p, c) }, treeId = tid)
+                rows += RR("net:" + c.kind + c.host + c.user, c.title, Icons.Filled.Dns, Color(0xFF42A5F5), net = c, level = 1, act = { fmLeaveRoot(p); Fm.connectNet(p, c, fresh = true) }, treeId = tid)
                 pend(tid)
                 if (tid in virtIds) addVirt(c, tid) else addKids(tid, 2, c)
             }
@@ -512,7 +540,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 if ((c.kind + "|" + c.host + "|" + c.user) in savedKeys) return@forEach
                 val tid = "N|" + c.kind + "|" + c.host + "|" + c.user + "|"
                 rows += RR("lanf:" + c.kind + c.host, h.name.ifBlank { h.ip }, Icons.Filled.Dns, Color(0xFFFFC107), net = c, level = 1,
-                    subText = (if (h.name.isNotBlank() && h.name != h.ip) h.ip + "  ·  " else "") + h.kinds.joinToString(" · ") { it.uppercase() }, act = { fmLeaveRoot(p); Fm.connectNet(p, c) }, treeId = tid)
+                    subText = if (h.name.isNotBlank() && h.name != h.ip) h.ip else null, act = { fmLeaveRoot(p); Fm.openLanHost(p, h) }, treeId = tid)
                 addKids(tid, 2, c)
             }
             if (FmRootCfg.lanScanning) rows += RR("lan:scan", stringResource(R.string.fm_net_scanning), Icons.Filled.Search, prim, level = 1, busy = true, subText = stringResource(R.string.wf_cancel_hint), act = { FmRootCfg.lanCancel() })
@@ -1013,6 +1041,17 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val bigFont = if (tv) 1.15f else 1f
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .22f)
     val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) p.rootOpen.remove(id) else { rootAccordion(p, id); p.rootOpen.add(id); FmRootCfg.refresh(p, id, NetStore.list(ctx)) } }
+    // устройство LAN (найденное или сохранённое): раскрытие дерева с автоматическим раскрытием общего ресурса из подключения
+    val rowToggle = { id: String ->
+        val isLan = r.level == 1 && !r.drive && r.net != null && id == r.treeId && (r.key.startsWith("lanf:") || (r.key.startsWith("net:") && r.net.kind != "dav" && r.net.kind != "cloud"))
+        val opening = id !in p.rootOpen
+        treeToggle(id)
+        if (isLan && opening) {
+            val nc = r.net!!
+            val h = if (r.key.startsWith("lanf:")) FmRootCfg.lanFound.firstOrNull { FmRootCfg.lanConn(it).host == nc.host } else null
+            Fm.scope.launch { FmRootCfg.lanAutoOpen(p, id, nc, h) }
+        }
+    }
     Box2(
         Modifier.fillMaxWidth().onKeyEvent { e ->
             val id = r.treeId
@@ -1089,17 +1128,17 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 }
             } else Modifier)
             .focusRequester(rowFr).hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = { Fm.active = p.id; p.rootSel = r.key; if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) treeToggle(r.treeId) else r.act() },
+                onClick = { Fm.active = p.id; p.rootSel = r.key; if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() },
                 onLongClick = { Fm.active = p.id; p.rootSel = r.key; menu = true })
             .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
             if (r.expandKey != null) Icon(if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-            else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 20.dp).clickable { treeToggle(r.treeId) }.padding(if (tv) 4.dp else 1.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
+            else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 20.dp).clickable { rowToggle(r.treeId) }.padding(if (tv) 4.dp else 1.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
             else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
-            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderIcon(UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
+            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderOrAppIcon(r.treeId.removePrefix("L|"), UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
@@ -1142,6 +1181,28 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
         if (iconPick) CustomIconPicker(r.title, "d:" + r.key) { iconPick = false }
         LDropdownMenu(menu, { menu = false }) {
             @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { menu = false; run() })
+            // 9.0: найденные и сохранённые устройства (сеть, LAN, Wi-Fi, ПК, Android): копирование названия и адреса
+            if (r.pc != null || r.adev != null || (r.net != null && !r.drive)) {
+                val devName = r.pc?.name?.ifBlank { r.pc.ip } ?: r.adev?.title ?: r.net?.title ?: r.title
+                val devAddr = r.pc?.ip ?: r.adev?.addr ?: r.net?.host
+                item(R.string.copy_name) { copyText(ctx, devName) }
+                if (!devAddr.isNullOrBlank()) item(R.string.copy_addr) { copyText(ctx, devAddr) }
+            }
+            // 9.0: у остальных строк (папки и ресурсы сетевых источников и облаков, найденное по LAN, места) долгое нажатие даёт «Копировать название» и «Копировать путь/адрес»
+            val localE = r.selE?.takeIf { it.net == null && it.ti == null && it.fi == null && r.appName == null }
+            val isDev = r.pc != null || r.adev != null || (r.net != null && !r.drive)
+            if (!isDev && localE == null && r.header == 0 && !r.err && !r.busy && r.title.isNotBlank() && r.key !in setOf("showhide", "wifi:scan", "lan:scan", "lan:find", "lan+", "cloud+", "lan:none", "wifi:none") &&
+                !r.key.endsWith(":st") && !r.key.endsWith(":fix") && !r.key.endsWith(":empty") && !r.key.endsWith(":more")) {
+                val nm = r.selE?.name ?: r.file?.name ?: r.gname ?: r.title
+                val tid = r.treeId
+                val pth: String? = r.selE?.path?.takeIf { it.isNotBlank() } ?: r.lpath ?: r.path ?: when {
+                    tid != null && tid.startsWith("N|") -> tid.split('|').let { pp -> if (pp.size >= 5) pp[1] + "://" + pp[2] + pp[4] else null }
+                    tid != null && tid.startsWith("L|") -> tid.removePrefix("L|")
+                    else -> null
+                }
+                item(R.string.copy_name) { copyText(ctx, nm) }
+                if (!pth.isNullOrBlank()) item(R.string.fm_copy_path) { copyText(ctx, pth) }
+            }
             // своя иконка для любой строки корневого экрана (диски, места, подключения, облака)
             if (r.header == 0 && !r.err && !r.busy && r.key != "showhide" && !r.key.endsWith(":st") && !r.key.endsWith(":fix") && !r.key.endsWith(":empty") && !r.key.endsWith(":more") && r.key != "wifi:scan" && r.key != "wifi:none") item(R.string.ic_row) { iconPick = true }
             r.retry?.let { rt -> item(R.string.rt_reconnect) { rt() } }
@@ -1179,7 +1240,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 item(R.string.fm_props) { Fm.props(pane("/"), rel) }
                 item(R.string.perm_title) { Fm.dlg = FmDlg.Perms(pane("/"), rel) }
                 item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(pane(e.parentPath), tg.filter { it.parentPath == e.parentPath }.map { it.name }) }
-                if (!multiSel) item(R.string.fm_copy_path) { Fm.copyPath(pane(e.parentPath), e.name) }
+                item(R.string.copy_name) { copyText(ctx, tg.joinToString("\n") { it.name }) }
+                item(R.string.fm_copy_path) { copyText(ctx, tg.joinToString("\n") { it.path }) }
                 item(R.string.fm_new_folder) { Fm.dlg = FmDlg.NewFolder(dir); refresh() }
                 item(R.string.fm_new_file) { Fm.dlg = FmDlg.NewFile(dir); refresh() }
                 item(R.string.fm_new_zip) { Fm.dlg = FmDlg.NewZip(dir); refresh() }
@@ -1199,7 +1261,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 }
                 item(R.string.tr_perm) { Fm.dlg = FmDlg.FTrash(fi.id) }
             }
-            r.net?.takeIf { !r.drive && CloudTrash.supported(CloudTrash.typeFor(ctx, it)) }?.let { nc -> item(R.string.tr_menu) { Fm.dlg = FmDlg.Trash(nc) } }
+            r.net?.takeIf { !r.drive && it.kind == "cloud" && CloudTrash.supported(CloudTrash.typeFor(ctx, it)) }?.let { nc -> item(R.string.tr_menu) { Fm.dlg = FmDlg.Trash(nc) } }
             r.vol?.let { v ->
                 item(R.string.rt_details) {
                     val fsTxt = (v.fs.ifBlank { "?" }) + if (v.ro) " · " + Fm.str(R.string.fm_vol_ro) else ""

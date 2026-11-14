@@ -70,7 +70,7 @@ object DocKind {
 
 /** Вызов из «Файлов»: открыть документ встроенным просмотрщиком. */
 fun openDoc(ctx: Context, p: FmPane, item: FmItem, kind: String) {
-    MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"
+    MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"; MediaSrc.src = p.src
     MediaSrc.entries = listOf(MediaEntry(item.name, FmIo.join(p.path, item.name))); MediaSrc.index = 0
     val cls = when (kind) { "text" -> TextEditorActivity::class.java; "pdf" -> PdfViewerActivity::class.java; else -> OfficeViewerActivity::class.java }
     ctx.startActivity(Intent(ctx, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -121,21 +121,58 @@ fun TextEditor(onClose: () -> Unit) {
     var r by remember { mutableStateOf("") }
     var backup by remember { mutableStateOf(true) }
     var tv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    var failed by remember { mutableStateOf(false) }
+    var privPath by remember { mutableStateOf<String?>(null) }   // 9.0: файл взят через root/ADB, сохранение пишет обратно тем же способом
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             runCatching {
-                val f = MediaSrc.file(ctx, e)
+                // 9.0: читаем файл любого типа до конца потоком (работает и для служебных файлов с нулевой длиной), а если обычному приложению
+                // файл не отдаётся (Android/data, /data и т.п.) или источник ADB, берём его через root/ADB (копия в кэше, только для чтения)
+                val viaAdb = MediaSrc.privNeeded(e.path)
+                var f = MediaSrc.file(ctx, e)
                 file = f
-                readOnly = (!MediaSrc.local && MediaSrc.fs !is KeepFs) || f.length() > EDIT_LIMIT
-                val bytes = if (f.length() > EDIT_LIMIT) f.inputStream().use { it.readNBytes(1 shl 20) } else f.readBytes()
+                if (viaAdb) privPath = e.path
+                readOnly = (!MediaSrc.local && MediaSrc.fs !is KeepFs)
+                fun readAll(x: File): ByteArray = x.inputStream().use { i -> if (x.length() > EDIT_LIMIT) { readOnly = true; i.readNBytes(1 shl 20) } else i.readBytes() }
+                var bytes = runCatching { readAll(f) }.getOrElse { ByteArray(0) }
+                if (bytes.isEmpty() && !viaAdb && MediaSrc.local && !FmIo.remote && FmIo.ensurePriv() == null) {
+                    val tmp = File(File(ctx.cacheDir, "play").apply { mkdirs() }, e.name)
+                    runCatching { tmp.delete(); Adb.pull(e.path, tmp) }
+                    if (tmp.length() > 0) { f = tmp; file = f; privPath = e.path; bytes = readAll(tmp) }
+                }
                 raw = bytes; enc = detect(bytes)
-            }.onFailure { msg = it.message }
+                if (bytes.isEmpty()) msg = ctx.getString(R.string.ed_empty)
+            }.onFailure { msg = ctx.getString(R.string.ed_read_failed, it.message ?: ""); failed = true }
         }
     }
     val text = remember(raw, enc) { raw?.let { String(it, Charset.forName(enc)) } }
     val edScope = androidx.compose.runtime.rememberCoroutineScope()
     fun save() {
         val f = file ?: return
+        val pp = privPath
+        if (pp != null) {
+            // файл из Android/data, /data и т.п.: пишем в копию и отправляем на место через root (если есть), иначе ADB
+            msg = ctx.getString(R.string.ed_saving_net)
+            edScope.launch {
+                val err = withContext(Dispatchers.IO) { runCatching {
+                    // 9.0: безопасная запись: копия .bak, отправка во временный файл рядом, проверка размера, затем перенос содержимого на место (владелец и права файла не меняются), проверка размера после записи
+                    val bytes = tv.text.toByteArray(Charset.forName(enc))
+                    f.writeBytes(bytes); FmIo.ensurePriv()
+                    fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                    val tmp = pp + ".adbphon-tmp"
+                    if (backup) Adb.shell("cp -f " + q(pp) + " " + q(pp + ".bak") + " 2>/dev/null")
+                    f.inputStream().use { i -> Adb.pushStream(i, bytes.size.toLong(), tmp) }
+                    val sz1 = Adb.shell("stat -c %s " + q(tmp) + " 2>&1").trim().toLongOrNull()
+                    if (sz1 != bytes.size.toLong()) { Adb.shell("rm -f " + q(tmp)); error("size " + sz1 + " != " + bytes.size) }
+                    val r = Adb.shell("cat " + q(tmp) + " > " + q(pp) + " 2>&1; echo rc=$?")
+                    Adb.shell("rm -f " + q(tmp))
+                    val sz2 = Adb.shell("stat -c %s " + q(pp) + " 2>&1").trim().toLongOrNull()
+                    if (!r.contains("rc=0") || sz2 != bytes.size.toLong()) error("write check failed: " + r.take(120) + " size=" + sz2)
+                }.exceptionOrNull() }
+                if (err == null) { dirty = false; msg = ctx.getString(R.string.ed_saved) } else msg = ctx.getString(R.string.ed_save_failed, err.message ?: "")
+            }
+            return
+        }
         val net = if (MediaSrc.local) null else MediaSrc.fs as? KeepFs
         runCatching {
             if (backup && f.exists() && net == null) f.copyTo(File(f.path + ".bak"), overwrite = true)
@@ -155,12 +192,12 @@ fun TextEditor(onClose: () -> Unit) {
             Text(e.name + if (dirty) " *" else "", Modifier.weight(1f), fontSize = 14.sp, maxLines = 1)
             if (!readOnly) TextButton({ save() }, enabled = dirty) { Text(stringResource(R.string.ed_save), fontSize = 13.sp) }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             TextButton({ enc = CHARSETS[(CHARSETS.indexOf(enc).coerceAtLeast(0) + 1) % CHARSETS.size] }) { Text(enc, fontSize = 12.sp) }
             TextButton({ wrap = !wrap; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("ed_wrap", wrap).apply() }) { Text(stringResource(if (wrap) R.string.ed_wrap_on else R.string.ed_wrap_off), fontSize = 12.sp) }
             TextButton({ size = (size - 2f).coerceAtLeast(8f) }) { Text("A−", fontSize = 12.sp) }
             TextButton({ size = (size + 2f).coerceAtMost(40f) }) { Text("A+", fontSize = 12.sp) }
-            TextButton({ find = true }) { Text(stringResource(R.string.ed_find), fontSize = 12.sp) }
+            TextButton({ find = true }) { Text(stringResource(R.string.ed_find), fontSize = 12.sp, maxLines = 1, softWrap = false) }
         }
         if (readOnly) Text(stringResource(R.string.ed_readonly), Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
         msg?.let { Text(it, Modifier.padding(horizontal = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
@@ -176,7 +213,7 @@ fun TextEditor(onClose: () -> Unit) {
                     colors = androidx.compose.material3.TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
                 )
             }
-        } else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
+        } else if (!failed) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
     }
     if (find) {
         LAlertDialog(onDismissRequest = { find = false }, title = { Text(stringResource(R.string.ed_find)) },

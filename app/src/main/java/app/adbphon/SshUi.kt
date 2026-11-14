@@ -236,8 +236,9 @@ private fun SshLogin(ctx: Context) {
             OutlinedTextField(SshModel.port, { SshModel.port = it.filter { c -> c.isDigit() }.take(5) }, Modifier.weight(0.5f), singleLine = true,
                 label = { Text(stringResource(R.string.ssh_port)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
+        val pw = rememberPw()   // 9.0: глазик в поле пароля
         OutlinedTextField(SshModel.password, { SshModel.password = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.ssh_pass)) },
-            visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+            visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         // вход по ключу: файл закрытого ключа (OpenSSH/PEM), парольная фраза вводится в поле пароля; содержимое хранится только в памяти
         val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) runCatching {
@@ -302,7 +303,7 @@ private fun SshFiles(ctx: Context) {
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(SshModel.files, key = { it.name }) { f ->
-                Box {
+                NoSelBox {
                     Row(
                         Modifier.fillMaxWidth().combinedClickable(onClick = { if (f.isDir) SshModel.open(f) else menuFor = f.name }, onLongClick = { menuFor = f.name })
                             .padding(vertical = 6.dp),

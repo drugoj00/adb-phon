@@ -162,7 +162,8 @@ fun BackupSectionV2(vm: MainViewModel) {
                 onDismissRequest = { st = BkState.Idle }, title = { Text(stringResource(R.string.bk2_enter_pass)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(p, { p = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.bk2_pass1b), maxLines = 1) }, visualTransformation = PasswordVisualTransformation())
+                        val pw = rememberPw()   // 9.0: глазик в поле пароля
+                        OutlinedTextField(p, { p = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.bk2_pass1b), maxLines = 1) }, visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } })
                         if (s.wrong) Text(stringResource(R.string.bk2_wrong_pass), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     }
                 },

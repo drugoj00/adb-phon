@@ -78,14 +78,18 @@ class PadKeeperService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     private var shown = ""
+    /** 9.0: служба сейчас в режиме переднего плана (с уведомлением). Пока геймпад не подключён и работает служба приёма звонков, отдельного уведомления с пустым значком нет. */
+    @Volatile private var fgOn = false
+    private var lastCallStart = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CH, getString(R.string.kpr_title), NotificationManager.IMPORTANCE_MIN))
+        if (Build.VERSION.SDK_INT >= 26) { runCatching { nm.deleteNotificationChannel("pad_keeper") }; nm.createNotificationChannel(NotificationChannel(CH, getString(R.string.kpr_title), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false); setSound(null, null); enableVibration(false) }) }
         val n = notification(getString(R.string.kpr_wait_bt), false)
         if (Build.VERSION.SDK_INT >= 29) ServiceCompat.startForeground(this, ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) else startForeground(ID, n)
+        fgOn = true
         if (intent?.action == ACTION_DISCONNECT) { disconnectAll(); return START_NOT_STICKY }    // сначала startForeground (иначе система считает запуск ошибкой), потом отключение
         if (intent?.action == ACTION_CONNECT) {    // кнопка «Подключить» в запросе: человек разрешил это устройство
             val addr = intent.getStringExtra("addr"); val nm2 = intent.getStringExtra("name") ?: addr
@@ -137,9 +141,27 @@ class PadKeeperService : Service() {
 
     private fun show(text0: String) {
         val text = if (runCatching { Adb.isConnected }.getOrDefault(false)) text0 + " · " + getString(R.string.kpr_adb) else text0
-        if (text == shown) return
+        val connected = BtHid.hostName != null
+        val nmr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!connected && CallListen.enabled(applicationContext)) {
+            // 9.0: в ожидании своё уведомление не нужно (раньше оно давало пустую ячейку в строке состояния): процесс держит служба приёма звонков
+            // 9.0: службу звонков запускаем не чаще раза в 20 с и только если она не работает; своё уведомление снимаем лишь когда уведомление службы звонков уже есть (иначе процесс могут убить)
+            if (!CallListenService.fg && System.currentTimeMillis() - lastCallStart > 20_000L) { lastCallStart = System.currentTimeMillis(); runCatching { CallListen.start(applicationContext) } }
+            if (CallListenService.fg) {
+                if (fgOn) { runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }; runCatching { nmr.cancel(ID) }; fgOn = false }
+                shown = ""
+                return
+            }
+            // служба звонков ещё не в переднем плане: остаёмся со своим уведомлением (ниже)
+        }
+        if (text == shown && fgOn) return
         shown = text
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(ID, notification(text, BtHid.hostName != null))
+        val n = notification(text, connected)
+        if (!fgOn) {
+            // геймпад подключён (или приём звонков выключен): уведомление с видимым значком; если система не даёт перейти в передний план из фона, остаётся обычное уведомление
+            runCatching { if (Build.VERSION.SDK_INT >= 29) ServiceCompat.startForeground(this, ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) else startForeground(ID, n); fgOn = true }
+                .onFailure { AppLog.e("ADBphon", "keeper fg", it); nmr.notify(ID, n) }
+        } else nmr.notify(ID, n)
     }
 
     private suspend fun waitFor(ms: Long, cond: () -> Boolean): Boolean {
@@ -181,5 +203,6 @@ class PadKeeperService : Service() {
         }
     }
 
-    companion object { private const val CH = "pad_keeper"; const val ID = 4417; const val ACTION_DISCONNECT = "app.adbphon.KEEPER_DISCONNECT"; const val ACTION_CONNECT = "app.adbphon.KEEPER_CONNECT" }
+    companion object { private const val CH = "pad_keeper_min";   // 9.0: новый канал MIN (у старого «pad_keeper» на телефонах importance=LOW: пустой значок занимал ячейку в строке состояния; важность существующего канала менять нельзя)
+         const val ID = 4417; const val ACTION_DISCONNECT = "app.adbphon.KEEPER_DISCONNECT"; const val ACTION_CONNECT = "app.adbphon.KEEPER_CONNECT" }
 }

@@ -33,6 +33,11 @@ object Term {
     private var helperCwd = "/sdcard"
     @Volatile private var helperBusy = false
 
+    private val promptMark = Regex("@@TVOPS@@([^\n]*)\n")
+    private const val PS_ECHO = "echo \"@@TVOPS@@\$(pwd)\"\n"
+    /** Приглашение как у adb shell: «a14xm:/sdcard $ » (у root «#»). */
+    private fun prompt(cwd: String): String = android.os.Build.DEVICE + ":" + cwd + (if (mode.value == "root") " # " else " $ ")
+
     private val ansi = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]|\u001B\\][^\u0007]*\u0007|\u001B[()][A-Za-z0-9]")
 
     /** Какой способ нужен сейчас, либо "" — команд выполнять нечем. */
@@ -49,7 +54,9 @@ object Term {
     }
 
     private fun append(s: String) {
-        val clean = ansi.replace(s, "").replace("\r\n", "\n").replace("\r", "")
+        var clean = ansi.replace(s, "").replace("\r\n", "\n").replace("\r", "")
+        // 9.0: root-оболочка без терминала приглашения не печатает: после каждой команды она выводит маркер с текущим каталогом, здесь он превращается в строку-приглашение
+        if (mode.value == "root") clean = promptMark.replace(clean) { m -> prompt(m.groupValues[1].trim().ifEmpty { "/" }) }
         if (clean.isEmpty()) return
         synchronized(sb) {
             sb.append(clean)
@@ -61,7 +68,11 @@ object Term {
     /** Служебная строка в окне терминала (не от оболочки). */
     private fun note(s: String) = append("\n[$s]\n")
 
-    fun clear() { synchronized(sb) { sb.setLength(0) }; ui.post(flush) }
+    fun clear() {
+        synchronized(sb) { sb.setLength(0) }; ui.post(flush)
+        // как в обычном терминале: после очистки сразу новое приглашение
+        if (running.value) when (mode.value) { "helper" -> append(prompt(helperCwd)); "root" -> write(PS_ECHO.toByteArray()); else -> write("\n".toByteArray()) }
+    }
 
     /** Запустить сеанс, если он не идёт или идёт не тем способом, который нужен сейчас. */
     fun ensure(ctx: Context) {
@@ -86,15 +97,15 @@ object Term {
                             while (gen == my) { val n = runCatching { r.read(cb) }.getOrDefault(-1); if (n < 0) break; append(String(cb, 0, n)) }
                         }
                         pump(p.inputStream); pump(p.errorStream)
+                        runCatching { p.outputStream.write(PS_ECHO.toByteArray()); p.outputStream.flush() }   // первое приглашение
                         p.waitFor()
                     }
                     if (gen == my) { running.value = false; note(ctx.getString(R.string.tc_ended)) }
                 }
-                note(ctx.getString(R.string.tc_started_root))
             }
             "helper" -> {
                 helperCwd = "/sdcard"; helperBusy = false
-                note(ctx.getString(R.string.tc_helper_note))
+                append(prompt(helperCwd))
             }
             else -> {
                 // открытие потока ADB — сетевая операция: только не в главном потоке
@@ -145,7 +156,7 @@ object Term {
                     helperCwd = out.substring(i + mark.length).trim().ifEmpty { cwd }
                     shown = out.substring(0, i).trimEnd('\n', ' ')
                 }
-                append(if (shown.isEmpty()) "" else shown + "\n")
+                append((if (shown.isEmpty()) "" else shown + "\n") + prompt(helperCwd))
             }
             helperBusy = false
         }
@@ -154,10 +165,10 @@ object Term {
     /** Отправить введённую строку. На root и в режиме помощника ввод не печатается оболочкой — показываем его здесь; у ADB-терминала оболочка печатает его сама. */
     fun sendLine(line: String) {
         if (!running.value) return
-        if (mode.value == "root") append("$ $line\n")
-        if (mode.value == "helper") append(helperCwd + " $ $line\n")
+        // приглашение уже на экране; у root и помощника набранную строку добавляем сами (у adb shell её печатает оболочка)
+        if (mode.value == "root" || mode.value == "helper") append(line + "\n")
         synchronized(sb) { markPos = sb.length }          // с этого места начинается вывод последней команды
-        if (mode.value == "helper") helperRun(line) else write((line + "\n").toByteArray())
+        if (mode.value == "helper") helperRun(line) else if (mode.value == "root") write((line + "\n" + PS_ECHO).toByteArray()) else write((line + "\n").toByteArray())
     }
 
     /** Начало вывода последней введённой команды в буфере. */
@@ -175,6 +186,7 @@ object Term {
             val last = s.lastIndexOf('\n')
             s = if (last >= 0) s.substring(0, last + 1) else if (s.isNotEmpty() && !s.endsWith("\n")) "" else s
         }
+        if (mode.value != "adb") { val tail = s.substringAfterLast('\n'); if (tail.endsWith("$ ") || tail.endsWith("# ")) s = s.dropLast(tail.length) }
         return s.trim('\n', '\r', ' ')
     }
 

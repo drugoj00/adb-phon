@@ -171,6 +171,8 @@ fun naturalCmp(a: String, b: String): Int {
 class FmParked(val conn: NetConn, val path: String, val view: String, val name: String)
 
 class FmPane(val id: Int, start: String) {
+    /** Номер последней загрузки списка: ответ более старой загрузки (например корня источника) не затирает более новую (папку из подключения). */
+    @Volatile var loadGen = 0
     /** Источник: «local» (напрямую, без ADB), «adb» (оболочка ADB), «smb» (сетевая папка). */
     var src by mutableStateOf("local")
     var smb: RemoteFs? = null
@@ -387,6 +389,7 @@ object Fm {
     fun load(p: FmPane, path: String = p.path, remember: Boolean = true, pick: String? = null) {
         if (!atTrashRoot(p, path)) p.cloudView = "drive"
         p.parked = null; p.parkedErr = null
+        val myGen = ++p.loadGen
         scope.launch {
             p.loading = true
             var tries = 0
@@ -414,6 +417,7 @@ object Fm {
                     err = FmIo.nice(e); break
                 }
             }
+            if (myGen != p.loadGen) return@launch
             p.loading = false
             if (list == null) { p.error = err; return@launch }
             if (remember && p.path != path) { p.back.add(p.path); if (p.back.size > 50) p.back.removeAt(0) }
@@ -448,7 +452,7 @@ object Fm {
         panes.forEach { it.root = prefs().getBoolean("root_p${it.id}", fresh) }
         // раскрытые узлы «домика» помнятся между запусками; самый первый запуск: сразу видно «Облачные диски» и «Добавить облако…»
         panes.forEach { if (!FmRootCfg.restoreOpen(ctx, it) && fresh) it.rootOpen.add("cloud") }
-        dense = prefs().getBoolean("dense", true); treeMode = prefs().getBoolean("tree", true); showSize = prefs().getBoolean("show_size", true)
+        dense = prefs().getBoolean("dense", true); treeMode = prefs().getBoolean("tree", true); showSize = true
         FmIo.privEnabled = prefs().getBoolean("priv", true); privOn = FmIo.privEnabled
         granted = hasFull(ctx)
         // папка при запуске: последняя / внутренняя память / Загрузки / DCIM / выбранная (для каждой панели отдельно); нет папки: внутренняя память
@@ -572,7 +576,7 @@ object Fm {
             }
             walk(FmIo.join(p.path, rel), 0)
             if (out.isEmpty()) { say(str(R.string.fm_play_none)); return@launch }
-            MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"; MediaSrc.entries = out; MediaSrc.index = 0
+            MediaSrc.fs = p.smb; MediaSrc.local = p.src != "smb"; MediaSrc.src = p.src; MediaSrc.entries = out; MediaSrc.index = 0
             val hasVideo = out.any { openCat(it.name.substringAfterLast('.', "").lowercase()) == "video" }
             if (hasVideo) sctx.startActivity(android.content.Intent(sctx, VideoPlayerActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) else AudioService.play(sctx)
         }
@@ -589,6 +593,8 @@ object Fm {
     /** Правка подключения на месте: запись, избранное и бэкап обновляются, панели с этим подключением переподключаются. */
     fun applyNetEdit(ctx: Context, old: NetConn, new: NetConn) {
         NetStore.update(ctx, old, new)
+        // 14.11.2026: дерево «Устройства» перечитывается (новая папка из поля «Общий ресурс или папка»)
+        for (k in (FmRootCfg.kids.keys + FmRootCfg.kidErr.keys).toList()) if (k.startsWith("N|" + old.kind + "|" + old.host + "|" + old.user + "|") || k.startsWith("N|" + new.kind + "|" + new.host + "|" + new.user + "|")) { FmRootCfg.kids.remove(k); FmRootCfg.kidErr.remove(k) }
         FmRootCfg.ver++
         panes.forEach { pp ->
             val n = pp.net
@@ -611,7 +617,22 @@ object Fm {
         connectNet(p, pk.conn, pk.path.takeIf { it.isNotBlank() && pk.view != "top" }, parked = pk, restore = Startup.Focus("net:" + pk.conn.kind + "|" + pk.conn.host + "|" + pk.conn.user, pk.path, pk.view, pk.name))
     }
 
-    fun connectNet(p: FmPane, c: NetConn, startPath: String? = null, fallbackLocal: Boolean = false, restore: Startup.Focus? = null, parked: FmParked? = null, delayMs: Long = 0L) {
+    /** 14.11.2026 (владелица): нажатие на найденное по LAN устройство сразу открывает его в панели: общий ресурс из подключения или корень (список ресурсов). Протокол: выбранный или SMB, при неудаче FTP, WebDAV, SFTP, без вопросов. */
+    fun openLanHost(p: FmPane, h: NetHost) {
+        scope.launch {
+            val pref = listOf("smb", "ftp", "dav", "sftp")
+            val order = (listOf(FmRootCfg.lanConn(h).kind) + h.kinds.sortedBy { k -> pref.indexOf(k).let { if (it < 0) 9 else it } }).distinct()
+            for ((i, k) in order.withIndex()) {
+                p.error = null
+                connectNet(p, FmRootCfg.lanConn(h, k), fresh = true)
+                delay(250)
+                var waited = 0L
+                while (p.status != null && waited < 30_000L) { delay(150); waited += 150 }   // не больше 30 с на одну попытку
+                if (p.error == null || i == order.lastIndex) break
+            }
+        }
+    }
+    fun connectNet(p: FmPane, c: NetConn, startPath: String? = null, fallbackLocal: Boolean = false, restore: Startup.Focus? = null, parked: FmParked? = null, delayMs: Long = 0L, fresh: Boolean = false) {
         // облако без модуля «ADB-phon Облака»: предложить скачать и установить (при запуске программы ничего не предлагается и в сеть не ходит)
         if (c.kind == "cloud" && !CloudModule.ok(sctx) && delayMs == 0L && parked == null && !fallbackLocal && CloudModule.supportedDevice()) { dlg = FmDlg.CloudModule { connectNet(p, c, startPath, fallbackLocal, restore) }; return }
         if (parked == null) { p.parked = null; p.parkedErr = null } else p.parkedErr = null
@@ -632,7 +653,8 @@ object Fm {
             p.net = c
             p.cloudView = "top"; FmRootCfg.sel.clear()
             val key = "net:" + c.kind + "|" + c.host + "|" + c.user
-            val rf = restore?.takeIf { it.key == key } ?: if (startPath.isNullOrBlank()) Startup.loadFocus(sctx, p.id)?.takeIf { it.key == key } else null
+            // fresh (14.11.2026): нажатие на устройство в LAN открывает общий ресурс из подключения или корень, а не прежнюю папку
+            val rf = if (fresh) null else restore?.takeIf { it.key == key } ?: if (startPath.isNullOrBlank()) Startup.loadFocus(sctx, p.id)?.takeIf { it.key == key } else null
             setSource(p, "smb", fs)
             // начальная папка: запомненная при запуске, иначе путь из записи подключения (для SMB: общий ресурс или папка в нём)
             val own = c.path.trim().trim('/').takeIf { it.isNotEmpty() }?.let { if (c.kind == "smb") "smb://" + c.host.trim().trim('/') + "/" + it + "/" else if (c.kind == "cloud") null else "/" + it }
@@ -920,13 +942,13 @@ object Fm {
         val fs = p.smb ?: return false
         if (p.src != "smb" || fs is ArchiveFs) return false
         return if (c.kind == "cloud") fs is CloudFs && p.path.trim('/').isEmpty() && CloudTrash.supported(CloudIcons.typeOf(sctx, c))
-        else NetTrash.supported(c) && NetTrash.isRoot(c, fs, p.path)
+        else false   // 14.11.2026: у LAN и прочих сетевых подключений корзины нет, корень виден как обычная папка
     }
     /** Сетевое подключение панели, у которого есть корзина (облако или сетевой источник); null: корзины нет. */
     fun trashConn(p: FmPane): NetConn? = p.net?.takeIf { p.src == "smb" && p.smb !is ArchiveFs && CloudTrash.supported(CloudTrash.typeFor(sctx, it)) }
     private fun atTrashRoot(p: FmPane, path: String): Boolean {
         val c = p.net ?: return false
-        return if (c.kind == "cloud") path.trim('/').isEmpty() else p.smb?.let { NetTrash.supported(c) && NetTrash.isRoot(c, it, path) } ?: false
+        return c.kind == "cloud" && path.trim('/').isEmpty()
     }
     /** Виртуальный вид («Корзина» или две строки): настоящие файлы корня не видны, поэтому действия над ними запрещены. */
     fun virt(p: FmPane): Boolean = cloudRoot(p) && p.cloudView != "drive"
@@ -1427,9 +1449,9 @@ object Fm {
 
     /** Встроенный просмотрщик или редактор для типа файла независимо от запомненного приложения. */
     fun openBuiltinForce(p: FmPane, it: FmItem) {
-        if (p.src == "adb") { say(str(R.string.fm_err_unsupported)); return }
         val f = join(p.path, it.name)
         DocKind.of(it.ext)?.let { k -> openDoc(sctx, p, it, k); return }
+        if (p.src == "adb") { say(str(R.string.fm_err_unsupported)); return }
         openCat(it.ext)?.let { cat -> openBuiltin(sctx, p, it, cat, f); return }
         openWith(p, it, null)
     }
@@ -1437,7 +1459,7 @@ object Fm {
     /** «Открыть как…»: тип выбирается вручную. */
     fun openAs(p: FmPane, it: FmItem, type: String) = scope.launch {
         val f = join(p.path, it.name)
-        if (p.src == "adb" && type != "apk") { say(str(R.string.fm_err_unsupported)); return@launch }
+        if (p.src == "adb" && type != "apk" && type != "text") { say(str(R.string.fm_err_unsupported)); return@launch }
         when (type) {
             "text" -> openDoc(sctx, p, it, "text")
             "image" -> openBuiltin(sctx, p, it, "photo", f)
@@ -1490,6 +1512,24 @@ object Fm {
             .onFailure { say(str(R.string.fm_no_app)) }
     }
 
+    /** 9.0: в начале файла нет нулевых байтов и почти нет «мусорных» знаков: это текст (любое расширение). Читаем не больше 4 КБ. */
+    private suspend fun looksLikeText(p: FmPane, it: FmItem): Boolean {
+        if (it.size > 20L * 1024 * 1024) return false
+        val head = runCatching { withContext(Dispatchers.IO) {
+            val path = join(p.path, it.name)
+            when (p.src) {
+                "adb" -> FmIo.readText(p, path).take(4000).toByteArray(Charsets.UTF_8)
+                "smb" -> p.smb?.head(path, 4096) ?: ByteArray(0)
+                else -> java.io.File(path).inputStream().use { i -> val b = ByteArray(4096); val n = i.read(b); if (n <= 0) ByteArray(0) else b.copyOf(n) }
+            }
+        } }.getOrDefault(ByteArray(0))
+        if (head.isEmpty()) return it.size == 0L
+        if (head.any { b -> b.toInt() == 0 }) return false
+        val s = String(head, Charsets.UTF_8)
+        val bad = s.count { c -> c == '\uFFFD' || (c.code < 32 && c != '\n' && c != '\r' && c != '\t' && c != '\u000C' && c != '\u001B') }
+        return bad * 20 <= s.length
+    }
+
     fun openFile(p: FmPane, it: FmItem) = scope.launch {
         val f = join(p.path, it.name)
         if (p.src == "adb" && (it.ext == "apk" || ApkInstall.isBundle(it.ext))) { ApkInstall.start(p, it); return@launch }
@@ -1507,6 +1547,10 @@ object Fm {
             DocKind.of(it.ext)?.let { k -> openDoc(sctx, p, it, k); return@launch }
             openCat(it.ext)?.let { cat -> openBuiltin(sctx, p, it, cat, f); return@launch }
         }
+        // 9.0: документы и текст открываются встроенными просмотрщиками и на источнике «ADB/root» (файл копируется в кэш и читается там)
+        if (p.src == "adb" && how == "builtin") DocKind.of(it.ext)?.let { k -> openDoc(sctx, p, it, k); return@launch }
+        // 9.0: файл с любым расширением (или без него), внутри которого обычный текст, открывается во встроенном редакторе, а не уходит в выбор приложения
+        if (how == "builtin" && p.src != "smb" && DocKind.of(it.ext) == null && openCat(it.ext) == null && Arc.kindOf(it.name) == null && it.ext != "apk" && looksLikeText(p, it)) { openDoc(sctx, p, it, "text"); return@launch }
         when (p.src) {
             "adb" -> if (it.ext == "apk") {
                 val out = runCatching { Adb.shell(pmInstallCmd(f), 120_000L) }.getOrDefault("")
@@ -1523,6 +1567,10 @@ object Fm {
         val out = runCatching { FmIo.readText(p, join(p.path, name)) }.getOrElse { FmIo.nice(it) }
         dlg = FmDlg.TextView(name, out)
     }
+
+    /** 9.0: имена (последнее звено пути) выбранных элементов в буфер, по строке на каждый. */
+    fun copyNames(names: List<String>) = copyText(sctx, names.joinToString("\n") { it.substringAfterLast('/') })
+    fun copyPaths(p: FmPane, names: List<String>) = copyText(sctx, names.joinToString("\n") { join(p.path, it) })
 
     fun copyPath(p: FmPane, name: String?) {
         val full = if (name == null) p.path else join(p.path, name)
@@ -2250,10 +2298,11 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
     val prim = MaterialTheme.colorScheme.primary
     val fs = if (Fm.dense) 15.sp else 14.sp
     val fw = if (Fm.dense) FontWeight.Medium else FontWeight.Normal
-    val h = if (Marq.tv) 40.dp else 30.dp
+    // 9.0: полоса выше, «домик» и «обновить» крупнее (размер строится от значка «домика», а не от текста), всё растёт вместе с «Размером элементов и значков»
+    val h = if (Marq.tv) 48.dp else 40.dp
     Row(Modifier.fillMaxWidth().height(h).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 38.dp).clickable { Fm.active = p.id; fmShowRoot(p) }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Home, stringResource(R.string.fm_root_title), Modifier.size(18.dp), tint = if (p.root) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 46.dp).clickable { Fm.active = p.id; fmShowRoot(p) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Home, stringResource(R.string.fm_root_title), Modifier.size(if (Marq.tv) 30.dp else 26.dp), tint = if (p.root) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
         }
         p.net?.takeIf { p.src == "smb" && !p.root }?.let { NetBrandIcon(it, if (Marq.tv) 24.dp else 20.dp, Modifier.padding(end = 4.dp)) }
         val pkc = p.parked?.takeIf { !p.root }
@@ -2280,8 +2329,8 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
             }
         }
         // 10.11.2026 (владелица: «надо кнопка обновить, чтобы можно было и самому обновлять»): на экране «Устройства» справа в заголовке кнопка «Обновить» (перечитывает всё раскрытое: диски, облака, корзины)
-        if (p.root) androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 38.dp).clickable { Fm.active = p.id; FmRootCfg.refreshAll(Fm.sctx) }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Refresh, stringResource(R.string.fm_refresh), Modifier.size(20.dp), tint = prim)
+        if (p.root) androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 46.dp).clickable { Fm.active = p.id; FmRootCfg.refreshAll(Fm.sctx) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Refresh, stringResource(R.string.fm_refresh), Modifier.size(if (Marq.tv) 28.dp else 24.dp), tint = prim)
         }
     }
 }
@@ -2533,7 +2582,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
             // значок того же размера, что в списке «Софт» (32 dp); долгое нажатие по папке: цвет папки
             if (f.isDir) {
                 val key = folderKey(p, full)
-                FolderIcon(UiPrefs.folderColors[key] ?: UiPrefs.folderDefault, isOpen, 32.dp,
+                FolderOrAppIcon(full, UiPrefs.folderColors[key] ?: UiPrefs.folderDefault, isOpen, 32.dp,
                     Modifier, customKey = "f:" + key)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
@@ -2566,7 +2615,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
     val createDir = if (f.isDir) full else full.substringBeforeLast(Char(47)).ifEmpty { Char(47).toString() }
     LDropdownMenu(true, { p.menuFor = null }) {
         @Composable fun item(l: Int, on: Boolean = true, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { p.menuFor = null; run() }, enabled = on)
-        if (p.src == "smb" && p.smb is AppsFs && !f.isDir && !multi) { AppMenuItems(p, f, o) { p.menuFor = null }; return@LDropdownMenu }
+        if (p.src == "smb" && p.smb is AppsFs && !f.isDir && !multi) { AppMenuItems(p, f, o) { p.menuFor = null }; item(R.string.copy_name) { Fm.copyNames(listOf(f.name)) }; return@LDropdownMenu }
         if (p.src == "smb" && p.smb is AppsFs && multi) { AppBatchMenuItems(p, names.filter { n -> p.items.firstOrNull { it.name == n }?.isDir == false }, o) { p.menuFor = null }; return@LDropdownMenu }
         if (multi) Text(stringResource(R.string.fm_selected, names.size), Modifier.padding(horizontal = 12.dp, vertical = 2.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
         if (!multi) {
@@ -2606,7 +2655,9 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
             item(R.string.fc_title) { Fm.dlg = FmDlg.FolderColor(folderKey(p, full), f.name) }
             item(R.string.fm_to_bookmarks) { Fm.toggleBookmark(full) }
         }
-        if (!multi) item(R.string.fm_copy_path) { Fm.copyPath(p, rel) }
+        // 9.0: «Копировать имя» и «Копировать путь» есть в меню любого файла и папки в любой панели и источнике (для нескольких выбранных: по строке на каждый)
+        item(R.string.copy_name) { Fm.copyNames(names) }
+        item(R.string.fm_copy_path) { Fm.copyPaths(p, names) }
         HorizontalDivider()
         CreateMenu(p, createDir) { p.menuFor = null }
     }
@@ -2766,7 +2817,7 @@ private fun FmDialogs() {
                 }
             } } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } })
-        is FmDlg.Props -> LAlertDialog(onDismissRequest = close, title = { Text(d.title) }, text = { Column(Modifier.barScroll()) { Text(d.body, fontSize = 13.sp, fontFamily = FontFamily.Monospace) } },
+        is FmDlg.Props -> LAlertDialog(onDismissRequest = close, title = { Text(d.title) }, text = { Column(Modifier.barScroll()) { PropsBody(d.body) } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
         is FmDlg.TextView -> LAlertDialog(onDismissRequest = close, title = { Text(d.title, maxLines = 1) },
             text = { Column(Modifier.heightIn(max = 420.dp).barScroll()) { Text(d.body, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } },

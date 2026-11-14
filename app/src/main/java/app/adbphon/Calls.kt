@@ -342,6 +342,10 @@ object CallListen {
 }
 
 class CallListenService : Service() {
+    companion object {
+        /** Служба звонков работает и уже показывает своё уведомление переднего плана (по нему PadKeeperService решает, можно ли снять своё). */
+        @Volatile var fg = false
+    }
     @Volatile private var running = false
     private var thread: Thread? = null
     @Volatile private var conn: HttpURLConnection? = null
@@ -375,14 +379,15 @@ class CallListenService : Service() {
         }
         runCatching { ServiceCompat.startForeground(this, Calls.NOTIF_LISTEN, n, t) }.onFailure {
             android.util.Log.w("TvoCall", "startForeground type=$t: $it")
-            runCatching { ServiceCompat.startForeground(this, Calls.NOTIF_LISTEN, n, if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0) }
+            runCatching { ServiceCompat.startForeground(this, Calls.NOTIF_LISTEN, n, if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0) }.onFailure { fg = false; return }
         }
+        fg = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "off") {
             getSharedPreferences("invites", MODE_PRIVATE).edit().putBoolean("call_listen", false).apply()
-            if (Calls.current == null) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
+            if (Calls.current == null) { fg = false; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
         }
         foreground(intent?.getBooleanExtra("incall", false) == true || Calls.current != null)
         Invites.ensureServer(applicationContext)
@@ -394,6 +399,7 @@ class CallListenService : Service() {
     }
 
     override fun onDestroy() {
+        fg = false
         running = false
         runCatching { conn?.disconnect() }
         super.onDestroy()

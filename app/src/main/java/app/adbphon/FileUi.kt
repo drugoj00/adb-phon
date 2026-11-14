@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
@@ -418,9 +420,19 @@ fun FilesLookSection() {
     val cmV = CloudModule.installedVersion(ctx)
     var cmAuto by remember(CloudModule.autoTick) { mutableStateOf(CloudModule.auto(ctx)) }
     var cmDel by remember { mutableStateOf(false) }
-    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        androidx.compose.material3.Text(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.weight(1f))
-        if (cmV != null) androidx.compose.material3.TextButton({ cmDel = true }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_cmod_remove)) }
+    // 9.0: обе кнопки всегда на месте: «Установить» (или «Обновить», если есть новая версия) и «Удалить»; неподходящая в этом состоянии серая
+    val cmUp = cmV != null && CloudModule.upgradeAvailable(ctx)
+    val cmCanInstall = CloudModule.supportedDevice() && (cmV == null || cmUp)
+    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+        androidx.compose.material3.Text(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp)
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton({ CloudModule.reset(); CloudModule.start(ctx, null, upgrade = cmUp) }, androidx.compose.ui.Modifier.weight(1f), enabled = cmCanInstall) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(if (cmUp) R.string.cmod_btn_update else R.string.cmod_btn_install), maxLines = 1)
+            }
+            androidx.compose.material3.OutlinedButton({ cmDel = true }, androidx.compose.ui.Modifier.weight(1f), enabled = cmV != null) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_cmod_remove), maxLines = 1)
+            }
+        }
     }
     SettingSwitch(cmAuto, { cmAuto = it; CloudModule.setAuto(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_cmod_auto), androidx.compose.ui.res.stringResource(R.string.set_cmod_auto_hint))
     if (cmDel) LAlertDialog(
@@ -430,7 +442,6 @@ fun FilesLookSection() {
         confirmButton = { androidx.compose.material3.TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
         dismissButton = { androidx.compose.material3.TextButton({ cmDel = false }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
     )
-    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_open_files), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     var remTick by remember { mutableStateOf(0) }
     val remembered = remember(remTick, UiPrefs.openAs.size) {
         val l = ArrayList<Pair<String, String>>()
@@ -438,7 +449,8 @@ fun FilesLookSection() {
         listOf("apk", "apks", "apkm", "xapk").forEach { e -> ApkInstall.saved(ctx, e)?.let { l += e to it } }
         l.sortedBy { it.first }
     }
-    if (remembered.isEmpty()) androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.inst_ask), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+    // 9.0: пункт показывается только когда есть запомненный выбор программы для типа файла; пояснение свёрнуто в названии, одинокого слова «Спрашивать» больше нет
+    if (remembered.isNotEmpty()) HintTitle(androidx.compose.ui.res.stringResource(R.string.set_open_files), androidx.compose.ui.res.stringResource(R.string.set_open_files_hint))
     remembered.forEach { (e, id) ->
         val what = when {
             id == "builtin" -> androidx.compose.ui.res.stringResource(R.string.oa_builtin)
@@ -473,3 +485,55 @@ fun FilesLookSection() {
 
 @Composable
 private fun Modifier.androidx_scroll(): Modifier = this.then(Modifier.heightIn(max = 360.dp)).then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
+
+
+// ------------------------------------------------------------------ значки папок приложений (9.0)
+
+private val appFolderParent = Regex("^(/storage/emulated/\\d+|/sdcard|/storage/self/primary|/data/media/\\d+)/Android/(data|obb|media)$|^/data/(data|user/\\d+|user_de/\\d+)$")
+
+/** Имя пакета, если папка лежит в Android/data, obb, media или /data/data (имя папки совпадает с пакетом приложения), иначе null. */
+fun appFolderPkg(parentPath: String, name: String): String? =
+    if (name.contains('.') && !name.startsWith(".") && name.all { it.isLetterOrDigit() || it == '.' || it == '_' } && appFolderParent.matches(parentPath.trimEnd('/'))) name else null
+
+/** Папка приложения: значок самого приложения (если оно установлено на этом устройстве) с маленькой папкой в углу, иначе обычная папка. */
+@Composable
+fun AppFolderIcon(pkg: String, colorIdx: Int, open: Boolean, size: Dp, customKey: String?, modifier: Modifier = Modifier) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var bmp by remember(pkg) { mutableStateOf(Thumbs.peek("i:$pkg")) }
+    LaunchedEffect(pkg) { if (bmp == null) bmp = Thumbs.appIcon(ctx, pkg) }
+    val b = bmp
+    if (b == null || (customKey != null && CustomIcons.spec(customKey) != null)) FolderIcon(colorIdx, open, size, modifier, customKey)
+    else Box(modifier.size(size)) {
+        Image(b.asImageBitmap(), null, Modifier.size(size * 0.84f).align(Alignment.TopStart).clip(RoundedCornerShape(size * 0.18f)))
+        FolderIcon(colorIdx, open, size * 0.5f, Modifier.align(Alignment.BottomEnd))
+    }
+}
+
+@Composable
+fun FolderOrAppIcon(fullPath: String, colorIdx: Int, open: Boolean, size: Dp, modifier: Modifier = Modifier, customKey: String? = null) {
+    val pkg = appFolderPkg(fullPath.substringBeforeLast('/', ""), fullPath.substringAfterLast('/'))
+    if (pkg != null) AppFolderIcon(pkg, colorIdx, open, size, customKey, modifier) else FolderIcon(colorIdx, open, size, modifier, customKey)
+}
+
+
+/** 9.0: окно «Свойства»: названия пунктов цветом интерфейса (акцент), между строками тонкие разделители, пустая строка отделяет несколько файлов. */
+@Composable
+fun PropsBody(body: String) {
+    val keyColor = MaterialTheme.colorScheme.primary
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxWidth()) {
+        val rows = body.split('\n')
+        rows.forEachIndexed { i, r ->
+            if (r.isBlank()) { Spacer(Modifier.height(10.dp)); return@forEachIndexed }
+            val at = r.indexOf(": ")
+            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
+                if (at in 1..24) {
+                    androidx.compose.material3.Text(r.substring(0, at), Modifier.weight(0.44f).padding(end = 8.dp), color = keyColor, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 12.sp)
+                    androidx.compose.material3.Text(r.substring(at + 2), Modifier.weight(0.56f), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                } else androidx.compose.material3.Text(r, Modifier.fillMaxWidth(), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            }
+            val nextBlank = i + 1 >= rows.size || rows[i + 1].isBlank()
+            if (!nextBlank) androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = lineColor)
+        }
+    }
+}

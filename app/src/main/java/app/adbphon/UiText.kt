@@ -9,6 +9,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
@@ -18,11 +19,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -163,10 +169,13 @@ fun Text(
 /** Растёт при нажатии «Свернуть все»: все раскрытые пояснения на странице закрываются. */
 val LocalCollapseKey = compositionLocalOf { 0 }
 
+/** 9.0: счётчик «свернуть все разделы»: растёт, когда пользователь уходит из программы (MainActivity.onStop), поэтому при следующем открытии всё свёрнуто. */
+object CollapseAll { var key by mutableStateOf(0); fun bump() { key++ } }
+
 /** Название настройки со стрелкой; по нажатию (или ОК пультом) раскрывается пояснение. Состояние только на время просмотра страницы. */
 @Composable
 fun Collapsible(title: String, modifier: Modifier = Modifier, bold: Boolean = false, titleContent: (@Composable () -> Unit)? = null, body: @Composable () -> Unit) {
-    val key = LocalCollapseKey.current
+    val key = LocalCollapseKey.current + CollapseAll.key
     var open by remember(key) { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth().clickable { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -206,6 +215,24 @@ fun HintTitle(
     }
 }
 
+/** Кнопка действия, у которой пояснение сворачивается стрелкой справа (правило: пояснение не лежит открытым текстом). */
+@Composable
+fun ActionWithHint(label: String, hint: String, onClick: () -> Unit) {
+    val key = LocalCollapseKey.current + CollapseAll.key
+    var open by remember(key) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.OutlinedButton(onClick, Modifier.weight(1f)) { androidx.compose.material3.Text(label) }
+            androidx.compose.material3.IconButton({ open = !open }) {
+                Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+            }
+        }
+        AnimatedVisibility(open, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            androidx.compose.material3.Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        }
+    }
+}
+
 private class MarqState { var content = 0; var view = 0 }
 
 /**
@@ -234,4 +261,20 @@ fun Modifier.liteMarquee(on: Boolean): Modifier {
         st.content = p.width; st.view = w
         layout(w, p.height) { p.placeRelative(-offset.floatValue.toInt(), 0) }
     }
+}
+
+
+// ------------------------------------------------------------------ глазик в полях паролей (9.0)
+
+/** Состояние поля пароля: по умолчанию скрыт; значок «глазик» справа в полосе поля переключает показ. */
+class PwState { var shown by mutableStateOf(false); val transform: VisualTransformation get() = if (shown) VisualTransformation.None else PasswordVisualTransformation() }
+
+@Composable
+fun rememberPw(): PwState = remember { PwState() }
+
+/** Компактный значок «показать/скрыть пароль» цветом интерфейса. */
+@Composable
+fun PwEyeIcon(shown: Boolean, onToggle: () -> Unit) {
+    Icon(if (shown) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, androidx.compose.ui.res.stringResource(if (shown) R.string.pw_hide else R.string.pw_show),
+        Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable { onToggle() }.padding(5.dp), tint = MaterialTheme.colorScheme.primary)
 }

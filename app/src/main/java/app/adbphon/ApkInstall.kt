@@ -198,7 +198,7 @@ object ApkInstall {
         if (!UiPrefs.askInstaller) {
             val saved = saved(ctx, item.ext)
             val o = saved?.let { s -> opts.firstOrNull { it.id == s && it.enabled } }
-                ?: opts.firstOrNull { it.id == (if (Adb.isConnected || isBundle(item.ext)) "adb" else "system") && it.enabled }
+                ?: opts.firstOrNull { it.id == "adb" && it.enabled }
                 ?: shown.firstOrNull { it.enabled }
             if (o != null) { run(p, item, o); return }
         }
@@ -280,6 +280,8 @@ object ApkInstall {
             o.id == "builtin" -> Fm.openBuiltinForce(p, item)
             o.id == "adb" && isBundle(item.ext) -> Fm.installBundleViaAdb(p, item)
             o.id == "adb" -> Fm.installViaAdb(p, item)
+            // 9.0: без ADB и без root системный установщик тоже сначала показывает окно с версиями (установленная и новая), потом ставит системной сессией
+            o.id == "system" && item.ext == "apk" && !(Adb.isConnected && !FmIo.remote) -> Fm.installViaAdb(p, item)
             else -> Fm.openWith(p, item, o.component ?: o.pkg, if (o.id == "system" || item.ext == "apk") APK_MIME else null)
         }
     }

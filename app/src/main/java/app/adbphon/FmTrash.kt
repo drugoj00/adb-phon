@@ -358,7 +358,8 @@ fun FilesDeleteSection() {
         EqChoice(stringResource(R.string.ds_c_off), FmDel.confirm == FmDel.OFF) { FmDel.setConfirm(ctx, FmDel.OFF) },
     ), perRow = 1)
     val off = FmDel.confirm == FmDel.OFF
-    Text(stringResource(if (off) R.string.ds_off_warn else R.string.ds_hint), fontSize = 12.sp, color = if (off) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+    if (off) Text(stringResource(R.string.ds_off_warn), fontSize = 12.sp, color = Color(0xFFC62828))
+    else Collapsible(stringResource(R.string.hint_more)) { Text(stringResource(R.string.ds_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
     SettingSwitch(FmDel.trashOn, { FmDel.setTrashOn(ctx, it) }, stringResource(R.string.ft_switch), stringResource(R.string.ft_switch_hint))
     // 7.5: параметры корзины остаются на месте и при выключенной корзине (приглушены, не работают), чтобы страница не прыгала и нажатие по соседнему
     // пункту не попадало на «Окно терминала» и «Резервную копию», сдвинувшиеся вверх

@@ -35,8 +35,9 @@ fun ArcPassDialog(d: FmDlg.ArcPass, close: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(d.file.name, fontSize = 13.sp, maxLines = 1)
+                val pw = rememberPw()   // 9.0: глазик в поле пароля
                 OutlinedTextField(t, { t = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.arc_password_hint), maxLines = 1) },
-                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                    visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
             }
         },
         confirmButton = { TextButton({ close(); val c = t.toCharArray(); Fm.arcPass[d.file.absolutePath] = c; d.arc?.password = c; d.arc?.invalidate(); d.retry() }) { Text(stringResource(R.string.btn_yes)) } },
@@ -93,8 +94,9 @@ fun MakeArcDialog(d: FmDlg.MakeArchive, close: () -> Unit) {
                 Row(Modifier.fillMaxWidth().androidxHScroll(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(0 to R.string.arc_lv_store, 1 to R.string.arc_lv_fast, 6 to R.string.arc_lv_normal, 9 to R.string.arc_lv_max).forEach { (v, l) -> FilterChip(level == v, { level = v }, { Text(stringResource(l), fontSize = 12.sp) }) }
                 }
+                val pw = rememberPw()   // 9.0: глазик в поле пароля
                 if (fmt == "zip") OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.arc_password_optional), maxLines = 1) },
-                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                    visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
             }
         },
         confirmButton = { TextButton({ close(); Fm.makeArc(d.pane, d.names, name.trim().ifEmpty { base } + "." + fmt, fmt, level, if (fmt == "zip" && pass.isNotEmpty()) pass.toCharArray() else null) }) { Text(stringResource(R.string.btn_yes)) } },

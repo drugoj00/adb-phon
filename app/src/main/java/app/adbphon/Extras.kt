@@ -1000,12 +1000,9 @@ fun EqChoices(items: List<EqChoice>, perRow: Int = items.size, minH: androidx.co
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
-    var colKey by remember { mutableStateOf(0) }
+    val colKey = 0   // 9.0: «Свернуть все» убрано; разделы сворачиваются сами при выходе из программы (CollapseAll)
     androidx.compose.runtime.CompositionLocalProvider(LocalCollapseKey provides colKey) {
     TabColumn("tab.settings", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton({ colKey++ }) { Text(stringResource(R.string.set_collapse_all), fontSize = 13.sp) }
-        }
         Text(stringResource(R.string.set_theme), fontWeight = FontWeight.Medium)
         EqChoices(listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).map { (code, label) ->
             EqChoice(stringResource(label), vm.theme == code) { vm.changeTheme(code) }
@@ -1057,8 +1054,7 @@ fun SettingsScreen(vm: MainViewModel) {
         ShizukuSection()
         val ctx = LocalContext.current
         val copied = stringResource(R.string.copied)
-        androidx.compose.material3.OutlinedButton({ Setup.only = null; Setup.open = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.su_open)) }
-        Text(stringResource(R.string.su_open_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+        ActionWithHint(stringResource(R.string.su_open), stringResource(R.string.su_open_hint)) { Setup.only = null; Setup.open = true }
         StartupSection(ctx)
         FilesLookSection()
         FilesDeleteSection()

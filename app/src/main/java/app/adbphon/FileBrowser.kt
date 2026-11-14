@@ -175,8 +175,9 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
                 OutlinedTextField(host, { host = it.trim() }, label = { Text(stringResource(R.string.fb_host)) }, singleLine = true, colors = fields, modifier = Modifier.fillMaxWidth())
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.fb_user)) }, singleLine = true, colors = fields, modifier = Modifier.weight(1f))
+                    val pw = rememberPw()   // 9.0: глазик в поле пароля
                     OutlinedTextField(pass, { pass = it }, label = { Text(stringResource(R.string.fb_pass)) }, singleLine = true, colors = fields,
-                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.weight(1f))
+                        visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } }, modifier = Modifier.weight(1f))
                 }
                 Chip(stringResource(R.string.fb_connect), true) { if (host.isNotBlank()) smb = SmbFs(host, user, pass) }
             } else {

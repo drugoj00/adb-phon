@@ -69,15 +69,15 @@ fun LAlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = { LangScope(confirmButton) },
         dismissButton = dismissButton?.let { d -> { LangScope(d) } },
-        title = title?.let { t -> { LangScope(t) } },
-        text = text?.let { t -> { LangScope(t) } },
+        title = title?.let { t -> { LangScope { SelectableArea(t) } } },
+        text = text?.let { t -> { LangScope { SelectableArea(t) } } },
     )
 }
 
 /** Dialog с языком из настроек программы (Compose в окнах подставляет контекст системы). */
 @androidx.compose.runtime.Composable
 fun LDialog(onDismissRequest: () -> Unit, properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(), content: @androidx.compose.runtime.Composable () -> Unit) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.imeGateKeys()) { LangScope(content) } }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.imeGateKeys()) { LangScope { SelectableArea(content) } } }
 }
 
 /** DropdownMenu с языком из настроек программы. */

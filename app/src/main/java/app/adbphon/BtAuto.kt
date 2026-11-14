@@ -277,6 +277,18 @@ object BtAuto {
         }
     }
 
+    /** 9.0: убрать из сопряжённых любое одно устройство из списка (не только подключённое сейчас); [done] вызывается, когда Android убрал запись. */
+    fun forgetDevice(ctx: Context, address: String, done: () -> Unit = {}) {
+        val app = ctx.applicationContext
+        scope.launch {
+            if (BtHid.hostAddress()?.equals(address, true) == true) { runCatching { BtHid.disconnect() }; delay(400) }
+            val dev = runCatching { adapter(app)?.getRemoteDevice(address) }.getOrNull()
+            if (dev != null) { runCatching { dev.javaClass.getMethod("removeBond").invoke(dev) }; unmarkAndroid(app, address) }
+            delay(700)
+            done()
+        }
+    }
+
     /** «Отключить и забыть»: разрывает HID, удаляет сопряжение на телефоне и возвращает Bluetooth цели, если включали его мы. */
     fun forget(ctx: Context) {
         userStopped = true
