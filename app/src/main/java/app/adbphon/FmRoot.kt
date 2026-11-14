@@ -196,6 +196,39 @@ object FmRootCfg {
         }
     }
     fun lanConn(h: NetHost, kind: String? = null): NetConn { val k = kind ?: lanKindOver[h.ip]?.takeIf { it in h.kinds } ?: lanKind?.takeIf { it in h.kinds } ?: h.kinds.firstOrNull() ?: "smb"; return NetConn(k, if (k == "dav") davUrlOf(h) else h.ip, 0, "", "", "", "", h.name) }
+    /** 9.3: папка-приёмник для копирования и переноса, когда другая панель показывает дерево «Устройства»: берётся последняя РАСКРЫТАЯ папка этой панели (источник любой: память, SD/USB, ADB, сеть, облако),
+     *  если ничего не раскрыто: папка строки с фокусом или последней нажатой (у файла его родитель). Иначе null (сообщение «раскрой папку»). */
+    class RowRef(val key: String, val node: String?)
+    private val lastRow = java.util.concurrent.ConcurrentHashMap<Int, RowRef>()
+    fun noteRow(paneId: Int, key: String, node: String?) { lastRow[paneId] = RowRef(key, node) }
+    class Dst(val src: String, val net: NetConn?, val path: String, val node: String) {
+        fun pane(): FmPane = FmPane(9, path).also { ps ->
+            if (net != null) { ps.src = "smb"; ps.smb = fsFor(net); ps.net = net } else ps.src = src
+        }
+        fun label(): String = Fm.pathLabel(pane(), if (net != null) "smb" else src, path)
+    }
+    /** Идентификатор узла дерева («L|путь», «D|путь», «N|вид|адрес|логин|путь») → место для записи. */
+    fun nodeDst(id: String): Dst? = runCatching {
+        when {
+            id.startsWith("L|") -> Dst("local", null, id.removePrefix("L|").ifEmpty { "/" }, id)
+            id.startsWith("D|") -> Dst("adb", null, id.removePrefix("D|").ifEmpty { "/" }, id)
+            id.startsWith("N|") -> {
+                val a = id.split('|', limit = 5)
+                val c = NetStore.list(Fm.sctx).firstOrNull { it.kind == a[1] && it.host == a[2] && it.user == a[3] } ?: return@runCatching null
+                val fs = fsFor(c)
+                val rest = a.getOrNull(4).orEmpty()
+                val path = if (rest == NetTrash.ROOT_MARK) NetTrash.rootPath(c, fs) else rest.ifEmpty { ownPath(c) ?: fs.root }
+                Dst("smb", c, path, id)
+            }
+            else -> null
+        }
+    }.getOrNull()
+    fun destFor(o: FmPane): Dst? {
+        o.rootOpen.toList().asReversed().firstNotNullOfOrNull { nodeDst(it) }?.let { return it }
+        val ref = lastRow[o.id]
+        if (ref?.node != null && ref.key in rowsOf(o.id)) nodeDst(ref.node)?.let { return it }
+        return null
+    }
     /** Фокус пульта: первый значок нижней панели выбора и ключ последней видимой строки списка (стрелка «вниз» на ней уходит на панель). */
     val barFocus = androidx.compose.ui.focus.FocusRequester()
     @Volatile var lastVisKey: String? = null
@@ -866,20 +899,37 @@ internal object RootSelOps {
             FmRootCfg.focusRowLater(focusKey)
         }
     }
+    /** После копирования или переноса: дождаться конца заданий и перечитать на месте источники и приёмник. */
+    suspend fun afterJobs(parents: List<String>) {
+        kotlinx.coroutines.delay(700)
+        var n = 0
+        while ((Fm.jobs.isNotEmpty() || Fm.dlg is FmDlg.Conflict) && n < 4000) { kotlinx.coroutines.delay(300); n++ }
+        kotlinx.coroutines.delay(500)
+        parents.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }
+        CloudTrash.ver++
+    }
     fun transfer(p: FmPane, move: Boolean) {
         val o = Fm.panes[1 - p.id]
         val groups = files.groupBy { (it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L") + "#" + it.parentPath }
         val par = files.map { it.parentId }
-        // 9.3: другая панель тоже корень: вместо глухого «открой папку-приёмник» спрашиваем, куда копировать
-        if (o.root) {
-            val jobs = groups.values.map { g -> pseudo(g[0], g[0].parentPath) to g.map { it.name } }
-            Fm.dlg = FmDlg.PickTarget(move, jobs) { FmRootCfg.sel.clear(); kotlinx.coroutines.delay(700); while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(300); kotlinx.coroutines.delay(500); FmRootCfg.kids.keys.toList().forEach { FmRootCfg.stale.add(it) } }
-            return
-        }
+        // 9.3: папка-приёмник: последняя раскрытая папка другой панели (дерево) или её текущая папка (список)
+        val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }) else null
+        dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
         Fm.scope.launch {
-            for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+            for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+            afterJobs(par + listOfNotNull(dst?.node))
         }
-        FmRootCfg.sel.clear(); refreshLater(par, emptyList())
+        FmRootCfg.sel.clear()
+    }
+    /** Копирование и перенос из обычного списка панели [p] (не дерево): в раскрытую папку дерева другой панели или в её текущую папку. */
+    fun fromList(p: FmPane, move: Boolean) {
+        val o = Fm.panes[1 - p.id]
+        val names = Fm.targets(p)
+        if (!o.root) { Fm.copyMove(move, p, o, names); return }
+        val dst = FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }
+        Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, dst.label()))
+        Fm.copyMove(move, p, dst.pane(), names)
+        Fm.scope.launch { afterJobs(listOf(dst.node)) }
     }
     fun deleteFiles() {
         val srcs = files.map { it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L" }.distinct()
@@ -1152,6 +1202,9 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
     val focusedNow = androidx.compose.runtime.rememberUpdatedState(focused)
+    // 9.3: строка, на которой фокус или которую нажали, запоминается как запасная папка-приёмник (файл: его родитель)
+    val nodeForTarget = r.selE?.takeIf { it.ti == null && it.fi == null && r.file != null }?.parentId ?: r.treeId?.takeIf { it.startsWith("L|") || it.startsWith("N|") || it.startsWith("D|") }
+    androidx.compose.runtime.LaunchedEffect(focused) { if (focused) FmRootCfg.noteRow(p.id, r.key, nodeForTarget) }
     androidx.compose.runtime.DisposableEffect(r.key) { onDispose { if (focusedNow.value) FmRootCfg.focusedRowGone(p.id, r.key) } }
     val rowFr = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if (focused) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
@@ -1262,7 +1315,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 }
             } else Modifier)
             .focusRequester(rowFr).hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = { Fm.active = p.id; p.rootSel = r.key; if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() },
+                onClick = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() },
                 onLongClick = { Fm.active = p.id; p.rootSel = r.key; menu = true })
             .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
@@ -1354,13 +1407,11 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 fun refresh(focusKey: String? = null) { val before = FmRootCfg.rowsOf(p.id); val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(600); var wn = 0; while (wn < 400 && (Fm.dlg is FmDlg.Rename || Fm.dlg is FmDlg.NewFolder || Fm.dlg is FmDlg.NewFile)) { kotlinx.coroutines.delay(300); wn++ }; kotlinx.coroutines.delay(if (wn > 0) 700L else 1900L); ids.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }; CloudTrash.ver++; FmRootCfg.focusRowLater(focusKey); FmRootCfg.focusRenamed(p.id, before) } }
                 fun transfer(move: Boolean) {
                     val o = Fm.panes[1 - p.id]
-                    if (o.root) {
-                        // 9.3: другая панель тоже корень: спрашиваем папку-приёмник
-                        Fm.dlg = FmDlg.PickTarget(move, tg.groupBy { it.parentPath }.map { (pp, g) -> pane(pp) to g.map { it.name } }) { FmRootCfg.sel.clear(); kotlinx.coroutines.delay(700); while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(300); kotlinx.coroutines.delay(500); FmRootCfg.kids.keys.toList().forEach { FmRootCfg.stale.add(it) } }
-                        return
-                    }
+                    val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }) else null
+                    dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
                     Fm.scope.launch {
-                        for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(move, pane(pp), o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+                        for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(move, pane(pp), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+                        RootSelOps.afterJobs(tg.map { it.parentId } + listOfNotNull(dst?.node))
                         refresh()
                     }
                 }

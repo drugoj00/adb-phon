@@ -1872,8 +1872,8 @@ fun rememberFmActionsAll(): List<FmAction> {
     return listOf(
         FmAction(Icons.Filled.ArrowUpward, R.string.fm_up) { Fm.up(p) },
         FmAction(Icons.Filled.Refresh, R.string.fm_refresh) { if (p.root) FmRootCfg.refreshAll(Fm.sctx) else Fm.load(p, remember = false) },
-        FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { if (rootSel) RootSelOps.transfer(p, false) else if (o.root) Fm.dlg = FmDlg.PickTarget(false, listOf(p to Fm.targets(p))) else Fm.copyMove(false, p, o, Fm.targets(p)) },
-        FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { if (rootSel) RootSelOps.transfer(p, true) else if (o.root) Fm.dlg = FmDlg.PickTarget(true, listOf(p to Fm.targets(p))) else Fm.copyMove(true, p, o, Fm.targets(p)) },
+        FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { if (rootSel) RootSelOps.transfer(p, false) else RootSelOps.fromList(p, false) },
+        FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { if (rootSel) RootSelOps.transfer(p, true) else RootSelOps.fromList(p, true) },
         FmAction(Icons.Filled.DeleteOutline, R.string.fm_delete, sel) { if (rootSel) RootSelOps.deleteFiles() else Fm.askDelete(p, Fm.targets(p)) },
         FmAction(Icons.Filled.Edit, R.string.fm_b_rename, p.selected.size == 1 && p.selected.none { '/' in it }) { Fm.dlg = FmDlg.Rename(p, Fm.targets(p).first()) },
         FmAction(Icons.Filled.CreateNewFolder, R.string.fm_new_folder, Fm.canCreate(p)) { Fm.dlg = FmDlg.NewFolder() },
