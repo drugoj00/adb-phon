@@ -189,7 +189,7 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
                 }
                 if (busy) Text(stringResource(R.string.working), color = t.accent, fontSize = 13.sp)
                 if (error.isNotEmpty()) Text(error, color = Color(0xFFF87171), fontSize = 13.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                BarLazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val parent = fs?.parent(path)
                     if (parent != null) item { FileRow("↑  " + stringResource(R.string.fb_up), "", true) { path = parent } }
                     items(entries, key = { it.path }) { e ->

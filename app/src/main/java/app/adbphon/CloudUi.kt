@@ -86,6 +86,8 @@ fun CloudAddDlg(close: () -> Unit) {
                     }
                     else -> {
                         if (phase == CloudAuth.FAIL) Text(stringResource(R.string.cl_failed, CloudAuth.message), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        // вход прошёл, но облако не открылось (или общий ключ отклонён): сразу мастер своего ключа для этого облака
+                        if (phase == CloudAuth.FAIL) CloudAuth.ownKeyFor?.let { kt -> OutlinedButton({ CloudAuth.reset(); close(); Fm.dlg = FmDlg.OwnKey(kt) }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.ok_connect_own)) } }
                         Text(stringResource(R.string.cl_pick), fontSize = 13.sp)
                         val provs by androidx.compose.runtime.produceState<List<CProv>?>(null) { value = runCatching { CloudCatalog.load(ctx) }.getOrNull() }
                         fun builtIn(t: String) = provs == null || provs!!.any { it.name == t }
@@ -99,6 +101,9 @@ fun CloudAddDlg(close: () -> Unit) {
                                         if (SharedKey.isOpen(ctx)) PermFlow.forCloudLogin(ctx) { CloudAuth.start(ctx, pr) }
                                         else { CloudAuth.reset(); close(); Fm.dlg = FmDlg.OwnKey("drive", 0, true) }
                                     }
+                                } else if (type == "yandex" && OwnKeys.get(ctx, "yandex") == null) {
+                                    // Яндекс: общего ключа у программы нет, общий ключ движка Яндекс отклоняет, поэтому сразу мастер «Свой ключ»
+                                    CloudAuth.reset(); close(); Fm.dlg = FmDlg.OwnKey("yandex")
                                 } else PermFlow.forCloudLogin(ctx) { CloudAuth.start(ctx, pr) }
                             }
                         }

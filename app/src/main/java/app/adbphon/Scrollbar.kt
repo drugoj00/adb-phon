@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -26,6 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -41,6 +45,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -82,6 +87,8 @@ object SbMath {
  */
 fun Modifier.verticalScrollbar(state: ScrollState, left: Boolean = false): Modifier =
     sbar(state, left) { vp -> Triple(state.value.toFloat(), vp, vp + state.maxValue) }
+        .upToTop({ state.value > 0 }) { state.animateScrollTo(0) }
+        .mouseDragScroll(state)
 
 fun Modifier.verticalScrollbar(state: LazyListState, left: Boolean = false): Modifier =
     sbar(state, left) { _ ->
@@ -93,6 +100,8 @@ fun Modifier.verticalScrollbar(state: LazyListState, left: Boolean = false): Mod
             Triple(state.firstVisibleItemIndex * avg + state.firstVisibleItemScrollOffset, info.viewportSize.height.toFloat(), avg * info.totalItemsCount)
         }
     }
+        .upToTop({ state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 0 }) { state.animateScrollToItem(0) }
+        .mouseDragScroll(state)
 
 fun Modifier.verticalScrollbar(state: LazyGridState, left: Boolean = false): Modifier =
     sbar(state, left) { _ ->
@@ -108,6 +117,8 @@ fun Modifier.verticalScrollbar(state: LazyGridState, left: Boolean = false): Mod
             Triple((state.firstVisibleItemIndex / cols) * pitch + state.firstVisibleItemScrollOffset, info.viewportSize.height.toFloat(), rows * pitch)
         }
     }
+        .upToTop({ state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 0 }) { state.animateScrollToItem(0) }
+        .mouseDragScroll(state)
 
 private fun Modifier.sbar(state: ScrollableState, leftIgnored: Boolean, metrics: (Float) -> Triple<Float, Float, Float>?): Modifier = composed {
     val left = scrollbarLeft()
@@ -233,6 +244,76 @@ fun Modifier.barScroll(): Modifier = composed {
     val s = rememberScrollState()
     val left = scrollbarLeft()
     this.verticalScrollbar(s, left).verticalScroll(s).padding(start = if (left) 10.dp else 0.dp, end = if (left) 0.dp else 10.dp)
+}
+
+/**
+ * 9.2: пульт, стрелка вверх у самой верхней кнопки. Выше фокусировать нечего (или фокус уходит на строку над списком), поэтому колонка
+ * раньше не доезжала до начала: заголовок и поля выше первой кнопки оставались за краем. Теперь, когда фокус дальше не идёт или уходит
+ * вверх из колонки, она прокручивается в самое начало. Срабатывает только если стрелку не взял сам элемент (ползунок и т. п.).
+ * [scrolled]: «колонка сейчас не в начале»; [toTop]: прокрутка в начало.
+ */
+fun Modifier.upToTop(scrolled: () -> Boolean, toTop: suspend () -> Unit): Modifier = composed {
+    val fm = androidx.compose.ui.platform.LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    var upAt by remember { mutableLongStateOf(0L) }
+    val scrolledNow by rememberUpdatedState(scrolled)
+    val toTopNow by rememberUpdatedState(toTop)
+    this
+        .onFocusChanged { f ->
+            // фокус ушёл из колонки сразу после стрелки вверх (на строку выше): колонку возвращаем в начало, чтобы был виден её верх
+            if (!f.hasFocus && upAt != 0L && System.currentTimeMillis() - upAt < 400 && scrolledNow()) scope.launch { runCatching { toTopNow() } }
+        }
+        .onKeyEvent { e ->
+            if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == androidx.compose.ui.input.key.Key.DirectionUp && scrolledNow()) {
+                upAt = System.currentTimeMillis()
+                if (!fm.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)) scope.launch { runCatching { toTopNow() } }
+                true
+            } else false
+        }
+}
+
+/**
+ * 9.2: прокрутка перетаскиванием МЫШЬЮ (как пальцем): зажатая левая кнопка и движение вверх или вниз листают содержимое. Compose мышь для
+ * перетаскивания не берёт (только колесо и полосу), поэтому на приставках с мышью страницу нельзя было «схватить». Клик по строке и кнопке
+ * не страдает: листание начинается, только когда указатель ушёл дальше порога и ушёл в основном по вертикали; если кнопку держат неподвижно
+ * дольше 0,5 с (долгое нажатие, перетаскивание файлов), прокрутка не включается. Отпустили с движением: инерция, как у касания.
+ * Ставится вместе с полосой прокрутки, то есть на каждый прокручиваемый контейнер.
+ */
+fun Modifier.mouseDragScroll(state: androidx.compose.foundation.gestures.ScrollableState): Modifier = composed {
+    val fling = androidx.compose.foundation.gestures.ScrollableDefaults.flingBehavior()
+    val flingNow by rememberUpdatedState(fling)
+    val scope = rememberCoroutineScope()
+    this.pointerInput(state) {
+        val slop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
+            if (down.type != androidx.compose.ui.input.pointer.PointerType.Mouse || !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
+            val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+            tracker.addPosition(down.uptimeMillis, down.position)
+            var last = down.position.y
+            var dragging = false
+            while (true) {
+                val ev = awaitPointerEvent(PointerEventPass.Initial)
+                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                if (!dragging) {
+                    val dx = c.position.x - down.position.x; val dy = c.position.y - down.position.y
+                    if (c.uptimeMillis - down.uptimeMillis > 500) break
+                    if (kotlin.math.abs(dy) > slop && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) { dragging = true; last = c.position.y } else continue
+                }
+                if (c.isConsumed) break
+                c.consume()
+                val dy = c.position.y - last
+                last = c.position.y
+                tracker.addPosition(c.uptimeMillis, c.position)
+                state.dispatchRawDelta(-dy)
+            }
+            if (dragging) {
+                val v = runCatching { tracker.calculateVelocity().y }.getOrDefault(0f)
+                if (kotlin.math.abs(v) > 200f) scope.launch { runCatching { state.scroll { with(flingNow) { performFling(-v) } } } }
+            }
+        }
+    }
 }
 
 /** То же для вкладок с запоминаемой прокруткой (rememberSavedScroll). */

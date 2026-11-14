@@ -1722,17 +1722,15 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxHeight()) {
                         val rows = (rememberFmActionsAll().count { it.label in fmMainLabels } + 1 + 1) / 2   // размер кнопок считается по полному набору: скрытые кнопки не растягивают остальные
                         val cap = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.07f).dp
-                        val sz = ((maxHeight - 30.dp - 4.dp * (rows - 1)) / rows).coerceIn(44.dp, 78.dp).let { if (it > cap) cap else it }
+                        val sz = ((maxHeight - 66.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f) - 4.dp * (rows - 1)) / rows).coerceIn(44.dp, 78.dp).let { if (it > cap) cap else it }
                         FmNarrow(actions, Modifier.width(sz * 2 + 4.dp).fillMaxHeight(), sz)
                     }
                     FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                 } else {
-                if (!right) FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
-                Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
-                    FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
-                }
-                if (right) FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
+                // 9.2: боковая панель кнопок телефона в ландшафте стоит по центру между окнами (левое | кнопки | правое), независимо от ведущей руки
+                FmPaneView(Fm.panes[0], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
+                FmSideColumn(actions, Modifier.width(48.dp).fillMaxHeight())
+                FmPaneView(Fm.panes[1], Modifier.weight(1f).fillMaxHeight(), volsRow = false)
                 }
             }
         } else {
@@ -1816,7 +1814,7 @@ fun FmButtonsDialog(onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { HintTitle(stringResource(R.string.sb_title), stringResource(R.string.sb_reorder_note) + "\n\n" + stringResource(R.string.sb_icon_hint)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.barScroll()) {
                 all.forEach { a ->
                     val k = FmButtons.key(ctx, a.label)
                     Row(Modifier.fillMaxWidth().clickable { FmButtons.toggle(ctx, k) }, verticalAlignment = Alignment.CenterVertically) {
@@ -1950,8 +1948,10 @@ fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSiz
 }
 
 /** Главные кнопки узкой колонки (остальные в «Ещё»). */
-private val fmMainLabels get() = setOf(R.string.fm_up, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
-    R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage) +
+private val fmMainLabels get() = (setOf(R.string.fm_up, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
+    R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage) -
+    // 9.2: на приставке шапка панели в три строки, поэтому «Перенести» и «Места» уходят в «Ещё» (функции остаются там)
+    (if (Marq.tv) setOf(R.string.fm_b_move, R.string.fm_storage) else emptySet())) +
     // на приставке экран высокий и колонка внизу пустовала: добавляем ещё две частые кнопки (семь рядов помещаются без прокрутки)
     (if (Marq.tv) setOf(R.string.fm_refresh, R.string.fm_new_zip, R.string.fm_play, R.string.fm_wifi_server, R.string.fm_select_none, R.string.fm_select_invert) else emptySet())
 
@@ -1970,7 +1970,7 @@ private fun FmSideColumn(actions: List<FmAction>, modifier: Modifier) {
         Text(stringResource(if (Fm.active == 0) R.string.fm_pane_left else R.string.fm_pane_right) + "\n" + Fm.shown(p).size + "·" + p.selected.size,
             fontSize = 9.sp, lineHeight = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth())
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberSavedScroll("files.side")), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f).fillMaxWidth().tabScroll(rememberSavedScroll("files.side")), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val ks = actions.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }
             actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, 44.dp, 21.dp, 8.sp, reorderKeys = ks) } }
         }
@@ -2034,11 +2034,11 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
         // подпись всегда по центру и без разрыва слова: шрифт подбирается по самому длинному слову (измерение, а не оценка по числу букв)
         val measurer = androidx.compose.ui.text.rememberTextMeasurer()
         val dens = androidx.compose.ui.platform.LocalDensity.current
-        val availPx = with(dens) { (size - 8.dp).toPx() }
+        val availPx = with(dens) { (size - (if (Marq.tv) 12.dp else 8.dp)).toPx() }
         val words = txt.split(' ').filter { it.isNotEmpty() }
         var fs = label.value
-        val minFs = label.value * 0.5f
-        while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), androidx.compose.material3.LocalTextStyle.current.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx }) fs -= 0.25f
+        val minFs = label.value * (if (Marq.tv) 0.3f else 0.5f)
+        while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), androidx.compose.material3.LocalTextStyle.current.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx * (if (Marq.tv) 0.8f else 1f) }) fs -= 0.25f
         val lblSize = fs.sp
         Text(txt, Modifier.fillMaxWidth(), fontSize = lblSize, lineHeight = lblSize * 1.12f, maxLines = 2, overflow = TextOverflow.Clip, fontFamily = CondFont,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
@@ -2070,9 +2070,27 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androi
     val rest = actions.filter { it.label !in fmMainLabels }
     val items = main + FmAction(Icons.Filled.MoreHoriz, R.string.fm_more) { Fm.dlg = FmDlg.More(rest) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (Marq.tv) {
+        // 9.2 (только приставка): шапка панели в три строки по центру: «Левая/Правая», «Объектов: N», «Выбрано: M»; шрифт чуть крупнее прежнего, ничего не обрезается
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            val hs = if (Marq.tv) 14.sp else 11.sp; val hl = if (Marq.tv) 17.sp else 13.sp
+            // обе метки рядом на одной строке; активная панель ярче и жирнее
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                val pc = MaterialTheme.colorScheme.primary
+                Text(stringResource(R.string.fm_pane_left), fontSize = hs, lineHeight = hl, color = if (Fm.active == 0) pc else pc.copy(alpha = .55f), fontWeight = if (Fm.active == 0) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
+                Text(" · ", fontSize = hs, lineHeight = hl, color = pc.copy(alpha = .55f), maxLines = 1)
+                Text(stringResource(R.string.fm_pane_right), fontSize = hs, lineHeight = hl, color = if (Fm.active == 1) pc else pc.copy(alpha = .55f), fontWeight = if (Fm.active == 1) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
+            }
+            Text(stringResource(R.string.fm_count_n, Fm.shown(p).size), Modifier.fillMaxWidth(),
+                fontSize = hs, lineHeight = hl, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+            Text(stringResource(R.string.fm_count_sel, p.selected.size), Modifier.fillMaxWidth(),
+                fontSize = hs, lineHeight = hl, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+        }
+        } else {
         Text(stringResource(if (Fm.active == 0) R.string.fm_pane_left else R.string.fm_pane_right) + "  ·  " + stringResource(R.string.fm_count, Fm.shown(p).size, p.selected.size),
             fontSize = 11.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberSavedScroll("files.narrow")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        }
+        Column(Modifier.weight(1f).fillMaxWidth().tabScroll(rememberSavedScroll("files.narrow")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items.chunked(2).forEach { r ->
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { val rk = if (a.label == R.string.fm_more) null else (main + rest).map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; if (tvSize != null) FmSquareButton(a, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, reorderKeys = rk, cols = 2) else if (Marq.tv) FmSquareButton(a, 72.dp, 34.dp, 11.5.sp, reorderKeys = rk, cols = 2) else FmSquareButton(a, 78.dp, 37.dp, 12.sp, reorderKeys = rk, cols = 2) } } }
             }
@@ -2089,7 +2107,7 @@ private fun FmChip(text: String, click: () -> Unit) {
 /** Портрет: узкая полоса действий (справа или слева по настройке «Панели управления») и активная панель. */
 @Composable
 private fun FmStrip(actions: List<FmAction>, modifier: Modifier) {
-    Column(modifier.verticalScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier.tabScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
         actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.let { vis -> val ks = vis.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; vis.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmMetrics.BTN_W, 21.dp, 7.5.sp, reorderKeys = ks) } } }
     }
@@ -2823,7 +2841,7 @@ private fun FmDialogs() {
             text = { Column(Modifier.heightIn(max = 420.dp).barScroll()) { Text(d.body, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
         is FmDlg.Archive -> LAlertDialog(onDismissRequest = close, title = { Text(d.name, maxLines = 1) },
-            text = { LazyColumn(Modifier.heightIn(max = 380.dp)) { items(d.lines) { Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } },
+            text = { BarLazyColumn(Modifier.heightIn(max = 380.dp)) { items(d.lines) { Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } },
             confirmButton = { TextButton({ close(); Fm.extract(d.pane, d.name, Fm.panes[1 - d.pane.id]) }) { Text(stringResource(R.string.fm_extract_other)) } },
             dismissButton = { Row { TextButton({ close(); Fm.extract(d.pane, d.name, d.pane) }) { Text(stringResource(R.string.fm_extract_here)) }; TextButton(close) { Text(stringResource(R.string.fm_close)) } } })
     }

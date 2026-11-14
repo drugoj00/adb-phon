@@ -242,7 +242,7 @@ fun RingtoneDialog(close: () -> Unit) {
         onDismissRequest = { stopPreview(); close() },
         title = { Text(stringResource(R.string.ring_title), fontSize = 17.sp) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val tick = ver   // перерисовка при изменении настроек
                 if (tick < 0) return@Column
                 row("video", stringResource(R.string.ring_video), Ringtones.RING_IDS, true)

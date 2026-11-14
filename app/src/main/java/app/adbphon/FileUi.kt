@@ -484,7 +484,7 @@ fun FilesLookSection() {
 }
 
 @Composable
-private fun Modifier.androidx_scroll(): Modifier = this.then(Modifier.heightIn(max = 360.dp)).then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
+private fun Modifier.androidx_scroll(): Modifier = this.then(Modifier.heightIn(max = 360.dp)).then(Modifier.barScroll())
 
 
 // ------------------------------------------------------------------ значки папок приложений (9.0)

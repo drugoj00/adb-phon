@@ -205,7 +205,7 @@ fun TextEditor(onClose: () -> Unit) {
             // поле редактора на Compose: надёжная раскладка, прокрутка по вертикали (и по горизонтали без переноса)
             var tfv by remember(text) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(text)) }
             tv = tfv
-            Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 8.dp)) {
+            Box(Modifier.fillMaxWidth().weight(1f).barScroll().then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 8.dp)) {
                 androidx.compose.material3.TextField(
                     value = tfv, onValueChange = { nv -> if (!readOnly) { if (nv.text != tfv.text) dirty = true; tfv = nv; tv = nv } },
                     modifier = if (wrap) Modifier.fillMaxWidth() else Modifier.widthIn(min = 300.dp), readOnly = readOnly,
@@ -282,7 +282,7 @@ fun PdfViewer(onClose: () -> Unit) {
         if (r == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { if (err != null) Text(stringResource(R.string.doc_open_failed, err ?: ""), color = MaterialTheme.colorScheme.error) else androidx.compose.material3.CircularProgressIndicator() }
         else BoxWithWidth { wPx ->
             val lock = remember { Any() }
-            LazyColumn(Modifier.fillMaxSize().background(Color(0xFF424242)), state = state, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxSize().background(Color(0xFF424242)).verticalScrollbar(state), state = state, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(r.pageCount) { i ->
                     var bmp by remember(i, zoom) { mutableStateOf<Bitmap?>(null) }
                     LaunchedEffect(i, zoom) {
@@ -413,7 +413,7 @@ fun OfficeViewer(onClose: () -> Unit) {
                 p.forEachIndexed { i, (t, _) -> TextButton({ cur = i }) { Text(t, fontSize = 12.sp, color = if (i == cur) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) } }
             }
             Text(stringResource(R.string.doc_readonly_office), Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll2Plain().padding(10.dp)) {
+            Box(Modifier.fillMaxSize().barScroll().horizontalScroll2Plain().padding(10.dp)) {
                 Text(p.getOrNull(cur)?.second.orEmpty().ifBlank { stringResource(R.string.doc_empty) }, fontSize = 14.sp, fontFamily = if (e.name.endsWith("xlsx") || e.name.endsWith("ods")) FontFamily.Monospace else null)
             }
         }

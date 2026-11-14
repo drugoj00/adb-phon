@@ -268,7 +268,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                 Chip(stringResource(R.string.ver_file), false) { if (!busy) browser = true }
                 Chip(stringResource(R.string.close), true) { onClose() }
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            BarLazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 item { Text(stringResource(R.string.ver_copies), color = t.sub, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
                 if (copies.isEmpty()) item { Text(stringResource(R.string.ver_no_copies), color = t.hint, fontSize = 13.sp) }
                 items(copies, key = { it.dir.path }) { c ->
@@ -330,7 +330,7 @@ fun BackupsDialog(onClose: () -> Unit) {
             Text(stringResource(R.string.backups_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.backups_where, AppBackups.root(ctx).absolutePath), color = t.hint, fontSize = 12.sp)
             Chip(stringResource(R.string.close), true, Modifier.focusRequester(first)) { onClose() }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            BarLazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(groups.entries.toList(), key = { it.key }) { (pkg, list) ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.tile).padding(horizontal = 12.dp, vertical = 8.dp),

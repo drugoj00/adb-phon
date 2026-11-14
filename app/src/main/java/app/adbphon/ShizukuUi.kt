@@ -98,7 +98,7 @@ private fun ShizukuAppsDialog(on: Boolean, onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.shz_apps), fontSize = 17.sp) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (!on) Text(stringResource(R.string.shz_apps_off), fontSize = 14.sp)
                 rows.forEach { r ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

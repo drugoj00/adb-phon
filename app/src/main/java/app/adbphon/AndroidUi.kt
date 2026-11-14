@@ -132,7 +132,7 @@ fun AndroidConsoleDialog(d: AdbDev, close: () -> Unit) {
             }
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 6.dp).background(Color(0xFF101418))) {
                 Text(if (err.isNotEmpty()) err else if (ses == null && out.isEmpty()) stringResource(R.string.spc_connecting) else out, color = if (err.isNotEmpty()) Color(0xFFEF9A9A) else Color(0xFFE0E0E0), fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                    modifier = Modifier.fillMaxSize().verticalScroll(sc).padding(6.dp))
+                    modifier = Modifier.fillMaxSize().verticalScrollbar(sc).verticalScroll(sc).padding(6.dp))
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(line, { line = it }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.acon_hint), fontSize = 11.sp) })

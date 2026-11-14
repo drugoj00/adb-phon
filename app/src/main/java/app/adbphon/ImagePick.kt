@@ -94,7 +94,7 @@ fun ImageSourceDialog(onPicked: (Uri) -> Unit, onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.imgsrc_title), fontSize = 16.sp, maxLines = 1) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth().clickable { own = true }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Filled.Folder, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                     Column {
@@ -140,7 +140,7 @@ private fun OwnImageBrowser(onPicked: (Uri) -> Unit, onBack: () -> Unit) {
         wide = true,
         title = { Text(dir.absolutePath, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = 420.dp).barScroll()) {
                 if (roots.size > 1) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     roots.forEach { r -> TextButton({ dir = r }) { Text(if (r == root) stringResource(R.string.imgsrc_device) else r.name, fontSize = 12.sp) } }
                 }

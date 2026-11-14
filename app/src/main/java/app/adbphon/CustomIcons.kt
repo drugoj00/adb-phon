@@ -166,7 +166,7 @@ fun CustomIconPicker(title: String, key: String, onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.ic_title) + ": " + title, fontSize = 16.sp, maxLines = 1) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CustomIcons.builtin.chunked(5).forEach { row ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         row.forEach { (id, vec) ->
@@ -206,7 +206,7 @@ fun FileTypeIconsDialog(onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.ic_types)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 names.forEach { (cat, res) ->
                     val label = stringResource(res)
                     val key = "c:" + cat.name

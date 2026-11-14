@@ -357,20 +357,27 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             }
             // «Выход»: полный выход из программы; остановка помощника геймпада, оверлея и ADB. Идёт операция с файлами: сначала вопрос.
             var exitAsk by remember { mutableStateOf(false) }
+            // 9.0: окно закрывается СРАЗУ (finishAffinity + finishAndRemoveTask), долгая остановка (помощник, оверлей, ADB, VPN, сетевые подключения) идёт после этого в фоне; процесс завершается, когда всё сделано
             val exitNow: () -> Unit = {
-                snackScope.launch {
-                    runCatching { VirtualPad.stop(true); OverlayPadService.stop(baseCtx) }
+                android.util.Log.i("ADBphon", "выход: нажато, окно закрывается")
+                val appCtx = baseCtx.applicationContext
+                val vmRef = vm
+                runCatching { act?.finishAffinity() }
+                runCatching { act?.finishAndRemoveTask() }
+                @Suppress("OPT_IN_USAGE")
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                    val t0 = System.currentTimeMillis()
+                    runCatching { VirtualPad.stop(true); OverlayPadService.stop(appCtx) }
                     runCatching { NetKeep.releaseAll() }
-                    // идущие операции отменяются и убирают за собой временные файлы (иначе остаётся недокопированный .fmpart), затем останавливается служба операций
+                    // идущие операции отменяются и убирают за собой временные файлы (иначе остаётся недокопированный .fmpart), затем останавливается служба
                     Fm.jobs.forEach { it.cancelled = true }
                     kotlinx.coroutines.withTimeoutOrNull(3000) { while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(100) }
-                    runCatching { baseCtx.stopService(android.content.Intent(baseCtx, FmOpService::class.java)) }
+                    runCatching { appCtx.stopService(android.content.Intent(appCtx, FmOpService::class.java)) }
                     runCatching { BtHid.cleanDisconnect("выход", 800) }
-                    PadKeeper.stopForExit(baseCtx)
-                    runCatching { kotlinx.coroutines.withTimeoutOrNull(20000) { VpnSession.end(baseCtx, "выход из программы") } }   // другой VPN возвращается как был
-                    kotlinx.coroutines.delay(1200)
-                    vm.shutdown()
-                    act?.finishAndRemoveTask()
+                    PadKeeper.stopForExit(appCtx)
+                    runCatching { kotlinx.coroutines.withTimeoutOrNull(20000) { VpnSession.end(appCtx, "выход из программы") } }   // другой VPN возвращается как был
+                    runCatching { vmRef.shutdown() }
+                    android.util.Log.i("ADBphon", "выход: фоновая остановка закончена за " + (System.currentTimeMillis() - t0) + " мс")
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }
             }
@@ -388,11 +395,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     tabHist.removeAll { it == tab }.let { tabHist.isNotEmpty() } -> { val back = tabHist.removeAt(tabHist.lastIndex); lastTab = back; tab = back }
                     // «Связь» по исчерпанию истории: прежняя вкладка в историю НЕ кладётся (иначе следующий «Назад» вернул бы её, и «Назад» ходил бы по кругу)
                     tab != 0 -> { lastTab = 0; tab = 0 }
-                    !vm.connected && vm.exitOnBack -> {
-                        vm.shutdown()
-                        act?.finishAndRemoveTask()
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                    }
+                    !vm.connected && vm.exitOnBack -> exitNow()
                     else -> act?.moveTaskToBack(true)
                 }
             }
@@ -1077,7 +1080,7 @@ fun AppsScreen(vm: MainViewModel) {
         if (showSettingsBk) LAlertDialog(
             onDismissRequest = { showSettingsBk = false },
             title = { Text(stringResource(R.string.bk2_title)) },
-            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { BackupSectionV2(vm) } },
+            text = { Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { BackupSectionV2(vm) } },
             confirmButton = { TextButton({ showSettingsBk = false }) { Text(stringResource(R.string.btn_close)) } },
         )
         infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }

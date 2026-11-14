@@ -242,7 +242,7 @@ fun ScreenPcScreen() {
     val hosts = remember { mutableStateListOf<PcHost>().also { it.addAll(loadHosts(ctx)) } }
 
     if (c.state == 0) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxSize().barScroll().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             HintTitle(stringResource(R.string.spc_title), stringResource(R.string.spc_hint), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold, titleSize = 16.sp)
             if (hosts.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

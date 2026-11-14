@@ -289,7 +289,7 @@ object FmRootCfg {
                 }
             }
             kids[id] = list; autoRetry.remove(id)
-        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { kidErr[id] = FmIo.nice(e); if (e is CloudApiError && CloudErr.retryable(e.kind) && (autoRetry[id] ?: 0) < 3) { autoRetry[id] = (autoRetry[id] ?: 0) + 1; Fm.scope.launch { delay(15_000); if (kidErr[id] != null) kidErr.remove(id) } } else if (e !is CloudApiError) autoRetry.remove(id); if (e is CloudApiError && e.kind in setOf("quota", "disabled", "scope")) kidErrOwnKey[id] = e.type ?: "drive" else if (e is CloudApiError && e.kind == "expired") kidErrOwnKey[id] = (e.type ?: "drive") + "@publish" }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { kidErr[id] = FmIo.nice(e); if (e is CloudApiError && CloudErr.retryable(e.kind) && (autoRetry[id] ?: 0) < 3) { autoRetry[id] = (autoRetry[id] ?: 0) + 1; Fm.scope.launch { delay(15_000); if (kidErr[id] != null) kidErr.remove(id) } } else if (e !is CloudApiError) autoRetry.remove(id); if (e is CloudApiError && e.kind in CloudErr.ownKeyKinds) kidErrOwnKey[id] = e.type ?: "drive" else if (e is CloudApiError && e.kind == "expired") kidErrOwnKey[id] = (e.type ?: "drive") + "@publish" }
     }
 
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)

@@ -296,6 +296,8 @@ object CloudAuth {
     var url by mutableStateOf("")
     var message by mutableStateOf("")
     var added by mutableStateOf<NetConn?>(null)
+    /** Облако, для которого после неудачного входа предлагается свой ключ (иначе null). */
+    var ownKeyFor by mutableStateOf<String?>(null)
     private var job: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var gen = 0
@@ -304,7 +306,7 @@ object CloudAuth {
     /** Отмена или сброс: процесс входа убивается, служба и блокировка сна снимаются. Страница «Готово» (LoginEcho) живёт сама до своего срока. */
     fun reset() {
         gen++
-        job?.cancel(); job = null; phase = IDLE; url = ""; message = ""; added = null
+        job?.cancel(); job = null; phase = IDLE; url = ""; message = ""; added = null; ownKeyFor = null
         appCtx?.let { CloudLoginService.stop(it) }
     }
 
@@ -350,7 +352,7 @@ object CloudAuth {
         appCtx = ctx
         job?.cancel()
         val my = ++gen
-        phase = WAIT; url = ""; message = ""; added = null
+        phase = WAIT; url = ""; message = ""; added = null; ownKeyFor = null
         LoginEcho.stop()
         // служба переднего плана и блокировка сна: вход идёт минуты (пароль, 2FA), пока приложение свёрнуто и браузер на экране
         CloudLoginService.start(ctx)
@@ -382,9 +384,25 @@ object CloudAuth {
                     RcloneConf.remove(ctx, tmp)
                     // Google Диск: если движок не отдал почту (лимит запросов, сбой), берём её прямо у Google по только что полученному токену
                     if (email == null && pr.type == "drive") email = googleDriveEmail(token)
+                    // Яндекс, Dropbox, Box: если движок не отдал логин, берём его прямо по токену (иначе подключение называется просто «Аккаунт»)
+                    if (email == null && pr.type in setOf("yandex", "dropbox", "box")) email = providerLogin(pr.type, token)
                 }
                 val name = "acc_" + sha1(pr.type + ":" + (email ?: token.take(80))).take(10)
                 RcloneConf.put(ctx, name, pr.type, token, cfg)
+                // вход прошёл, а логина нет и ключ общий: проверяем, открывается ли облако; не открывается из-за ключа, предлагаем свой ключ
+                if (email == null && pr.type != "drive" && pr.type != "onedrive" && pr.type in OwnKeys.types && OwnKeys.get(ctx, pr.type) == null) {
+                    val pr0 = runCatching { Rclone.run(ctx, listOf("lsjson", "$name:", "--max-depth", "1", "--no-mimetype", "--no-modtime") + Rclone.common, 90_000L) }.getOrNull()
+                    if (pr0 != null && !pr0.ok) {
+                        val ce = CloudErr.fromText(ctx, pr0.err + "\n" + pr0.out, pr.type)
+                        if (ce.kind in CloudErr.ownKeyKinds || ce.kind == "auth" || ce.kind == "other") {
+                            RcloneConf.remove(ctx, name)
+                            ownKeyFor = pr.type
+                            message = ctx.getString(R.string.cl_e_key_login)
+                            phase = FAIL
+                            return@launch
+                        }
+                    }
+                }
                 val title = (email ?: ctx.getString(R.string.cl_account)) + " (" + (pr.title ?: ctx.getString(pr.titleRes)) + ")"
                 val conn = NetConn("cloud", name, 0, title, "")
                 NetStore.save(ctx, conn)
@@ -411,6 +429,31 @@ object CloudAuth {
             val v = o.optString(key).trim(); if (v.isNotEmpty() && v != "null") return v
         }
         return null
+    }
+
+    /** Логин владельца по токену входа: Яндекс (Диск REST), Dropbox, Box. null: не получилось (подключение останется «Аккаунт»). */
+    private suspend fun providerLogin(type: String, token: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val at = JSONObject(token).getString("access_token")
+            val (u, method, hdr) = when (type) {
+                "yandex" -> Triple("https://cloud-api.yandex.net/v1/disk", "GET", "OAuth $at")
+                "dropbox" -> Triple("https://api.dropboxapi.com/2/users/get_current_account", "POST", "Bearer $at")
+                else -> Triple("https://api.box.com/2.0/users/me", "GET", "Bearer $at")
+            }
+            val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 15_000; c.readTimeout = 20_000; c.requestMethod = method; c.setRequestProperty("Authorization", hdr)
+            try {
+                if (method == "POST") { c.doOutput = true; c.outputStream.close() }
+                if (c.responseCode !in 200..299) return@runCatching null
+                val o = JSONObject(c.inputStream.bufferedReader().readText())
+                val v = when (type) {
+                    "yandex" -> o.optJSONObject("user")?.optString("login")
+                    "dropbox" -> o.optString("email")
+                    else -> o.optString("login")
+                }
+                v?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
+            } finally { c.disconnect() }
+        }.getOrNull()
     }
 
     /** Почта владельца Google Диска напрямую: запрос «о диске» с токеном входа (нужна для названия «почта (Google Диск)», как у остальных облаков). */

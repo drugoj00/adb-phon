@@ -174,7 +174,7 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
                                     }
                                 }
                             } else {
-                                CField(label, values[o.name] ?: "", { values[o.name] = it }, password = o.isPassword)
+                                CField(label, values[o.name] ?: "", { values[o.name] = it }, password = o.isPassword || secretOptName(o.name))   // 9.0: секретные поля (пароль, секретный ключ, токен) скрыты, глазик справа
                                 if (hint.isNotBlank() && o.name !in COMMON) Text(hint, fontSize = 10.sp, lineHeight = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                         }
@@ -193,6 +193,9 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
         dismissButton = { TextButton({ values.clear(); back() }) { Text(stringResource(R.string.cl_mega_back)) } },
     )
 }
+
+/** Имя настройки облака — секрет (пароль, секретный ключ доступа, токен, парольная фраза): поле скрыто, справа глазик. */
+private fun secretOptName(n: String): Boolean = n == "key" || Regex("(?i)(pass|secret|token|api_?key|private_key|key_pem|passphrase)").containsMatchIn(n)
 
 private val COMMON = setOf("user", "pass", "password", "url", "host", "email", "username", "access_key_id", "secret_access_key", "region", "endpoint", "provider", "account", "key")
 

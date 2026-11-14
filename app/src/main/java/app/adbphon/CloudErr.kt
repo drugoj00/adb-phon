@@ -41,7 +41,9 @@ object CloudErr {
             "rate_limit_exceeded" in t || "quota exceeded" in t || "ratelimitexceeded" in t || "userratelimitexceeded" in t || "too many requests" in t || " 429" in t -> "quota"
             "service_disabled" in t || "has not been used in project" in t || "accessnotconfigured" in t -> "disabled"
             "access_token_scope_insufficient" in t || "insufficient authentication scopes" in t || "insufficientpermissions" in t -> "scope"
-            "invalid_grant" in t || "expired or revoked" in t || "empty token" in t || "unauthorized_client" in t || "error 401" in t || "invalid_client" in t -> "auth"
+            // общий ключ входа отклонён облаком (или права ключа не те): лечится своим ключом; для облаков без своего ключа fromText вернёт это в "auth"/"other"
+            "unauthorized_client" in t || "invalid_client" in t || "access_denied" in t || "error 403" in t || "403 forbidden" in t || "status code 403" in t || "forbidden" in t -> "key"
+            "invalid_grant" in t || "expired or revoked" in t || "empty token" in t || "error 401" in t -> "auth"
             "unexpected end of json" in t || "eagain" in t || "try again" in t || "temporarily" in t || "bad gateway" in t || "service unavailable" in t || "server busy" in t -> "transient"
             "lookup" in t || "dial tcp" in t || "timeout" in t || "no such host" in t || "connection refused" in t -> "net"
             else -> "other"
@@ -63,6 +65,8 @@ object CloudErr {
     fun fromText(ctx: Context, raw: String, type: String?): CloudApiError {
         var kind = classify(raw)
         // вход Google слетел у СВОЕГО ключа: чаще всего ключ создан в режиме «Тестирование» (вход держится 7 дней); подсказка ведёт на шаг «Опубликовать приложение»
+        // «key» (отказ общего ключа) осмыслен только для облаков со своим ключом, где своего ещё нет; иначе прежние виды ошибок
+        if (kind == "key" && (type == null || type == "drive" || type == "google photos" || type !in OwnKeys.types || OwnKeys.get(ctx, type) != null)) kind = if (raw.lowercase().let { "unauthorized_client" in it || "invalid_client" in it }) "auth" else "other"
         if (kind == "auth" && (type == "drive" || type == "google photos") && OwnKeys.get(ctx, type) != null) kind = "expired"
         val cause = when (kind) {
             "expired" -> ctx.getString(R.string.cl_e_g_expired)
@@ -70,6 +74,7 @@ object CloudErr {
             "disabled" -> ctx.getString(R.string.cl_e_disabled)
             "scope" -> ctx.getString(R.string.cl_e_scope)
             "auth" -> ctx.getString(R.string.cl_e_auth)
+            "key" -> ctx.getString(R.string.cl_e_key)
             "net" -> ctx.getString(R.string.cl_err_net)
             "transient" -> ctx.getString(R.string.cl_e_transient)
             else -> {
@@ -78,7 +83,7 @@ object CloudErr {
                 line.replace(Regex("(?i)rclone"), "ADB-phon").replace(Regex("^\\d{4}/\\d\\d/\\d\\d \\d\\d:\\d\\d:\\d\\d\\s*"), "").replace(Regex("^(ERROR|NOTICE|CRITICAL)\\s*:\\s*"), "").take(160)
             }
         }
-        val own = if (kind in setOf("quota", "disabled", "scope")) " " + ctx.getString(R.string.cl_e_own_key_tap) else ""
+        val own = if (kind in setOf("quota", "disabled", "scope")) " " + ctx.getString(R.string.cl_e_own_key_tap) else if (kind == "key") " " + ctx.getString(R.string.cl_e_key_tap) else ""
         return CloudApiError(kind, ctx.getString(R.string.cl_e_head, providerName(ctx, type)) + ": " + cause + own, type)
     }
 
@@ -86,7 +91,10 @@ object CloudErr {
     fun offersPublish(ctx: Context, msg: String) = msg.contains(ctx.getString(R.string.cl_e_g_expired))
 
     /** Сообщение содержит предложение «свой ключ». */
-    fun offersOwnKey(ctx: Context, msg: String) = msg.contains(ctx.getString(R.string.cl_e_own_key_tap))
+    fun offersOwnKey(ctx: Context, msg: String) = msg.contains(ctx.getString(R.string.cl_e_own_key_tap)) || msg.contains(ctx.getString(R.string.cl_e_key_tap)) || msg.contains(ctx.getString(R.string.cl_e_key_login))
+
+    /** Виды ошибок, при которых программа предлагает подключить свой ключ. */
+    val ownKeyKinds = setOf("quota", "disabled", "scope", "key")
 }
 
 /** Только для стенда: подменяет результат успешного добавления облака (без создания записи). */

@@ -42,6 +42,8 @@ object OwnKeyWizard {
     private val gId = Regex("\\b\\d{6,}-[a-z0-9]{8,}\\.apps\\.googleusercontent\\.com\\b")
     private val gSecret = Regex("\\bGOCSPX-[A-Za-z0-9_-]{16,}\\b")
     private val token = Regex("^[A-Za-z0-9_.~-]{16,120}$")
+    private val tokenId = Regex("^[A-Za-z0-9_.~-]{4,120}$")
+    private val tokenSecret = Regex("^[A-Za-z0-9_.~-]{8,120}$")
 
     /** Форма значения по провайдеру: проверка идентификатора и секрета. */
     fun validId(type: String, s: String): Boolean = when (type) {
@@ -50,7 +52,7 @@ object OwnKeyWizard {
         "yandex" -> Regex("^[0-9a-f]{32}$").matches(s)
         "box" -> Regex("^[A-Za-z0-9]{32}$").matches(s)
         "onedrive" -> Regex("^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").matches(s)
-        else -> token.matches(s)
+        else -> tokenId.matches(s)
     }
 
     fun validSecret(type: String, s: String): Boolean = when (type) {
@@ -59,7 +61,7 @@ object OwnKeyWizard {
         "yandex" -> Regex("^[0-9a-f]{32}$").matches(s)
         "box" -> Regex("^[A-Za-z0-9]{32}$").matches(s)
         "onedrive" -> Regex("^[A-Za-z0-9_.~-]{20,120}$").matches(s)
-        else -> token.matches(s)
+        else -> tokenSecret.matches(s)
     }
 
     /** Что нашли в тексте буфера: идентификатор, секрет (любой из них может отсутствовать). */
@@ -104,6 +106,27 @@ object OwnKeyWizard {
     /** Номер шага «Опубликовать приложение» у Google (с нуля): без него вход ключа в режиме «Тестирование» слетает через 7 дней. */
     const val PUBLISH_STEP = 3
     const val REDIRECT = "http://127.0.0.1:53682/"
+    const val REDIRECT_LOCALHOST = "http://localhost:53682/"
+
+    /** Адрес возврата, который движок входа шлёт облаку: у одних 127.0.0.1, у других localhost (в консоли облака он должен совпасть буква в букву). */
+    fun redirectFor(type: String): String = when (type) {
+        "yandex", "box" -> REDIRECT
+        "dropbox", "onedrive", "pcloud", "zoho", "hidrive", "putio" -> REDIRECT_LOCALHOST
+        else -> REDIRECT
+    }
+
+    /** Конкретные шаги для облака; null: общие шаги okw_x1..x3. */
+    fun stepLines(type: String): List<Int>? = when (type) {
+        "yandex" -> listOf(R.string.okw_yandex_1, R.string.okw_yandex_2, R.string.okw_yandex_3)
+        "dropbox" -> listOf(R.string.okw_dropbox_1, R.string.okw_dropbox_2, R.string.okw_dropbox_3)
+        "onedrive" -> listOf(R.string.okw_onedrive_1, R.string.okw_onedrive_2, R.string.okw_onedrive_3, R.string.okw_onedrive_4)
+        "box" -> listOf(R.string.okw_box_1, R.string.okw_box_2, R.string.okw_box_3)
+        "pcloud" -> listOf(R.string.okw_pcloud_1, R.string.okw_pcloud_2, R.string.okw_pcloud_3)
+        "zoho" -> listOf(R.string.okw_zoho_1, R.string.okw_zoho_2, R.string.okw_zoho_3)
+        "hidrive" -> listOf(R.string.okw_hidrive_1, R.string.okw_hidrive_2, R.string.okw_hidrive_3)
+        "putio" -> listOf(R.string.okw_putio_1, R.string.okw_putio_2, R.string.okw_putio_3)
+        else -> null
+    }
 
     fun setClip(ctx: Context, text: String) {
         runCatching { (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("ADB-phon", text)) }
@@ -129,11 +152,12 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
     var id by remember { mutableStateOf(OwnKeys.get(ctx, type)?.first.orEmpty()) }
     var secret by remember { mutableStateOf(OwnKeys.get(ctx, type)?.second.orEmpty()) }
     val google0 = type == "drive" || type == "google photos"
-    var step by remember { mutableIntStateOf(if (google0) startStep.coerceIn(0, 4) else startStep.coerceIn(0, 2)) }
+    val own = OwnKeyWizard.stepLines(type)
+    var step by remember { mutableIntStateOf(if (google0) startStep.coerceIn(0, 4) else startStep.coerceIn(0, (own?.size ?: 3) - 1)) }
     var note by remember { mutableStateOf("") }
     var started by remember { mutableStateOf(false) }
     val google = type == "drive" || type == "google photos"
-    val lines = if (google) listOf(R.string.okw_g1, R.string.okw_g2, R.string.okw_g3, R.string.okw_gp, R.string.okw_g4) else listOf(R.string.okw_x1, R.string.okw_x2, R.string.okw_x3)
+    val lines = if (google) listOf(R.string.okw_g1, R.string.okw_g2, R.string.okw_g3, R.string.okw_gp, R.string.okw_g4) else (own ?: listOf(R.string.okw_x1, R.string.okw_x2, R.string.okw_x3))
     val total = lines.size
     val last = step == total - 1
 
@@ -195,7 +219,7 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
         google && step == 0 -> OwnKeyWizard.APP_NAME
         google && step == 2 -> OwnKeyWizard.APP_NAME
         !google && step == 0 -> OwnKeyWizard.APP_NAME
-        !google && step == 1 -> OwnKeyWizard.REDIRECT
+        !google && step == 1 -> OwnKeyWizard.redirectFor(type)
         else -> null
     }
 

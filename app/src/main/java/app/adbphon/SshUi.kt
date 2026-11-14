@@ -272,7 +272,7 @@ private fun SshTerminal() {
     LaunchedEffect(SshModel.lines.size) { if (SshModel.lines.isNotEmpty()) state.animateScrollToItem(SshModel.lines.size - 1) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (SshModel.cwd.isNotEmpty()) Text(SshModel.cwd, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = state) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().verticalScrollbar(state), state = state) {
             items(SshModel.lines.size) { i -> Text(SshModel.lines[i], fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -301,7 +301,7 @@ private fun SshFiles(ctx: Context) {
             Text(SshModel.path, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             TextButton({ picker.launch(arrayOf("*/*")) }, enabled = !SshModel.busy) { Text(stringResource(R.string.ssh_upload), fontSize = 12.sp) }
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        BarLazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(SshModel.files, key = { it.name }) { f ->
                 NoSelBox {
                     Row(

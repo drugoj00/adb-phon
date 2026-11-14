@@ -323,7 +323,7 @@ fun FullBackupsDialog(onClose: () -> Unit, onSettings: (() -> Unit)? = null) {
                 Chip(stringResource(R.string.close), true) { onClose() }
                 if (onSettings != null) Chip(stringResource(R.string.fbk_settings), false) { onSettings() }
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            BarLazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(items, key = { it.dir }) { c ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.tile).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(c.label.ifEmpty { c.pkg }, color = t.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)

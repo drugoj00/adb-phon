@@ -186,7 +186,7 @@ fun ConsolePage() {
                 Box(Modifier.fillMaxWidth().height(if (wide) 420.dp else 300.dp).background(bgC, shape)
                     .border(2.dp, MaterialTheme.colorScheme.onSurface, shape).clip(shape)
                     .pointerInput(Unit) { detectTapGestures(onTap = { selA = -1; selB = -1; runCatching { typeFocus.requestFocus() }; kbc?.show() }) }
-                    .verticalScroll(scroll).padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 40.dp)) {   // справа место под значок «Вставить»
+                    .verticalScrollbar(scroll).verticalScroll(scroll).padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 40.dp)) {   // справа место под значок «Вставить»
                     val curColor = if (bgC.luminance() > 0.6f) Color(0xFF0F766E) else Color(0xFF5EEAD4)   // бирюзовый акцент интерфейса, виден на светлом и тёмном фоне
                     val curShown = idle && (solid || blinkOn)
                     val styled = remember(text, selA, selB, fgC, bgC, input, idle, curShown) {

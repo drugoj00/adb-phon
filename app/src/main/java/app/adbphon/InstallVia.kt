@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -102,6 +103,8 @@ fun ViaAskHost() {
         onDismissRequest = { r.done(null) },
         title = { Text(stringResource(R.string.inst_title), maxLines = 1) },
         text = {
+            var remember by remember { mutableStateOf(false) }
+            Column(Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val first = opts.indexOfFirst { it.enabled }
                 val fr = remember { FocusRequester() }
@@ -110,7 +113,7 @@ fun ViaAskHost() {
                     Row(
                         (if (idx == first) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }
                             .then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier)
-                            .clickable(enabled = o.enabled) { r.done(o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
+                            .clickable(enabled = o.enabled) { if (remember) { ApkInstall.remember(ctx, "apk", o.id); UiPrefs.setAskInstaller(ctx, false) }; r.done(o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         val sz = if (tv) 44.dp else 36.dp
@@ -123,6 +126,11 @@ fun ViaAskHost() {
                         }
                     }
                 }
+            }
+                Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(remember, null); Text(stringResource(R.string.inst_remember_ext, "apk"), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
+                }
+                Text(stringResource(R.string.inst_remember_note), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
             }
         },
         confirmButton = { TextButton({ r.done(null) }) { Text(stringResource(R.string.btn_cancel)) } },

@@ -218,7 +218,7 @@ fun FilesScreen(vm: MainViewModel) {
     val listUi: @Composable (Modifier) -> Unit = { listMod ->
       Column(listMod) {
         if (vm.files.isEmpty()) Text(stringResource(R.string.files_empty), Modifier.padding(16.dp))
-        LazyColumn(Modifier.weight(1f)) {
+        BarLazyColumn(Modifier.weight(1f)) {
             items(vm.files, key = { it.name }) { f ->
                 Box {
                     Row(

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -302,7 +303,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                     val fr = remember { androidx.compose.ui.focus.FocusRequester() }
                     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
                     d.opts.forEachIndexed { idx, o ->
-                        Row((if (idx == firstEnabled) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }.then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier).clickable { if (o.id != "market" && (o.id != "archive" || d.item.ext == "apk" || ApkInstall.isBundle(d.item.ext))) { if (remember) ApkInstall.remember(ctx, d.item.ext, o.id) else if (savedId != null) ApkInstall.forget(ctx, d.item.ext) }; close(); ApkInstall.run(d.pane, d.item, o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
+                        Row((if (idx == firstEnabled) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }.then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier).clickable { if (o.id != "market" && (o.id != "archive" || d.item.ext == "apk" || ApkInstall.isBundle(d.item.ext))) { if (remember) { ApkInstall.remember(ctx, d.item.ext, o.id); UiPrefs.setAskInstaller(ctx, false) } else if (savedId != null) ApkInstall.forget(ctx, d.item.ext) }; close(); ApkInstall.run(d.pane, d.item, o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val sz = if (tv) 44.dp else 36.dp
                             val bmp = remember(o.id) { o.ai?.let { ai -> runCatching { val d = ai.loadIcon(ctx.packageManager); android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888).also { b -> d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(b)) } }.getOrNull() } }
@@ -315,9 +316,11 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                         }
                     }
                 }
-                if (!UiPrefs.askInstaller) Row(Modifier.fillMaxWidth().clickable { remember = !remember }.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(remember, { remember = it }); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp)
+                // 9.2: флажок «Запомнить» виден всегда (раньше только при выключенном «Спрашивать», когда окно не показывается); один фокус на всей строке: ОК пультом и касание переключают
+                Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
                 }
+                Text(stringResource(R.string.inst_remember_note), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
             }
         },
         confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },
