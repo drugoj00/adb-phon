@@ -1271,7 +1271,7 @@
     <string name="tr_drive">Хмарний диск</string>
     <string name="ap_need_root">Немає доступу. Потрібен root.</string>
     <string name="tr_restore_fail">Не вдалося відновити, файл залишився в кошику.</string>
-    <string name="sel_need_target">Спершу відкрий теку-приймач в іншій панелі</string>
+    <string name="sel_need_target">В іншій панелі розкрий теку, куди копіювати</string>
     <string name="sel_one_source">Позначено з різних джерел: дій з одним джерелом за раз</string>
     <string name="sb_copy">Копіювати</string>
     <string name="sb_move">Перемістити</string>
@@ -1783,4 +1783,6 @@
     <string name="pk_move_to">Перенести в…</string>
     <string name="pk_here">Сюди</string>
     <string name="pk_pick">Обери теку (натисни на назву)</string>
+    <string name="pk_copying_to">Копіюю в: %1$s</string>
+    <string name="pk_moving_to">Переношу в: %1$s</string>
 </resources>
