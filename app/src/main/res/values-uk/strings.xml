@@ -1779,4 +1779,8 @@
     <string name="fm_count_sel">Вибрано: %1$d</string>
     <string name="fm_count_n_s">Об.: %1$d</string>
     <string name="fm_count_sel_s">Виб.: %1$d</string>
+    <string name="pk_copy_to">Копіювати в…</string>
+    <string name="pk_move_to">Перенести в…</string>
+    <string name="pk_here">Сюди</string>
+    <string name="pk_pick">Обери теку (натисни на назву)</string>
 </resources>
