@@ -330,7 +330,7 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
             DropIconButton(Icons.Filled.DeleteOutline, stringResource(R.string.fm_delete), if (permanent) red else MaterialTheme.colorScheme.primary, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.fm_delete)) {
                 close()
                 if (never && !permanent) FmDel.setConfirm(cctx, FmDel.PERM)
-                Fm.deletePermanent = perm
+                Fm.deletePermanent = permanent   // 9.3: было «perm» (только галочка): у источника без корзины удаление шло в несуществующую корзину и тихо не выполнялось
                 Fm.delete(d.pane, d.names).invokeOnCompletion { Fm.deletePermanent = false }
             }
             DropIconButton(Icons.Filled.Close, stringResource(R.string.btn_cancel), cfGrey, bs, Modifier.weight(1f).focusRequester(cancelFocus), shortLabel = stringResource(R.string.btn_cancel), onClick = close)

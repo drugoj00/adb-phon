@@ -257,6 +257,8 @@ sealed class FmDlg {
     class Bookmarks : FmDlg()
     class History : FmDlg()
     class Tree : FmDlg()
+    /** 9.3: «Куда?» — когда копирование или перенос начаты с корневого экрана, а другая панель тоже корень: выбор локальной папки-приёмника. */
+    class PickTarget(val move: Boolean, val jobs: List<Pair<FmPane, List<String>>>, val after: suspend () -> Unit = {}) : FmDlg()
     class Storage : FmDlg()
     class WifiServer(val dir: String) : FmDlg()
     class WifiDev(val conn: NetConn?, val host: String, val name: String) : FmDlg()
@@ -1863,20 +1865,22 @@ private fun rememberFmActions(): List<FmAction> {
 @Composable
 fun rememberFmActionsAll(): List<FmAction> {
     val p = Fm.cur; val o = Fm.other
-    val sel = p.selected.isNotEmpty()
+    // 9.3: в режиме «Дерево» отмеченное лежит в FmRootCfg.sel, а не в p.selected: кнопки колонки («Копия», «Перенос», «Удалить», «Снять») были серыми
+    val rootSel = p.root && FmRootCfg.sel.values.any { it.ti == null && it.fi == null }
+    val sel = p.selected.isNotEmpty() || rootSel
     val sctx = LocalContext.current
     return listOf(
         FmAction(Icons.Filled.ArrowUpward, R.string.fm_up) { Fm.up(p) },
         FmAction(Icons.Filled.Refresh, R.string.fm_refresh) { if (p.root) FmRootCfg.refreshAll(Fm.sctx) else Fm.load(p, remember = false) },
-        FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { Fm.copyMove(false, p, o, Fm.targets(p)) },
-        FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { Fm.copyMove(true, p, o, Fm.targets(p)) },
-        FmAction(Icons.Filled.DeleteOutline, R.string.fm_delete, sel) { Fm.askDelete(p, Fm.targets(p)) },
+        FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { if (rootSel) RootSelOps.transfer(p, false) else if (o.root) Fm.dlg = FmDlg.PickTarget(false, listOf(p to Fm.targets(p))) else Fm.copyMove(false, p, o, Fm.targets(p)) },
+        FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { if (rootSel) RootSelOps.transfer(p, true) else if (o.root) Fm.dlg = FmDlg.PickTarget(true, listOf(p to Fm.targets(p))) else Fm.copyMove(true, p, o, Fm.targets(p)) },
+        FmAction(Icons.Filled.DeleteOutline, R.string.fm_delete, sel) { if (rootSel) RootSelOps.deleteFiles() else Fm.askDelete(p, Fm.targets(p)) },
         FmAction(Icons.Filled.Edit, R.string.fm_b_rename, p.selected.size == 1 && p.selected.none { '/' in it }) { Fm.dlg = FmDlg.Rename(p, Fm.targets(p).first()) },
         FmAction(Icons.Filled.CreateNewFolder, R.string.fm_new_folder, Fm.canCreate(p)) { Fm.dlg = FmDlg.NewFolder() },
         FmAction(Icons.Filled.Description, R.string.fm_new_file, Fm.canCreate(p)) { Fm.dlg = FmDlg.NewFile() },
         FmAction(Icons.Filled.FolderZip, R.string.fm_new_zip, Fm.canCreateZip(p)) { Fm.dlg = FmDlg.NewZip() },
         FmAction(Icons.Filled.SelectAll, R.string.fm_select_all) { Fm.selectAll(p) },
-        FmAction(Icons.Filled.Deselect, R.string.fm_select_none, sel) { p.selected = emptySet() },
+        FmAction(Icons.Filled.Deselect, R.string.fm_select_none, sel) { p.selected = emptySet(); if (rootSel) FmRootCfg.sel.clear() },
         FmAction(Icons.Filled.FlipToBack, R.string.fm_select_invert) { Fm.invert(p) },
         FmAction(Icons.Filled.FilterAlt, R.string.fm_select_mask) { Fm.dlg = FmDlg.Mask() },
         FmAction(Icons.Filled.Sort, R.string.fm_sort) { Fm.dlg = FmDlg.View() },
@@ -2805,6 +2809,7 @@ private fun FmDialogs() {
         is FmDlg.SearchResult -> PathListDlg(R.string.fm_search, d.list, R.string.fm_nothing, close, subtitle = stringResource(R.string.fm_found, d.list.size)) {
             Fm.goTo(Fm.cur, it, false)
         }
+        is FmDlg.PickTarget -> PickTargetDlg(d, close)
         is FmDlg.Tree -> if (Fm.cur.src == "smb") { close(); Fm.say(Fm.str(R.string.fm_err_unsupported)) } else TreeDlg(close)
         is FmDlg.Source -> SourceDlg(close, prefill = d.prefill)
         is FmDlg.CloudModule -> CloudModuleDialog(d, close)
@@ -2951,6 +2956,64 @@ private fun TreeDlg(close: () -> Unit) {
             }
         },
         confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } },
+    )
+}
+
+private data class PickRow(val path: String, val depth: Int, val open: Boolean, val label: String)
+
+/** 9.3: выбор папки-приёмника для копирования и переноса с корневого экрана (когда другая панель тоже корень). Папка выбирается нажатием на имя, стрелка раскрывает. */
+@Composable
+private fun PickTargetDlg(d: FmDlg.PickTarget, close: () -> Unit) {
+    val base = remember { FmPane(9, "/").also { it.src = "local" } }
+    val scope = rememberCoroutineScope()
+    val internal = stringResource(R.string.fm_internal)
+    LaunchedEffect(Unit) { Fm.refreshVols() }
+    val roots = listOf(PickRow("/sdcard", 0, false, internal)) + Fm.vols.filter { it.ok }.map { PickRow(it.path, 0, false, it.label) }
+    var open by remember { mutableStateOf(setOf<String>()) }
+    val kids = remember { androidx.compose.runtime.mutableStateMapOf<String, List<String>>() }
+    var sel by remember { mutableStateOf<String?>(null) }
+    fun toggle(path: String) {
+        if (path in open) { open = open - path; return }
+        scope.launch { kids[path] = runCatching { FmIo.subdirs(base, path) }.getOrDefault(emptyList()).filter { !it.trimEnd('/').substringAfterLast('/').startsWith('.') }; open = open + path }
+    }
+    val rows = ArrayList<PickRow>()
+    fun walk(path: String, depth: Int, label: String) {
+        rows.add(PickRow(path, depth, path in open, label))
+        if (path in open) kids[path].orEmpty().forEach { walk(it, depth + 1, it.trimEnd('/').substringAfterLast('/')) }
+    }
+    roots.forEach { walk(it.path, 0, it.label) }
+    LAlertDialog(
+        onDismissRequest = close, title = { Text(stringResource(if (d.move) R.string.pk_move_to else R.string.pk_copy_to)) },
+        text = {
+            Column {
+                Text(sel ?: stringResource(R.string.pk_pick), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(4.dp))
+                BarLazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(rows.size, key = { rows[it].path }) { i ->
+                        val r = rows[i]
+                        val on = r.path == sel
+                        Row(Modifier.fillMaxWidth().padding(start = (r.depth * 14).dp), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.IconButton({ toggle(r.path) }, Modifier.size(34.dp)) {
+                                Icon(if (r.open) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(20.dp))
+                            }
+                            Text(r.label, Modifier.weight(1f).clickable { sel = r.path }.background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = .18f) else Color.Transparent).padding(vertical = 9.dp, horizontal = 4.dp),
+                                fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton({
+                val to = sel ?: return@TextButton
+                close()
+                Fm.scope.launch {
+                    for ((sp, names) in d.jobs) { Fm.copyMoveTo(d.move, sp, base, "local", to, names); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+                    d.after()
+                }
+            }, enabled = sel != null) { Text(stringResource(R.string.pk_here)) }
+        },
+        dismissButton = { TextButton(close) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

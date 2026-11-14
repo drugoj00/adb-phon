@@ -54,6 +54,8 @@ object Setup {
     /** Окно «нужно разрешение» в момент запуска функции: показывается, когда пользователь пропустил первый запуск, а функции разрешение нужно. */
     var askKey by mutableStateOf<String?>(null)
     private val lastAsk = HashMap<String, Long>()
+    /** 9.3: «Не сейчас» на «Работа в фоне» и уведомления: не переспрашивать при каждой операции копирования, а только раз в 6 часов. */
+    fun snooze(key: String) { if (key == "battery" || key == "notif") lastAsk[key] = System.currentTimeMillis() + 6 * 3600_000L - 15_000L }
 
     /** true, если разрешение есть. Иначе (не чаще раза в 15 секунд на разрешение) показывает окно с пояснением и кнопкой «Включить»; вызывающий код продолжает без него или ждёт возврата. */
     fun need(ctx: Context, key: String): Boolean {
@@ -183,11 +185,11 @@ fun PermAsk() {
         onDispose { owner.lifecycle.removeObserver(ob) }
     }
     LAlertDialog(
-        onDismissRequest = { Setup.askKey = null },
+        onDismissRequest = { Setup.snooze(key); Setup.askKey = null },
         title = { Text(stringResource(step.title).replaceFirstChar { it.uppercase() }, fontSize = 17.sp) },
         text = { Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(stringResource(step.why), fontSize = 14.sp) } },
         confirmButton = { TextButton({ if (act != null) step.go(act) }) { Text(stringResource(R.string.su_enable)) } },
-        dismissButton = { TextButton({ Setup.askKey = null }) { Text(stringResource(R.string.su_adb_no), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) } },
+        dismissButton = { TextButton({ Setup.snooze(key); Setup.askKey = null }) { Text(stringResource(R.string.su_adb_no), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) } },
     )
 }
 

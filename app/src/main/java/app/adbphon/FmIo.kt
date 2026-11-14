@@ -69,7 +69,8 @@ object FmIo {
 
     private fun s(id: Int, vararg a: Any): String = runCatching { app.getString(id, *a) }.getOrDefault("")
     private fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
-    fun join(dir: String, name: String) = dir.trimEnd('/') + "/" + name
+    /** Имя с адресом источника («smb://хост/папка/файл», так называются отмеченные в дереве сетевые элементы) уже полный путь: к папке не приклеивается. */
+    fun join(dir: String, name: String) = if (name.contains("://")) name else dir.trimEnd('/') + "/" + name
     private val lsLine = Regex("^([dl-])\\S+\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{4}-\\d\\d-\\d\\d)\\s+(\\d\\d:\\d\\d)\\s+(.+)$")
 
     /** Понятный текст ошибки без упоминания связи для обычного режима. */

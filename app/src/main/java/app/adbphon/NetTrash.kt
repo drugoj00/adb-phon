@@ -79,16 +79,27 @@ object NetTrash {
         for (c in NetStore.list(ctx)) if (c.kind != "cloud" && supported(c)) runCatching { ensure(ctx, c) }
     }
 
+    /** Папку SFTP и FTP сервер удаляет только пустой: содержимое убирается снизу вверх. SMB и WebDAV удаляют папку целиком сами. */
+    private suspend fun removeTree(c: NetConn, fs: RemoteFs, path: String, isDir: Boolean) {
+        if (isDir && (c.kind == "sftp" || c.kind == "ftp" || c.kind == "ftps")) {
+            for (e in fs.list(path.trimEnd('/') + "/")) removeTree(c, fs, e.path, e.isDir)
+        }
+        fs.removeRemote(path, isDir)
+    }
+
     /** Удаление на сетевом источнике: [permanent] = навсегда, иначе в корзину источника. null: готово, иначе текст ошибки. */
     suspend fun delete(ctx: Context, c: NetConn, fs: RemoteFs, path: String, isDir: Boolean, permanent: Boolean, size: Long): String? {
-        if (!supported(c)) return ctx.getString(R.string.nt_none)
-        val rel = rel(c, fs, path)?.takeIf { it.isNotEmpty() } ?: return ctx.getString(R.string.nt_none)
-        val id = ensure(ctx, c)
         // тип и размер неизвестны (удаление из дерева «домика»): один запрос списка родительской папки
         var dir = isDir; var sz = size
         if (!isDir && size < 0) runCatching { fs.list(path.trimEnd('/').substringBeforeLast('/', "").ifEmpty { "/" }).firstOrNull { it.name == path.trimEnd('/').substringAfterLast('/') } }.getOrNull()?.let { dir = it.isDir; sz = it.size }
+        // 9.3: навсегда и у источника без корзины (SMB без общего ресурса в записи, WebDAV «Wi-Fi проводника») удаляется прямо на сервере; раньше такое удаление отвечало «удалять нельзя» или уходило в несуществующую корзину
+        if (permanent || !supported(c)) {
+            return try { removeTree(c, fs, path, dir); if (supported(c)) CloudTrash.invalidate(rid(c)); null } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { FmIo.nice(e) }
+        }
+        val rel = rel(c, fs, path)?.takeIf { it.isNotEmpty() } ?: return ctx.getString(R.string.nt_none)
+        val id = ensure(ctx, c)
         val inTrash = rel == CloudTrash.DIR || rel.startsWith(CloudTrash.DIR + "/")
-        val res = if (!permanent && !inTrash) CloudTrash.moveIn(ctx, id, rel, dir, sz) else CloudTrash.purgeRel(ctx, id, rel, dir)
+        val res = if (!inTrash) CloudTrash.moveIn(ctx, id, rel, dir, sz) else CloudTrash.purgeRel(ctx, id, rel, dir)
         if (res == null) CloudTrash.invalidate(id)
         return res
     }

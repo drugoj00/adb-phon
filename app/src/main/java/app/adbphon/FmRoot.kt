@@ -155,7 +155,8 @@ object FmRootCfg {
     /** Ручное «Обновить» на экране «Устройства»: сбрасывает загруженное содержимое раскрытых узлов и кэш корзин, всё читается заново. */
     fun refreshAll(ctx: Context) {
         Fm.scope.launch {
-            kids.clear(); kidErr.clear(); autoRetry.clear()
+            // 9.4: раскрытые узлы перечитываются на месте (без «Загрузки…»): список не схлопывается, прокрутка и фокус остаются
+            kids.keys.toList().forEach { stale.add(it) }; kidErr.clear(); autoRetry.clear()
             NetStore.list(ctx).forEach { c -> runCatching { CloudTrash.invalidate(NetTrash.rid(c)) } }
             CloudTrash.ver++
             runCatching { FmTrash.bump(); FmTrash.refreshSum() }
@@ -250,6 +251,16 @@ object FmRootCfg {
      * при нескольких удалённых строках берётся строка после последней удалённой. Положение прокрутки держит сам список (строки с постоянными ключами).
      * Вызывается из строки, которая освобождается, пока на ней фокус.
      */
+    fun rowsOf(paneId: Int): List<String> = rowsByPane[paneId]?.first ?: emptyList()
+    /** После переименования (исчезла одна строка, появилась одна): фокус новой строке, если пульт или клавиатура уже использовались. */
+    fun focusRenamed(paneId: Int, before: List<String>) {
+        Fm.scope.launch {
+            kotlinx.coroutines.delay(900)
+            val now = rowsOf(paneId)
+            val gone = before.filter { it !in now }; val fresh = now.filter { it !in before }
+            if (gone.size == 1 && fresh.size == 1 && FocusRestore.keyMode(Fm.sctx)) { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = fresh[0] }
+        }
+    }
     fun focusedRowGone(paneId: Int, key: String) {
         val old = rowsByPane[paneId] ?: return
         Fm.scope.launch {
@@ -257,6 +268,9 @@ object FmRootCfg {
             val now = rowsByPane[paneId] ?: return@launch
             if (key in now.first) return@launch     // строка только ушла за край экрана, она по-прежнему в списке
             val gone = old.first.filter { it !in now.first }.toSet()
+            // переименование: одна строка исчезла, одна появилась на том же месте: фокус новой строке
+            val fresh = now.first.filter { it !in old.first }
+            if (gone.size == 1 && fresh.size == 1) { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = fresh[0]; return@launch }
             val keys = old.first; val lv = old.second
             if (keys.size != lv.size) return@launch
             val idx = keys.indices.filter { keys[it] in gone }
@@ -824,20 +838,9 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     }
 }
 
-/**
- * Панель групповых действий над отмеченным в дереве «домика»: ОДНА строка из значков (подпись по долгому нажатию и в описании для чтения с экрана).
- * Слева кружок с числом отмеченного и «Снять выбор»; справа (прокручивается, если не помещается): для обычных файлов «Копировать», «Перенести»,
- * «Удалить»; для элементов «Корзины» «Восстановить» и «Удалить навсегда» (красные значки у удаления).
- */
-@Composable
-internal fun RootSelBar(p: FmPane) {
-    val ctx = LocalContext.current
-    val focusManager = LocalFocusManager.current
-    val items = FmRootCfg.sel.values.toList()
-    val trash = items.filter { it.ti != null || it.fi != null }
-    val files = items.filter { it.ti == null && it.fi == null }
-    val red = Color(0xFFD84343)
-    var confirmForever by remember { mutableStateOf(false) }
+/** Групповые действия над отмеченным в дереве «домика»: общие для панели выбора и кнопок центральной колонки. */
+internal object RootSelOps {
+    private val files get() = FmRootCfg.sel.values.filter { it.ti == null && it.fi == null }
     fun pseudo(e: FmRootCfg.SelE, path: String): FmPane = FmPane(9, path).also { ps ->
         if (e.net != null) { ps.src = "smb"; ps.smb = FmRootCfg.fsFor(e.net); ps.net = e.net }
     }
@@ -863,11 +866,16 @@ internal fun RootSelBar(p: FmPane) {
             FmRootCfg.focusRowLater(focusKey)
         }
     }
-    fun transfer(move: Boolean) {
+    fun transfer(p: FmPane, move: Boolean) {
         val o = Fm.panes[1 - p.id]
-        if (o.root) { Fm.say(Fm.str(R.string.sel_need_target)); return }
         val groups = files.groupBy { (it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L") + "#" + it.parentPath }
         val par = files.map { it.parentId }
+        // 9.3: другая панель тоже корень: вместо глухого «открой папку-приёмник» спрашиваем, куда копировать
+        if (o.root) {
+            val jobs = groups.values.map { g -> pseudo(g[0], g[0].parentPath) to g.map { it.name } }
+            Fm.dlg = FmDlg.PickTarget(move, jobs) { FmRootCfg.sel.clear(); kotlinx.coroutines.delay(700); while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(300); kotlinx.coroutines.delay(500); FmRootCfg.kids.keys.toList().forEach { FmRootCfg.stale.add(it) } }
+            return
+        }
         Fm.scope.launch {
             for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
         }
@@ -877,13 +885,31 @@ internal fun RootSelBar(p: FmPane) {
         val srcs = files.map { it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L" }.distinct()
         if (srcs.size != 1) { Fm.say(Fm.str(R.string.sel_one_source)); return }
         val first = files[0]
-        if (first.net != null && first.net.kind != "cloud" && !NetTrash.supported(first.net)) { Fm.say(Fm.str(R.string.nt_none)); return }
         // одна «тень» панели на корне источника, имена от корня: так удаляется отмеченное из разных папок разом
         val par = files.map { it.parentId }
         val nb = FmRootCfg.neighborOf(files.map { "t:" + it.key }.toSet())
         Fm.askDelete(pseudo(first, "/"), files.map { it.path.trimStart('/') })
         FmRootCfg.sel.clear(); refreshLater(par, emptyList(), nb, true)
     }
+}
+
+/**
+ * Панель групповых действий над отмеченным в дереве «домика»: ОДНА строка из значков (подпись по долгому нажатию и в описании для чтения с экрана).
+ * Слева кружок с числом отмеченного и «Снять выбор»; справа (прокручивается, если не помещается): для обычных файлов «Копировать», «Перенести»,
+ * «Удалить»; для элементов «Корзины» «Восстановить» и «Удалить навсегда» (красные значки у удаления).
+ */
+@Composable
+internal fun RootSelBar(p: FmPane) {
+    val ctx = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val items = FmRootCfg.sel.values.toList()
+    val trash = items.filter { it.ti != null || it.fi != null }
+    val files = items.filter { it.ti == null && it.fi == null }
+    val red = Color(0xFFD84343)
+    var confirmForever by remember { mutableStateOf(false) }
+    fun transfer(move: Boolean) = RootSelOps.transfer(p, move)
+    fun deleteFiles() = RootSelOps.deleteFiles()
+    fun refreshLater(parents: List<String>, hosts: List<String>, focusKey: String? = null, isDelete: Boolean = false) = RootSelOps.refreshLater(parents, hosts, focusKey, isDelete)
     fun doForever() {
         val list = trash.toList(); val hosts = list.mapNotNull { it.net?.let { n -> NetTrash.rid(n) } }
         FmRootCfg.sel.clear()
@@ -1325,10 +1351,14 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 val rel = tg.map { it.path.trimStart('/') }
                 val dir = if (e.isDir) e.path else e.parentPath
                 if (e.isDir && !multiSel) item(R.string.fc_title) { Fm.dlg = FmDlg.FolderColor(e.path, e.path.trimEnd('/').substringAfterLast('/')) }
-                fun refresh(focusKey: String? = null) { val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(2500); ids.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }; CloudTrash.ver++; FmRootCfg.focusRowLater(focusKey) } }
+                fun refresh(focusKey: String? = null) { val before = FmRootCfg.rowsOf(p.id); val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(600); var wn = 0; while (wn < 400 && (Fm.dlg is FmDlg.Rename || Fm.dlg is FmDlg.NewFolder || Fm.dlg is FmDlg.NewFile)) { kotlinx.coroutines.delay(300); wn++ }; kotlinx.coroutines.delay(if (wn > 0) 700L else 1900L); ids.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }; CloudTrash.ver++; FmRootCfg.focusRowLater(focusKey); FmRootCfg.focusRenamed(p.id, before) } }
                 fun transfer(move: Boolean) {
                     val o = Fm.panes[1 - p.id]
-                    if (o.root) { Fm.say(Fm.str(R.string.sel_need_target)); return }
+                    if (o.root) {
+                        // 9.3: другая панель тоже корень: спрашиваем папку-приёмник
+                        Fm.dlg = FmDlg.PickTarget(move, tg.groupBy { it.parentPath }.map { (pp, g) -> pane(pp) to g.map { it.name } }) { FmRootCfg.sel.clear(); kotlinx.coroutines.delay(700); while (Fm.jobs.isNotEmpty()) kotlinx.coroutines.delay(300); kotlinx.coroutines.delay(500); FmRootCfg.kids.keys.toList().forEach { FmRootCfg.stale.add(it) } }
+                        return
+                    }
                     Fm.scope.launch {
                         for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(move, pane(pp), o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
                         refresh()
