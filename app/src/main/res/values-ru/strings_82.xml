@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tc_type_hint">Нажми на окно, чтобы печатать прямо в нём; «Вставить» появляется в углу окна.</string>
+    <string name="ed_empty">Файл пуст.</string>
+    <string name="ed_read_failed">Не удалось прочитать файл: %1$s</string>
+    <string name="fm_package">Пакет</string>
+    <string name="bt_forget_one">Забыть устройство</string>
+    <string name="bt_forget_one_q">Убрать «%1$s» (%2$s) из сопряжённых?</string>
+    <string name="bt_forget_yes">Забыть</string>
+    <string name="set_open_files_hint">Запомненное приложение для типа файла (например, .apk), которое ты выбрал с галочкой «Запомнить». «Забыть» возвращает вопрос. Пункт виден, только пока что-то запомнено.</string>
+    <string name="hint_more">Подробнее</string>
+    <string name="pw_show">Показать пароль</string>
+    <string name="pw_hide">Скрыть пароль</string>
+    <string name="cmod_btn_install">Установить</string>
+    <string name="cmod_btn_update">Обновить</string>
+    <string name="copy_name">Копировать название</string>
+    <string name="copy_addr">Копировать адрес</string>
+    <string name="tc_runml_n">Выполнить строк: %1$d?</string>
+    <string name="tc_runml_go">Выполнить</string>
+    <string name="tc_runml_cancel">Отмена</string>
+</resources>

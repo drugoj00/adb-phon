@@ -776,15 +776,10 @@
     <string name="fm_mode_tree">Дерево</string>
     <string name="fm_mode_list">Список</string>
     <string name="fm_vol_ro">только чтение</string>
-    <string name="fm_vol_body">Путь: %1$s
-Объём: %2$s
-Файловая система: %3$s
-Тип: %4$s</string>
+    <string name="fm_vol_body">Путь: %1$s\nОбъём: %2$s\nФайловая система: %3$s\nТип: %4$s</string>
     <string name="fm_vol_unsupported">Система не смонтировала этот накопитель: его файловая система не поддерживается (например NTFS без драйвера). Отформатируй его в exFAT или FAT32 на компьютере либо подключи к устройству, где NTFS поддерживается.</string>
     <string name="fm_vol_unsupported_short">Файловая система не поддерживается системой (NTFS?)</string>
-    <string name="fm_net_body">Тип: %1$s
-Адрес: %2$s
-Пользователь: %3$s</string>
+    <string name="fm_net_body">Тип: %1$s\nАдрес: %2$s\nПользователь: %3$s</string>
     <string name="fm_net_lost">Не удалось снова открыть %1$s: показана память телефона.</string>
     <string name="set_collapse_all">Свернуть все</string>
     <string name="set_marq">Прокрутка длинных названий</string>
