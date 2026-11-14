@@ -1283,7 +1283,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="tr_drive">Cloud drive</string>
     <string name="ap_need_root">No access. Root is needed.</string>
     <string name="tr_restore_fail">Could not restore: the item stays in the trash.</string>
-    <string name="sel_need_target">Open the target folder in the other panel first</string>
+    <string name="sel_need_target">Expand the target folder in the other panel</string>
     <string name="sel_one_source">Selected items come from different sources: act on one source at a time</string>
     <string name="sb_copy">Copy</string>
     <string name="sb_move">Move</string>
@@ -1795,4 +1795,6 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="pk_move_to">Move to…</string>
     <string name="pk_here">Here</string>
     <string name="pk_pick">Pick a folder (tap its name)</string>
+    <string name="pk_copying_to">Copying to: %1$s</string>
+    <string name="pk_moving_to">Moving to: %1$s</string>
 </resources>
