@@ -6,4 +6,5 @@
     <string name="via_adb_pane_only">Файл лежить на пристрої: ставить лише ADB-phon</string>
     <string name="via_started">Запущено вибраний встановлювач</string>
     <string name="via_cancelled">Встановлення скасовано</string>
+    <string name="inst_remember_note">Після запамʼятовування вікно більше не показується; повернути: Налаштування → «Питати, чим встановлювати».</string>
 </resources>
