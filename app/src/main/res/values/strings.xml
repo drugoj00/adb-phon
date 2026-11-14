@@ -844,6 +844,8 @@
     <string name="set_narrow">Narrow font in lists</string>
     <string name="set_narrow_hint">Names and captions in lists use a condensed font of the same size, so more text fits without scrolling.</string>
     <string name="set_folder_color">Default folder color</string>
+    <string name="oa_notepad">ADB-phon Notepad</string>
+    <string name="oa_notepad_hint">Built-in viewer and editor</string>
     <string name="oa_builtin">Built-in</string>
     <string name="oa_pick">Choose an app</string>
     <string name="ph_info">Photo info</string>
@@ -1634,6 +1636,10 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="ic_row">Custom icon…</string>
     <string name="ic_item">Custom file icon…</string>
     <string name="sb_icon_hint">Tap a button icon to replace it with your own.</string>
+    <string name="sb_size">Side column buttons size (phone, landscape)</string>
+    <string name="sb_size_s">Small</string>
+    <string name="sb_size_m">Medium</string>
+    <string name="sb_size_l">Large</string>
     <string name="sb_reset_icons">Reset all button icons</string>
     <string name="inv_title">Connection over the internet</string>
     <string name="inv_code">Program code: %1$s</string>
