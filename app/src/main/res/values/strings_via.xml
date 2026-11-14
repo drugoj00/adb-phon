@@ -6,4 +6,5 @@
     <string name="via_adb_pane_only">The file is on the device: only ADB-phon can install it</string>
     <string name="via_started">Installer started</string>
     <string name="via_cancelled">Installation cancelled</string>
+    <string name="inst_remember_note">Remember: the “Install with…” window is then no longer shown; to bring it back turn on Settings → “Ask which installer to use”.</string>
 </resources>
