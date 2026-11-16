@@ -22,7 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +44,8 @@ import java.io.File
  * Свои иконки (7.0): для отдельной папки, для расширения файла и для категории файлов (фото, видео, музыка...).
  * Хранятся в настройках «icons»: ключ «f:путь» (папка), «p:путь» (файл), «e:расширение», «c:КАТЕГОРИЯ»; значение «b:имя» (значок из набора)
  * или «i:файл» (своё изображение, копия 128x128 лежит в files/icons).
+ * Другие ключи: «s:» кнопки панели, «d:» строки корня, «t:» вкладки, «a:» приложения, «v:» устройства; 10.0: «u:remote:N», «u:more:N» подвкладки, «k:путь» закладки
+ * (MiscIconKeys). Весь файл настроек «icons» входит в копию настроек целиком (AppBackup), отдельной маски ключей нет.
  */
 object CustomIcons {
     class Spec(val vec: ImageVector?, val bmp: Bitmap?)

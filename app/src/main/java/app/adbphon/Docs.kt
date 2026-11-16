@@ -221,7 +221,7 @@ fun TextEditor(onClose: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(q, { q = it }, singleLine = true, label = { Text(stringResource(R.string.ed_find_what), maxLines = 1) })
                     if (!readOnly) OutlinedTextField(r, { r = it }, singleLine = true, label = { Text(stringResource(R.string.ed_replace_with), maxLines = 1) })
-                    androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) { androidx.compose.material3.Checkbox(backup, { backup = it }); Text(stringResource(R.string.ed_backup), fontSize = 13.sp) }
+                    androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) { BigCheckbox(backup, { backup = it }); Text(stringResource(R.string.ed_backup), fontSize = 13.sp) }
                 }
             },
             confirmButton = {
@@ -250,7 +250,7 @@ class PdfViewerActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) { Surface(Modifier.fillMaxSize()) { PdfViewer { finish() } } } }
+        setContent { MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) { Surface(Modifier.fillMaxSize()) { ImeGateHost { PdfViewer { finish() } } } } }
     }
 }
 
@@ -275,8 +275,8 @@ fun PdfViewer(onClose: () -> Unit) {
             Text(e.name, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1)
             val n = renderer?.pageCount ?: 0
             if (n > 0) Text("${state.firstVisibleItemIndex + 1}/$n", fontSize = 12.sp)
-            TextButton({ zoom = (zoom - 0.25f).coerceAtLeast(0.5f) }) { Text("−") }
-            TextButton({ zoom = (zoom + 0.25f).coerceAtMost(3f) }) { Text("+") }
+            // 10.0 (cnt): «− 100% +», нажатие на число открывает ввод (от 50 до 300%), шаг 25% как раньше
+            NumberStepper(kotlin.math.round(zoom * 100).toInt(), 50..300, { zoom = it / 100f }, step = 25, unit = "%", label = stringResource(R.string.cnt_zoom), compact = true)
         }
         val r = renderer
         if (r == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { if (err != null) Text(stringResource(R.string.doc_open_failed, err ?: ""), color = MaterialTheme.colorScheme.error) else androidx.compose.material3.CircularProgressIndicator() }

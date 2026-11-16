@@ -105,6 +105,7 @@ object UiPrefs {
         }
         instMode.clear()
         listOf("apk", "apks", "apkm", "xapk").forEach { e -> p.getString("inst_$e", "ask")?.takeIf { it != "ask" }?.let { instMode[e] = it } }
+        InstallerStore.get(ctx)   // 10.0: единый выбор установщика читается при запуске (перенос старых настроек)
     }
 
     fun setAskInstaller(ctx: Context, v: Boolean) { askInstaller = v; sp(ctx).edit().putBoolean("ask_installer", v).apply() }
@@ -296,7 +297,7 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(size * 0.28f).align(Alignment.TopStart).padding(2.dp).background(Color.Black.copy(alpha = .5f), CircleShape), tint = Color.White)
                 Thumbs.durations[localPath ?: ""]?.let { ms ->
                     val sec = ms / 1000
-                    androidx.compose.material3.Text(if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec % 3600 / 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60), Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(3.dp)).padding(horizontal = 2.dp), fontSize = 8.sp, color = Color.White, maxLines = 1)
+                    FloorText(if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec % 3600 / 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60), Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(3.dp)).padding(horizontal = 2.dp), fontSize = 8.sp, color = Color.White, maxLines = 1)
                 }
             }
         }
@@ -407,46 +408,74 @@ fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: 
 /** Блок настроек внешнего вида «Файлов»: узкий шрифт, цвет папок по умолчанию, «Открывать как» для фото, аудио и видео. */
 @Composable
 fun FilesLookSection() {
+    FilesBgMusicSetting(); FilesWifiAutoSetting(); FilesThumbsSetting()
+    InstallerDefaultSetting()   // 10.0: «Установщик по умолчанию» вместо «Спрашивать, чем устанавливать»
+    CloudModuleSetting(); CloudModuleAutoSetting()
+    FilesOpenAsSetting(); FilesDirTapSetting(); FilesFolderColorSetting(); FilesTypeIconsSetting()
+}
+
+// 10.0 (set): пункты блока по отдельности, чтобы экран «Настройки» раскладывал их по группам («Файлы», «Облака»)
+@Composable
+fun FilesBgMusicSetting() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var colorDlg by remember { mutableStateOf(false) }
     var bg by remember { mutableStateOf(ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).getBoolean("bg_music", false)) }
     SettingSwitch(bg, { bg = it; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("bg_music", it).apply() }, androidx.compose.ui.res.stringResource(R.string.set_bg_music), androidx.compose.ui.res.stringResource(R.string.set_bg_music_hint))
+}
+
+@Composable
+fun FilesWifiAutoSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var wa by remember { mutableStateOf(WifiAuto.enabled(ctx)) }
     SettingSwitch(wa, { wa = it; WifiAuto.setEnabled(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_wifi_auto), androidx.compose.ui.res.stringResource(R.string.set_wifi_auto_hint))
+}
+
+@Composable
+fun FilesThumbsSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     SettingSwitch(UiPrefs.thumbs, { UiPrefs.setThumbs(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_thumbs), androidx.compose.ui.res.stringResource(R.string.set_thumbs_hint))
-    SettingSwitch(UiPrefs.askInstaller, { UiPrefs.setAskInstaller(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_ask_installer), androidx.compose.ui.res.stringResource(R.string.set_ask_installer_hint))
+}
+
+/** Модуль «ADB-phon Облака»: версия, «Установить»/«Обновить» и «Удалить» (строки-действия, 10.0 set). */
+@Composable
+fun CloudModuleSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     // 7.6: модуль «ADB-phon Облака»: версия, автообновление и удаление
     @Suppress("UNUSED_VARIABLE") val cmTick = CloudModule.ver
     val cmV = CloudModule.installedVersion(ctx)
-    var cmAuto by remember(CloudModule.autoTick) { mutableStateOf(CloudModule.auto(ctx)) }
     var cmDel by remember { mutableStateOf(false) }
     // 9.0: обе кнопки всегда на месте: «Установить» (или «Обновить», если есть новая версия) и «Удалить»; неподходящая в этом состоянии серая
     val cmUp = cmV != null && CloudModule.upgradeAvailable(ctx)
     val cmCanInstall = CloudModule.supportedDevice() && (cmV == null || cmUp)
-    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-        androidx.compose.material3.Text(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp)
-        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.OutlinedButton({ CloudModule.reset(); CloudModule.start(ctx, null, upgrade = cmUp) }, androidx.compose.ui.Modifier.weight(1f), enabled = cmCanInstall) {
-                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(if (cmUp) R.string.cmod_btn_update else R.string.cmod_btn_install), maxLines = 1)
-            }
-            androidx.compose.material3.OutlinedButton({ cmDel = true }, androidx.compose.ui.Modifier.weight(1f), enabled = cmV != null) {
-                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_cmod_remove), maxLines = 1)
-            }
-        }
+    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+        FloorText(androidx.compose.ui.res.stringResource(R.string.set_cmod_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        FloorText(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp)
+        SetAction(SetIcons.download, androidx.compose.ui.res.stringResource(if (cmUp) R.string.cmod_btn_update else R.string.cmod_btn_install), enabled = cmCanInstall) { CloudModule.reset(); CloudModule.start(ctx, null, upgrade = cmUp) }
+        SetAction(SetIcons.delete, androidx.compose.ui.res.stringResource(R.string.set_cmod_remove), enabled = cmV != null, danger = true) { cmDel = true }
     }
-    SettingSwitch(cmAuto, { cmAuto = it; CloudModule.setAuto(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_cmod_auto), androidx.compose.ui.res.stringResource(R.string.set_cmod_auto_hint))
     if (cmDel) LAlertDialog(
         onDismissRequest = { cmDel = false },
-        title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove_title)) },
-        text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove_text), fontSize = 14.sp) },
-        confirmButton = { androidx.compose.material3.TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
-        dismissButton = { androidx.compose.material3.TextButton({ cmDel = false }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
+        title = { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove_title)) },
+        text = { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove_text), fontSize = 14.sp) },
+        confirmButton = { androidx.compose.material3.TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
+        dismissButton = { androidx.compose.material3.TextButton({ cmDel = false }) { FloorText(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
     )
+}
+
+@Composable
+fun CloudModuleAutoSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var cmAuto by remember(CloudModule.autoTick) { mutableStateOf(CloudModule.auto(ctx)) }
+    SettingSwitch(cmAuto, { cmAuto = it; CloudModule.setAuto(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_cmod_auto), androidx.compose.ui.res.stringResource(R.string.set_cmod_auto_hint))
+}
+
+/** Запомненные программы для типов файлов (пункт виден, только когда есть запомненный выбор). */
+@Composable
+fun FilesOpenAsSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var remTick by remember { mutableStateOf(0) }
     val remembered = remember(remTick, UiPrefs.openAs.size) {
         val l = ArrayList<Pair<String, String>>()
         UiPrefs.openAs.forEach { (k, v) -> if (k.startsWith("ext:")) l += k.removePrefix("ext:") to (if (v == "builtin") "builtin" else "cmp:$v") }
-        listOf("apk", "apks", "apkm", "xapk").forEach { e -> ApkInstall.saved(ctx, e)?.let { l += e to it } }
         l.sortedBy { it.first }
     }
     // 9.0: пункт показывается только когда есть запомненный выбор программы для типа файла; пояснение свёрнуто в названии, одинокого слова «Спрашивать» больше нет
@@ -460,27 +489,42 @@ fun FilesLookSection() {
             else -> runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(id.removePrefix("cmp:").substringBefore(Char(47)), 0)).toString() }.getOrDefault(id)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Text("." + e + "  →  " + what, Modifier.weight(1f), fontSize = 13.sp)
-            androidx.compose.material3.TextButton({ ApkInstall.forget(ctx, e); remTick++ }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.rt_forget)) }
+            FloorText("." + e + "  →  " + what, Modifier.weight(1f), fontSize = 13.sp)
+            androidx.compose.material3.TextButton({ ApkInstall.forget(ctx, e); remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.rt_forget)) }
         }
     }
-    if (remembered.isNotEmpty()) androidx.compose.material3.TextButton({ remembered.forEach { (e, _) -> ApkInstall.forget(ctx, e) }; remTick++ }) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.reset_all)) }
-    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.set_dir_tap), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+    if (remembered.isNotEmpty()) androidx.compose.material3.TextButton({ remembered.forEach { (e, _) -> ApkInstall.forget(ctx, e) }; remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.reset_all)) }
+}
+
+@Composable
+fun FilesDirTapSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    FloorText(androidx.compose.ui.res.stringResource(R.string.set_dir_tap), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     EqChoices(listOf(
         EqChoice(androidx.compose.ui.res.stringResource(R.string.dt_expand), Fm.dirTapExpand) { Fm.dirTapExpand = true; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("dir_tap", "expand").apply() },
         EqChoice(androidx.compose.ui.res.stringResource(R.string.dt_open), !Fm.dirTapExpand) { Fm.dirTapExpand = false; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("dir_tap", "open").apply() },
     ))
+}
+
+@Composable
+fun FilesFolderColorSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var colorDlg by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable { colorDlg = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         FolderIcon(UiPrefs.folderDefault, false, 32.dp)
         Text(androidx.compose.ui.res.stringResource(R.string.set_folder_color), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
+    if (colorDlg) FolderColorDialog(androidx.compose.ui.res.stringResource(R.string.set_folder_color), UiPrefs.folderDefault, false, { i -> if (i != null) UiPrefs.setFolderDefault(ctx, i); colorDlg = false }, { colorDlg = false })
+}
+
+@Composable
+fun FilesTypeIconsSetting() {
     var typeIcons by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable { typeIcons = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         FileGlyph(FCat.PHOTO, "", 32.dp)
         Text(androidx.compose.ui.res.stringResource(R.string.ic_types), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
     if (typeIcons) FileTypeIconsDialog { typeIcons = false }
-    if (colorDlg) FolderColorDialog(androidx.compose.ui.res.stringResource(R.string.set_folder_color), UiPrefs.folderDefault, false, { i -> if (i != null) UiPrefs.setFolderDefault(ctx, i); colorDlg = false }, { colorDlg = false })
 }
 
 @Composable
@@ -528,12 +572,51 @@ fun PropsBody(body: String) {
             val at = r.indexOf(": ")
             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
                 if (at in 1..24) {
-                    androidx.compose.material3.Text(r.substring(0, at), Modifier.weight(0.44f).padding(end = 8.dp), color = keyColor, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 12.sp)
-                    androidx.compose.material3.Text(r.substring(at + 2), Modifier.weight(0.56f), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                } else androidx.compose.material3.Text(r, Modifier.fillMaxWidth(), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    FloorText(r.substring(0, at), Modifier.weight(0.44f).padding(end = 8.dp), color = keyColor, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 12.sp)
+                    FloorText(r.substring(at + 2), Modifier.weight(0.56f), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                } else FloorText(r, Modifier.fillMaxWidth(), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
             val nextBlank = i + 1 >= rows.size || rows[i + 1].isBlank()
             if (!nextBlank) androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = lineColor)
         }
     }
+}
+
+
+/**
+ * 10.0: окно «Свойства» (папка, файл, несколько файлов, диск, подключение) без прокрутки: строки делятся на страницы (портрет 6 строк; ландшафт две колонки по 4),
+ * переключатель «Ещё ›» / «‹ Назад»; BACK возвращает на предыдущую страницу, на первой закрывает.
+ */
+@Composable
+fun PropsDialog(title: String, body: String, close: () -> Unit) {
+    val land = isLandscapeUi()
+    val perCol = if (land) 4 else 6
+    val perPage = if (land) perCol * 2 else perCol
+    // каждый файл (блок до пустой строки) на своей странице; длинный блок делится по perPage строк
+    val pages = remember(body, land) {
+        val out = ArrayList<List<String>>()
+        body.split("\n\n").map { blk -> blk.split('\n').filter { it.isNotBlank() } }.filter { it.isNotEmpty() }.forEach { rows -> rows.chunked(perPage).forEach { out.add(it) } }
+        if (out.isEmpty()) out.add(listOf(""))
+        out
+    }
+    var page by remember(pages) { androidx.compose.runtime.mutableIntStateOf(0) }
+    LAlertDialog(
+        wide = land,
+        onDismissRequest = { if (page > 0) page-- else close() },
+        title = { Text(title + if (pages.size > 1) "  (" + (page + 1) + "/" + pages.size + ")" else "", maxLines = 2) },
+        text = {
+            val rows = pages[page.coerceIn(0, pages.lastIndex)]
+            if (land) {
+                // две колонки: в левую первые perCol непустых строк, остальное вправо
+                var seen = 0; var cut = rows.size
+                for ((i, r) in rows.withIndex()) { if (r.isNotBlank()) { if (seen == perCol) { cut = i; break }; seen++ } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f)) { PropsBody(rows.subList(0, cut).dropLastWhile { it.isBlank() }.joinToString("\n")) }
+                    Column(Modifier.weight(1f)) { PropsBody(rows.subList(cut, rows.size).dropWhile { it.isBlank() }.joinToString("\n")) }
+                }
+            } else PropsBody(rows.joinToString("\n"))
+        },
+        confirmButton = { TextButton(close) { Text(androidx.compose.ui.res.stringResource(R.string.fm_close)) } },
+        dismissButton = { if (pages.size > 1) TextButton({ page = if (page < pages.size - 1) page + 1 else 0 }) { Text(if (page < pages.size - 1) androidx.compose.ui.res.stringResource(R.string.cl_more) + " \u203a" else "\u2039 " + androidx.compose.ui.res.stringResource(R.string.okw_back), maxLines = 1, softWrap = false) } },
+    )
 }

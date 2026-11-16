@@ -311,11 +311,13 @@ fun RemoteScreen(vm: MainViewModel) {
         vm.remoteHost?.let { Text(stringResource(R.string.target_remote, it), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             labels.forEachIndexed { i, l ->
+                var icMenu by remember { mutableStateOf(false) }   // 10.0: «Изменить значок…» по долгому нажатию (MiscUi.kt)
                 SegmentedButton(
                     selected = mode == i, onClick = { mode = i },
                     shape = SegmentedButtonDefaults.itemShape(i, labels.size),
-                    icon = {},
-                ) { Text(stringResource(l), fontSize = 10.sp, maxLines = 1, softWrap = false) }
+                    modifier = Modifier.miscLongPress { icMenu = true },
+                    icon = { MiscIconGlyph(MiscIconKeys.remote(i), 14.dp, androidx.compose.material3.LocalContentColor.current) },
+                ) { Text(stringResource(l), fontSize = 10.sp, maxLines = 1, softWrap = false); MiscIconMenu(icMenu, { icMenu = false }, stringResource(l), MiscIconKeys.remote(i)) }
             }
         }
     }
@@ -372,7 +374,7 @@ fun RemoteScreen(vm: MainViewModel) {
                 AirControls(vm, cursor, sens)
                 RemoteKeys(vm) {
                     Text(stringResource(R.string.air_sens), fontSize = 12.sp)
-                    Slider(sens, { sens = it }, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
+                    NumberSlider(sens, { sens = it }, NumberSliderRules.AIR_SENS, stringResource(R.string.air_sens), sliderModifier = Modifier.height(24.dp), colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))   // 10.0 (num)
                 }
                 HelperSwitch(vm, stringResource(R.string.air_hint))
             }
@@ -415,7 +417,7 @@ private fun RemoteLandscape(
                     RemoteTopKeys(vm)
                     RemoteMediaOnly(vm)
                     Text(stringResource(R.string.air_sens), fontSize = 12.sp)
-                    Slider(sens, onSens, Modifier.height(24.dp), valueRange = 0.3f..3f, colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
+                    NumberSlider(sens, onSens, NumberSliderRules.AIR_SENS, stringResource(R.string.air_sens), sliderModifier = Modifier.height(24.dp), colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))   // 10.0 (num)
                     HelperSwitch(vm, stringResource(R.string.air_hint))
                 }
             }
@@ -877,15 +879,21 @@ fun MoreScreen(vm: MainViewModel) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { (i, s) ->
                         val on = sub == i
+                        var icMenu by remember { mutableStateOf(false) }   // 10.0: «Изменить значок…» по долгому нажатию (MiscUi.kt)
                         Box(
                             Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(10.dp))
                                 .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+                                .miscLongPress { icMenu = true }
                                 .clickable { sub = i },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(stringResource(s), fontSize = 13.sp, maxLines = 1, textAlign = TextAlign.Center,
-                                color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground)
+                            val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                MiscIconGlyph(MiscIconKeys.more(i), 18.dp, fg)
+                                Text(stringResource(s), fontSize = 13.sp, maxLines = 1, textAlign = TextAlign.Center, color = fg)
+                            }
+                            MiscIconMenu(icMenu, { icMenu = false }, stringResource(s), MiscIconKeys.more(i))
                         }
                     }
                 }
@@ -1002,112 +1010,8 @@ fun EqChoices(items: List<EqChoice>, perRow: Int = items.size, minH: androidx.co
 fun SettingsScreen(vm: MainViewModel) {
     val colKey = 0   // 9.0: «Свернуть все» убрано; разделы сворачиваются сами при выходе из программы (CollapseAll)
     androidx.compose.runtime.CompositionLocalProvider(LocalCollapseKey provides colKey) {
-    TabColumn("tab.settings", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.set_theme), fontWeight = FontWeight.Medium)
-        EqChoices(listOf("auto" to R.string.theme_auto, "light" to R.string.theme_light, "dark" to R.string.theme_dark).map { (code, label) ->
-            EqChoice(stringResource(label), vm.theme == code) { vm.changeTheme(code) }
-        })
-        Text(stringResource(R.string.set_lang), fontWeight = FontWeight.Medium)
-        EqChoices(
-            listOf(EqChoice(stringResource(R.string.lang_auto), vm.lang == "auto") { vm.changeLang("auto") }) +
-                listOf("ru" to "Русский", "uk" to "Українська", "en" to "English").map { (code, name) -> EqChoice(name, vm.lang == code) { vm.changeLang(code) } },
-            perRow = 2,
-        )
-        val mctx = LocalContext.current
-        Text(stringResource(R.string.set_marq), fontWeight = FontWeight.Medium)
-        EqChoices(listOf(
-            EqChoice(stringResource(R.string.marq_on), Marq.mode != 2) { Marq.setMode(mctx, 1) },
-            EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(mctx, 2) },
-        ))
-        SettingSwitch(TapGuard.on, { TapGuard.set(mctx, it) }, stringResource(R.string.tg_title), stringResource(R.string.tg_hint))
-        Text(stringResource(R.string.sc_font), fontWeight = FontWeight.Medium)
-        val scNames = listOf(R.string.sc_small, R.string.sc_normal, R.string.sc_large, R.string.sc_xlarge)
-        val scCtx = LocalContext.current
-        EqChoices(AppScale.steps.mapIndexed { i, v -> EqChoice(stringResource(scNames[i]), AppScale.font == v) { AppScale.setFont(scCtx, v) } }, perRow = 4)
-        Text(stringResource(R.string.sc_ui), fontWeight = FontWeight.Medium)
-        EqChoices(AppScale.steps.mapIndexed { i, v -> EqChoice(stringResource(scNames[i]), AppScale.ui == v) { AppScale.setUi(scCtx, v) } }, perRow = 4)
-        SettingSwitch(AppFull.on, { AppFull.set(scCtx, it) }, stringResource(R.string.fs_title), stringResource(R.string.fs_hint))
-        val btnDlg = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-        androidx.compose.material3.OutlinedButton({ btnDlg.value = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.sb_title)) }
-        if (btnDlg.value) FmButtonsDialog { btnDlg.value = false }
-        val ccx = LocalContext.current
-        if (android.os.Build.VERSION.SDK_INT >= 31) SettingSwitch(AppColors.dynamic, { AppColors.setDynamic(ccx, it) }, stringResource(R.string.col_dynamic), stringResource(R.string.col_dynamic_hint))
-        if (!AppColors.dynamic) {
-            val accentThemeFr = remember { androidx.compose.ui.focus.FocusRequester() }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.col_accent), Modifier.weight(1f), fontWeight = FontWeight.Medium)
-                androidx.compose.material3.TextButton({ AppColors.resetColor(ccx) }, Modifier.focusRequester(accentThemeFr), enabled = AppColors.hue >= 0f || AppColors.accent != 0) { Text(stringResource(R.string.bar_color_theme)) }
-            }
-            var mh by remember { mutableStateOf(if (AppColors.hue >= 0f) AppColors.hue else 175f) }
-            HueBar(mh, AppColors.hue >= 0f, { mh = it; AppColors.hue = it }, { AppColors.setHue(ccx, mh) }, themeBtn = accentThemeFr, themeBtnEnabled = AppColors.hue >= 0f || AppColors.accent != 0)
-        }
-        BarContrastSetting()
-        SettingSwitch(vm.keepScreenOn, { vm.changeKeepScreenOn(it) }, stringResource(R.string.set_keep_on), stringResource(R.string.set_keep_hint))
-        SettingSwitch(vm.exitOnBack, { vm.changeExitOnBack(it) }, stringResource(R.string.set_exit_back), stringResource(R.string.set_exit_hint))
-        SettingSwitch(vm.logOn, { vm.changeLog(it) }, stringResource(R.string.log_switch), stringResource(R.string.log_hint))
-        val srvAuto = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AdbServer.auto) }
-        val srvOff = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AdbServer.offAfter) }
-        SettingSwitch(srvAuto.value, { srvAuto.value = it; AdbServer.auto = it }, stringResource(R.string.srv_auto), stringResource(R.string.srv_auto_hint))
-        SettingSwitch(srvOff.value, { srvOff.value = it; AdbServer.offAfter = it }, stringResource(R.string.srv_off), stringResource(R.string.srv_off_hint))
-        androidx.compose.material3.OutlinedButton({ Thread { AdbServer.stop() }.start() }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.srv_stop)) }
-        CallPicSettings()
-        ShizukuSection()
-        val ctx = LocalContext.current
-        val copied = stringResource(R.string.copied)
-        ActionWithHint(stringResource(R.string.su_open), stringResource(R.string.su_open_hint)) { Setup.only = null; Setup.open = true }
-        StartupSection(ctx)
-        FilesLookSection()
-        FilesDeleteSection()
-        HandednessSection()
-        Collapsible(stringResource(R.string.tc_set_title)) { TermSettings() }
-        BackupSectionV2(vm)
-        CopiesSection()
-        Collapsible(stringResource(R.string.set_version, vm.appVersion)) {
-            Text(stringResource(R.string.ver_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-        }
-        var clearVer by remember { mutableStateOf<Pair<Int, Long>?>(null) }
-        val noneMsg = stringResource(R.string.ver_none)
-        val clearedFmt = stringResource(R.string.ver_cleared)
-        EqButtons(listOf(
-            EqBtn(stringResource(R.string.ver_btn)) { vm.openVersions() },
-            EqBtn(stringResource(R.string.ver_clear_btn)) {
-                val files = VersionKeeper.oldFiles(ctx)
-                if (files.isEmpty()) Toast.makeText(ctx, noneMsg, Toast.LENGTH_SHORT).show()
-                else clearVer = files.size to files.sumOf { it.length() }
-            },
-        ))
-        EqButtons(listOf(EqBtn(stringResource(R.string.upd_check)) { vm.checkUpdate(true) }))
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            androidx.compose.material3.Checkbox(vm.autoUpdate, { vm.changeAutoUpdate(it) })
-            Text(stringResource(R.string.upd_auto), fontSize = 14.sp)
-        }
-        clearVer?.let { (n, bytes) ->
-            LAlertDialog(
-                onDismissRequest = { clearVer = null },
-                title = { Text(stringResource(R.string.ver_clear_btn)) },
-                text = { Text(stringResource(R.string.ver_clear_confirm, n, bytes / 1048576)) },
-                confirmButton = { TextButton({ val k = VersionKeeper.clearOld(ctx); clearVer = null; Toast.makeText(ctx, String.format(clearedFmt, k), Toast.LENGTH_SHORT).show() }) { Text(stringResource(R.string.ssh_delete)) } },
-                dismissButton = { TextButton({ clearVer = null }) { Text(stringResource(R.string.btn_cancel)) } },
-            )
-        }
-        EqButtons(listOf(
-            EqBtn(stringResource(R.string.log_show)) { vm.showLog() },
-            EqBtn(stringResource(R.string.log_copy)) {
-                val text = (AppLog.lastCrash().takeIf { it.isNotBlank() }?.let { "== СБОЙ ==\n$it\n\n" }.orEmpty()) + AppLog.tail(300)
-                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("ADB-phon log", text))
-                Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
-            },
-            EqBtn(stringResource(R.string.log_save), vm.connected) { vm.saveLog() },
-            EqBtn(stringResource(R.string.log_clear)) { AppLog.clear(); vm.hideLog() },
-        ), perRow = 2)
-        androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp))
-        Collapsible("", titleContent = {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.logo), null, Modifier.size(32.dp))
-                Text("ADB-phon " + vm.appVersion, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-        }) { AboutScreen(vm, embedded = true) }
+    TvFontScope {   // 10.0 (tvfont): на ТВ крупный текст в настройках
+    SettingsGrouped(vm)   // 10.0 (set): пункты разложены по группам (SettingsGroups.kt, SettingsItems.kt, SettingsLayout.kt)
     }
     }
     VersionsDialog(vm)
@@ -1175,7 +1079,7 @@ fun CopiesSection() {
     var open by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingSwitch(on, { on = it; Cfg.setBackupOnDelete(ctx, it) }, stringResource(R.string.set_backups), stringResource(R.string.backups_hint))
-        EqButtons(listOf(EqBtn(stringResource(R.string.backups_open)) { open = true }))
+        SetAction(SetIcons.copies, stringResource(R.string.backups_open), stringResource(R.string.set_h_copies)) { open = true }   // 10.0 (set): строка-действие
     }
     if (open) BackupsDialog { open = false }
 }
@@ -1192,6 +1096,8 @@ fun BarContrastSetting() {
         Slider(v, { v = it; BarStyle.contrast = it.toInt() }, Modifier.weight(1f).height(24.dp), valueRange = 0f..100f, onValueChangeFinished = { BarStyle.set(ctx, v.toInt()) },
             colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = .35f)))
         Text(stringResource(R.string.bar_strong), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+        // 10.0 (num): значение контраста, нажатие открывает ввод своего числа
+        NumberValueTap(v.toInt(), NumberSliderRules.BAR_CONTRAST, stringResource(R.string.bar_contrast), { n -> v = n.toFloat(); BarStyle.set(ctx, n) })
     }
     FmSpaceBar(0f, Modifier.fillMaxWidth())
     FmSpaceBar(0.5f, Modifier.fillMaxWidth().padding(top = 4.dp))
@@ -1203,6 +1109,6 @@ fun BarContrastSetting() {
         androidx.compose.material3.TextButton({ BarStyle.setColor(ctx, BarStyle.THEME) }, Modifier.focusRequester(barThemeFr), enabled = BarStyle.colorIdx != BarStyle.THEME) { Text(stringResource(R.string.bar_color_theme)) }
     }
     var hv by remember { mutableStateOf(BarStyle.hue) }
-    HueBar(hv, BarStyle.colorIdx == BarStyle.CUSTOM, { hv = it; BarStyle.hue = it; if (BarStyle.colorIdx != BarStyle.CUSTOM) BarStyle.colorIdx = BarStyle.CUSTOM }, { BarStyle.setColor(ctx, BarStyle.CUSTOM); BarStyle.setHue(ctx, hv) }, themeBtn = barThemeFr, themeBtnEnabled = BarStyle.colorIdx != BarStyle.THEME)
+    HueBarNum(hv, BarStyle.colorIdx == BarStyle.CUSTOM, { hv = it; BarStyle.hue = it; if (BarStyle.colorIdx != BarStyle.CUSTOM) BarStyle.colorIdx = BarStyle.CUSTOM }, { BarStyle.setColor(ctx, BarStyle.CUSTOM); BarStyle.setHue(ctx, hv) }, stringResource(R.string.bar_color), themeBtn = barThemeFr, themeBtnEnabled = BarStyle.colorIdx != BarStyle.THEME)
 
 }

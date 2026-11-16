@@ -37,7 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -223,6 +223,8 @@ fun ConsolePage() {
                 }
                 if (copiedNote.isNotEmpty()) Text(copiedNote, style = MaterialTheme.typography.labelMedium)
                 // 9.0: строки «Команда» с кнопкой «Выполнить» больше нет: команда печатается прямо в окне вывода (нажатие на окно), Enter выполняет
+                // 10.0: сеанс не идёт (обрыв связи или exit): переподключение в ту же папку
+                if (!running) Button(onClick = { Term.reconnect(ctx) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cld_tc_reconnect)) }
                 // управляющие клавиши
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedButton(enabled = running, onClick = { Term.interrupt(ctx) }) { Text("Ctrl+C") }
@@ -243,7 +245,7 @@ fun ConsolePage() {
                     OutlinedButton(onClick = { clip.setText(AnnotatedString(text)); copiedNote = ctx.getString(R.string.tc_copied_pv, text.trim().take(40)) }) { Text(stringResource(R.string.tc_copy)) }
                     OutlinedButton(onClick = { val o = Term.lastOutput(); if (o.isNotEmpty()) { clip.setText(AnnotatedString(o)); copiedNote = ctx.getString(R.string.tc_copied_pv, o.take(40)) } else copiedNote = ctx.getString(R.string.tc_nothing) }) { Text(stringResource(R.string.tc_copy_last)) }
                     OutlinedButton(onClick = { Term.clear() }) { Text(stringResource(R.string.tc_clear)) }
-                    OutlinedButton(onClick = { Term.stop(quiet = true); Term.ensure(ctx) }) { Text(stringResource(R.string.tc_restart)) }
+                    OutlinedButton(onClick = { Term.restart(ctx) }) { Text(stringResource(R.string.tc_restart)) }
                 }
             }
         }
@@ -312,8 +314,9 @@ fun TermSettings() {
     Box(Modifier.fillMaxWidth().background(Color(bg), shape).border(2.dp, MaterialTheme.colorScheme.onSurface, shape).padding(10.dp)) {
         Text("a14xm:/sdcard \$ ls -l\ntotal 0\ndrwxrwx--x 2 root sdcard_rw DCIM", color = Color(fg), fontFamily = FontFamily.Monospace, fontSize = fs.toInt().sp)
     }
-    Text(stringResource(R.string.tc_set_size) + ": " + fs.toInt(), Modifier.padding(top = 8.dp))
-    Slider(value = fs, onValueChange = { fs = it }, onValueChangeFinished = { Term.setFontSp(ctx, fs.toInt()) }, valueRange = 9f..24f, steps = 14)
+    Text(stringResource(R.string.tc_set_size), Modifier.padding(top = 8.dp))
+    // 10.0 (num): число справа от ползунка, нажатие открывает ввод своего значения
+    NumberSlider(fs, { fs = it }, NumberSliderRules.TERM_FONT, stringResource(R.string.tc_set_size), steps = 14, onValueChangeFinished = { Term.setFontSp(ctx, kotlin.math.round(fs).toInt()) })
     Text(stringResource(R.string.tc_set_bg), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
     swatches(bgs, bg) { bg = it; Term.setBg(ctx, it) }
     Text(stringResource(R.string.tc_set_fg), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))

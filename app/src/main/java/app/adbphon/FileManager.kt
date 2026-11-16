@@ -1,9 +1,12 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package app.adbphon
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.drawscope.withTransform
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +16,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -252,7 +256,6 @@ sealed class FmDlg {
     class ArcPass(val file: java.io.File, val arc: ArchiveFs?, val retry: () -> Unit) : FmDlg()
     class ArcConflict(val choose: (Int) -> Unit) : FmDlg()
     class ArcCharset(val arc: ArchiveFs, val pane: FmPane) : FmDlg()
-    class Drop(val src: FmPane, val names: List<String>, val dst: FmPane, val dstSrc: String, val toPath: String, val label: String) : FmDlg()
     class OpenAs(val pane: FmPane, val item: FmItem) : FmDlg()
     class Bookmarks : FmDlg()
     class History : FmDlg()
@@ -292,6 +295,7 @@ sealed class FmDlg {
     class Perms(val pane: FmPane, val names: List<String>) : FmDlg()
     class TextView(val title: String, val body: String) : FmDlg()
     class Archive(val pane: FmPane, val name: String, val lines: List<String>) : FmDlg()
+    class Repack(val spec: RepackSpec) : FmDlg()
     class MakeArchive(val pane: FmPane, val names: List<String>) : FmDlg()
     class Conflict(val move: Boolean, val src: FmPane, val dst: FmPane, val names: List<String>, val report: ClashReport) : FmDlg()
 }
@@ -332,6 +336,8 @@ object Fm {
     }
     /** Очередь длительных операций (копирование, перенос, удаление, упаковка): выполняются по одной, у каждой своя полоска. */
     val jobs = androidx.compose.runtime.mutableStateListOf<FmJob>()
+    /** 10.0: сколько заданий было запущено за всё время; нужен, чтобы заметить даже очень быстрое задание, которое началось и закончилось между проверками. */
+    @Volatile var jobSeq = 0
     val job: FmJob? get() = jobs.firstOrNull()
     var opsCollapsed by mutableStateOf(false)
     private val opLock = kotlinx.coroutines.sync.Mutex()
@@ -436,6 +442,8 @@ object Fm {
                 if (key != null && p.parked == null) { Startup.saveLast(sctx, p.id, key, path); if (p.src == "local" || p.src == "smb") Startup.saveSrc(sctx, p.id, key) }
             }
             p.kids.clear()
+            // 10.0: после перечитывания раскрытые папки дерева подгружаются заново (ключ эффекта мог не измениться, и они оставались пустыми)
+            if (treeMode) { val base = path.trimEnd('/') + "/"; for (e in p.expanded.toList()) if (e.startsWith(base)) scope.launch { loadKids(p, e) } }
         }
     }
 
@@ -445,7 +453,6 @@ object Fm {
         inited = true
         panes.forEach { it.sortCfg = SortStore.loadGlobal(it.id) }
         showHidden = prefs().getBoolean("hidden", false)
-        FmDnd.on = true   // 08.11.2026 (владелица): перетаскивание всегда включено, переключатель в настройках убран
         dirTapExpand = prefs().getString("dir_tap", "expand") != "open"
         FmRootCfg.load(ctx)
         FmDel.init(ctx)
@@ -572,7 +579,7 @@ object Fm {
                 if (out.size >= 800) return
                 val items0 = runCatching { FmIo.list(p, dir) }.getOrDefault(emptyList())
                 // порядок как в панели: та же сортировка (общая или своя у этой папки), те же скрытые; папка раскрывается на своём месте списка
-                val items = withContext(Dispatchers.IO) { runCatching { sortList(p, dir, if (showHidden) items0 else items0.filter { !it.hidden }) }.getOrDefault(items0) }
+                val items = withContext(Dispatchers.IO) { runCatching { sortList(p, dir, if (showHidden) items0 else items0.filter { !it.hidden }, treeCfg(p, dir)) }.getOrDefault(items0) }
                 for (f in items) {
                     if (out.size >= 800) return
                     if (f.isDir) { if (depth < 4) walk(FmIo.join(dir, f.name), depth + 1) }
@@ -747,20 +754,25 @@ object Fm {
     fun setPaneCfg(p: FmPane, c: SortCfg) { p.sortCfg = c; SortStore.saveGlobal(p.id, c); sortTick++ }
     /** Настройка сортировки для папки [dir] панели [p]: своя у этой папки, иначе общая у панели. */
     fun cfgFor(p: FmPane, dir: String): SortCfg = SortStore.folder(p, dir) ?: p.sortCfg
+    /**
+     * 10.0 (chk): настройка для вложенного уровня раскрытого дерева: своя у этой папки, иначе та же, что у открытой папки панели.
+     * Раньше вложенные уровни брали общую настройку панели, и при «Только эта папка» верхний уровень и раскрытые папки сортировались по-разному.
+     */
+    fun treeCfg(p: FmPane, dir: String): SortCfg = SortStore.folder(p, dir) ?: if (SortEngine.isInside(p.path, dir) || dir.trimEnd('/') == p.path.trimEnd('/')) cfgFor(p, p.path) else p.sortCfg
     fun setHidden(v: Boolean) { showHidden = v; prefs().edit().putBoolean("hidden", v).apply() }
 
     fun shown(p: FmPane): List<FmItem> = sortList(p, p.path, if (showHidden) p.items else p.items.filter { !it.hidden })
 
     /** Сортировка списка папки [dir] по группам (папки, файлы, фото, видео, музыка, документы), у каждой группы свой критерий. */
-    fun sortList(p: FmPane, dir: String, base: List<FmItem>): List<FmItem> {
-        val cfg = cfgFor(p, dir)
+    fun sortList(p: FmPane, dir: String, base: List<FmItem>, cfg0: SortCfg? = null): List<FmItem> {
+        val cfg = cfg0 ?: cfgFor(p, dir)
         // теги, число элементов и цвета выбираются заранее: в самой сортировке только быстрые обращения к таблицам
         val meta = HashMap<FmItem, SMeta>(); val cnt = HashMap<FmItem, Int>(); val col = HashMap<FmItem, Int>()
         val needColor = cfg.keyOf(SGroup.DIR) == SKey.COLOR
         for (f in base) {
             val g = cfg.groupOf(f.isDir, f.ext)
             if (!cfg.needsMeta(g)) { if (g == SGroup.DIR && needColor) col[f] = UiPrefs.folderColors[folderKey(p, join(dir, f.name))] ?: UiPrefs.folderDefault; continue }
-            if (g == SGroup.DIR) cnt[f] = SortMeta.count(p, join(dir, f.name))
+            if (g == SGroup.DIR) cnt[f] = SortMeta.count(p, join(dir, f.name), f)
             else SortMeta.get(join(dir, f.name), f)?.let { meta[f] = it }
         }
         return SortEngine.sort(base, cfg, SortCtx({ meta[it] }, { cnt[it] ?: -1 }, { col[it] ?: 0 }))
@@ -891,7 +903,6 @@ object Fm {
      */
     fun onBack(): Boolean {
         if (dlg != null) { dlg = null; return true }
-        if (FmDnd.active) { FmDnd.cancel(); return true }
         val p = cur
         if (p.selected.isNotEmpty()) { p.selected = emptySet(); return true }
         if (p.root) return FmRootCfg.treeOn && collapseLastTreeNode(p)
@@ -968,19 +979,27 @@ object Fm {
     }
     fun goBack(p: FmPane) { if (p.back.isNotEmpty()) load(p, p.back.removeAt(p.back.size - 1), remember = false) }
 
-    fun toggleSel(p: FmPane, name: String) { p.lastName = name.substringAfterLast('/'); p.selected = if (name in p.selected) p.selected - name else p.selected + name }
-    fun selectAll(p: FmPane) { if (virt(p)) return; p.selected = shown(p).map { it.name }.toSet() }
-    fun invert(p: FmPane) { if (virt(p)) return; p.selected = (shown(p).map { it.name }.toSet() - p.selected) + p.selected.filter { '/' in it } }
+    /** 10.0 (fm1): содержимое раскрытой папки дерева (ключи «папка/имя» от текущей папки панели); null: папка свёрнута. */
+    fun selKids(p: FmPane): (String) -> List<String>? = { rel ->
+        val full = FmIo.join(p.path, rel)
+        if (treeMode && full in p.expanded) p.kids[full]?.let { l -> (if (showHidden) l else l.filter { !it.hidden }).map { rel + "/" + it.name } } else null
+    }
+    /** Отмечено само или через отмеченную папку выше (раскрытое дерево). */
+    fun isSel(p: FmPane, key: String): Boolean = SelTree.covered(p.selected, key)
+    /** 10.0 (fm1): отметка папки = всё её содержимое; снятие вложенного оставляет остальное отмеченным (SelTree). */
+    fun toggleSel(p: FmPane, name: String) { p.lastName = name.substringAfterLast('/'); p.selected = SelTree.toggle(p.selected, name, selKids(p)) }
+    fun selectAll(p: FmPane) { if (p.root) { FmRootCfg.selectAllVisible(p.id); return }; if (virt(p)) return; p.selected = SelTree.selectAll(p.selected.filter { '/' in it }, shown(p).map { it.name }) }
+    fun invert(p: FmPane) { if (p.root) { FmRootCfg.invertVisible(p.id); return }; if (virt(p)) return; p.selected = SelTree.invert(p.selected, shown(p).map { it.name }, selKids(p)) }
     fun mask(p: FmPane, glob: String) {
         if (virt(p)) return
         val re = Regex("^" + glob.split('*').joinToString(".*") { Regex.escape(it) }.replace("\\?", ".") + "$", RegexOption.IGNORE_CASE)
         // и вложенные: содержимое раскрытых папок дерева (ключ «папка/имя» от текущей папки, как у ручного выбора)
         val base = p.path.trimEnd('/') + "/"
         val nested = p.expanded.toList().filter { it.startsWith(base) }.flatMap { d -> (p.kids[d] ?: emptyList()).filter { re.matches(it.name) }.map { d.removePrefix(base) + "/" + it.name } }
-        p.selected = shown(p).filter { re.matches(it.name) }.map { it.name }.toSet() + nested
+        p.selected = SelTree.normalize(shown(p).filter { re.matches(it.name) }.map { it.name } + nested)
     }
     /** С чем работают кнопки: выделенное (верхний уровень по порядку списка, затем отмеченное глубже в раскрытых папках дерева, «папка/файл»), иначе ничего. */
-    fun targets(p: FmPane): List<String> = if (virt(p)) emptyList() else shown(p).map { it.name }.filter { it in p.selected } + p.selected.filter { '/' in it }
+    fun targets(p: FmPane): List<String> { if (virt(p)) return emptyList(); val s = SelTree.normalize(p.selected); return shown(p).map { it.name }.filter { it in s } + s.filter { '/' in it } }
 
     // ---------- закладки и история ----------
     fun bookmarks(): List<String> = prefs().getStringSet("bm", emptySet()).orEmpty().sorted()
@@ -999,7 +1018,7 @@ object Fm {
     /** Выполнить операцию над списком имён в очереди с полоской хода. [units]: сколько всего байт (или элементов), если известно заранее; -1 если нет. */
     private suspend fun runJob(title: String, names: List<String>, bytes: Boolean = true, units: suspend () -> Long = { -1L }, files: suspend () -> Int = { -1 }, op: suspend (FmJob, String) -> String?): Boolean {
         val j = FmJob(title, names.size, bytes)
-        jobs.add(j)
+        jobs.add(j); jobSeq++
         // копирование идёт в фоне: нужны уведомления и работа без ограничений батареи (если пропущено при первом запуске, спрашиваем сейчас)
         if (Setup.need(sctx, "notif")) Setup.need(sctx, "battery")
         FmOpService.start(sctx)
@@ -1058,8 +1077,10 @@ object Fm {
      * Сначала проверяется, что уже лежит в приёмнике (в том числе внутри папок с одним именем): если есть совпадения и решений [acts] ещё нет,
      * показывается окно «Заменить / Пропустить / Переименовать». Копия в ту же папку получает имя «имя (1)».
      */
-    fun copyMove(move: Boolean, src: FmPane, dst: FmPane, names: List<String>, acts: Map<String, CAct>? = null, newName: String? = null) {
+    fun copyMove(move: Boolean, src: FmPane, dst: FmPane, names: List<String>, acts: Map<String, CAct>? = null, newName: String? = null, noRepack: Boolean = false) {
         if (names.isEmpty()) return
+        // 10.0: набор APK-частей (base + config.*), например папка из /data/app: сначала спросить формат результата
+        if (!noRepack && !move && acts == null && newName == null && names.none { '/' in it } && repackAsk(src, dst, names) { copyMove(move, src, dst, names, acts, newName, true) }) return
         if (names.any { '/' in it }) {
             // отмечено в разных раскрытых папках дерева: для каждой исходной папки своя операция (очередь заданий общая, идут по одной)
             val groups = names.groupBy { it.substringBeforeLast('/', "") }
@@ -1334,9 +1355,9 @@ object Fm {
     fun openArchiveFor(p: FmPane, it: FmItem) { openArchive(p, it.name) }
 
     /** Установка пакета из нескольких частей (APKS, APKM, XAPK, ZIP с APK и OBB) через ADB/root: части и OBB подбираются под устройство. */
-    fun installBundleViaAdb(p: FmPane, it: FmItem): kotlinx.coroutines.Job = scope.launch {
-        val silent = Adb.isConnected && !FmIo.remote
-        if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it) }) return@launch
+    fun installBundleViaAdb(p: FmPane, it: FmItem, quiet: Boolean = true): kotlinx.coroutines.Job = scope.launch {
+        val silent = quiet && Adb.isConnected && !FmIo.remote
+        if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it, quiet) }) return@launch
         if (silent) {
             // тихая установка по ADB/root: сначала подтверждение с версиями, потом окно с полоской хода (части и OBB, «n из N»), итог внутри окна
             val srcF = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
@@ -1421,9 +1442,9 @@ object Fm {
     }
 
     /** Наш способ установки APK: тихо через ADB/root, а без них сессией PackageInstaller с подтверждением системы. */
-    fun installViaAdb(p: FmPane, it: FmItem): kotlinx.coroutines.Job = scope.launch {
+    fun installViaAdb(p: FmPane, it: FmItem, quiet: Boolean = true): kotlinx.coroutines.Job = scope.launch {
         val f = join(p.path, it.name)
-        if (Adb.isConnected && !FmIo.remote && p.src == "local") {
+        if (quiet && Adb.isConnected && !FmIo.remote && p.src == "local") {
             val lf = java.io.File(f)
             val af = ApkFile(it.name, android.net.Uri.fromFile(lf), lf.length(), lf)
             val meta = withContext(Dispatchers.IO) { ApkInfo.readFor(sctx, af) }
@@ -1443,7 +1464,7 @@ object Fm {
         val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(sctx, af) }.getOrNull() }
         dlg = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
             scope.launch {
-                if (Adb.isConnected && !FmIo.remote) {
+                if (quiet && Adb.isConnected && !FmIo.remote) {
                     val run = InstRun()
                     InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
                     installWithProgress(sctx, listOf(af), mapOf(af.name to meta), run, wipe)
@@ -1597,6 +1618,99 @@ object Fm {
         load(to, remember = false)
     }
 
+    // ---------- перепаковка APK (10.0) ----------
+    private suspend fun fetchTo(p: FmPane, path: String, dest: File) {
+        when (p.src) {
+            "local" -> File(path).copyTo(dest, true)
+            "adb" -> Adb.pull(path, dest)
+            else -> (p.smb ?: error(str(R.string.fm_err_unsupported))).copyTo(path, dest)
+        }
+    }
+
+    /** Папка результата: локальная папка другой панели, иначе папка этой панели, иначе «Загрузки» телефона. Второе значение: панель, которую нужно обновить. */
+    private fun repackDest(p: FmPane, o: FmPane): Pair<File, FmPane?> {
+        return when {
+            o.src == "local" && !o.root && o.path.startsWith("/") -> File(o.path) to o
+            p.src == "local" && p.path.startsWith("/") -> File(p.path) to p
+            else -> File("/sdcard/Download") to null
+        }
+    }
+
+    /** Есть части: окно выбора формата; один APK: копия как есть без вопросов (подпись цела). */
+    fun repackStart(spec: RepackSpec) { if (spec.hasSplits) dlg = FmDlg.Repack(spec) else repackRun(spec, RFormat.AS_IS, RSign.OWN) }
+
+    fun repackRun(spec: RepackSpec, fmt: RFormat, sign: RSign) = scope.launch {
+        var out: File? = null
+        val ok = runJob(str(R.string.rp_job), listOf(spec.title)) { _, _ ->
+            try { out = Repack.build(sctx, spec.load(), spec.title, spec.destDir, fmt, sign); null }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Throwable) { e.message ?: e.javaClass.simpleName }
+            finally { spec.cleanup() }
+        }
+        if (ok) out?.let { say(str(R.string.rp_saved, it.name)) }
+        spec.after()
+    }
+
+    private fun tmpDir() = File(sctx.cacheDir, "repack_" + System.nanoTime()).also { it.mkdirs() }
+
+    /** Пункт «Перепаковать…» для файла .apks/.xapk/.apkm: части достаются из архива без изменений. */
+    fun repackFile(p: FmPane, f: FmItem, other: FmPane = panes[1 - p.id]) {
+        val (dd, dp) = repackDest(p, other)
+        val full = join(p.path, f.name)
+        val tmp = tmpDir()
+        repackStart(RepackSpec(f.name.substringBeforeLast('.'), dd, dd.path, true,
+            load = {
+                val z = if (p.src == "local") File(full) else File(tmp, f.name).also { fetchTo(p, full, it) }
+                Repack.extractParts(z, File(tmp, "parts"))
+            },
+            cleanup = { tmp.deleteRecursively() },
+            after = { dp?.let { load(it, remember = false) } }))
+    }
+
+    /** Установленная программа из списка приложений панели: части берутся из PackageManager (читаются на месте). */
+    fun repackApp(p: FmPane, other: FmPane, pkg: String, label: String) {
+        val (dd, dp) = repackDest(p, other)
+        val a = runCatching { sctx.packageManager.getApplicationInfo(pkg, android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES) }.getOrNull() ?: return
+        val files = (listOfNotNull(a.sourceDir) + a.splitSourceDirs.orEmpty()).map { File(it) }.filter { it.isFile }
+        repackStart(RepackSpec(label.ifBlank { pkg }, dd, dd.path, files.size > 1, load = { files }, after = { dp?.let { load(it, remember = false) } }))
+    }
+
+    /** Копирование набора APK-частей (base + config.*) из папки: возвращает название и пути частей; null, если это не набор. */
+    private suspend fun repackSet(src: FmPane, names: List<String>): Pair<String, List<String>>? {
+        val folder: String
+        val apks: List<String>
+        if (names.size == 1) {
+            val item = FmIo.list(src, src.path).firstOrNull { it.name == names[0] } ?: return null
+            if (!item.isDir) return null
+            folder = join(src.path, names[0])
+            apks = FmIo.list(src, folder).filter { !it.isDir && it.name.lowercase().endsWith(".apk") }.map { it.name }
+        } else {
+            if (names.any { !it.lowercase().endsWith(".apk") }) return null
+            folder = src.path; apks = names
+        }
+        if (apks.size < 2 || apks.none { Bundles.isBasePart(it) } || apks.none { Bundles.isConfigPart(it) }) return null
+        // у папок /data/app/~~хэш/пакет-хэш== имя пакета перед последним тире
+        val last = folder.trimEnd('/').substringAfterLast('/')
+        val title = if (Regex(".+-[A-Za-z0-9_\\-]{22}==").matches(last)) last.substringBeforeLast('-') else last.ifBlank { "app" }
+        return title to apks.map { join(folder, it) }
+    }
+
+    /** true: проверка набора APK-частей запущена; окно выбора формата или обычное копирование ([rerun]) начнётся после неё. */
+    private fun repackAsk(src: FmPane, dst: FmPane, names: List<String>, rerun: () -> Unit): Boolean {
+        if (dst.src != "local" || !dst.path.startsWith("/")) return false
+        scope.launch {
+            val set = runCatching { repackSet(src, names) }.getOrNull()
+            if (set == null) { rerun(); return@launch }
+            val tmp = tmpDir()
+            val dd = File(dst.path)
+            dlg = FmDlg.Repack(RepackSpec(set.first, dd, dd.path, true,
+                load = { set.second.map { path -> File(tmp, path.substringAfterLast('/')).also { fetchTo(src, path, it) } } },
+                cleanup = { tmp.deleteRecursively() },
+                after = { load(dst, remember = false) }))
+        }
+        return true
+    }
+
     fun makeArchive(p: FmPane, names: List<String>, outName: String) = scope.launch {
         val out = if (outName.endsWith(".tar.gz") || outName.endsWith(".tgz")) outName else "$outName.tar.gz"
         runJob(str(R.string.fm_packing), listOf(out)) { FmIo.makeTar(p, names, out) }
@@ -1678,39 +1792,18 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
         Fm.refreshVols()
         onDispose { runCatching { ctx.unregisterReceiver(rx) } }
     }
-    // перетаскивание не должно «застревать»: сброс при сворачивании приложения и при уходе с вкладки
-    androidx.compose.runtime.DisposableEffect(owner) {
-        val ob = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_PAUSE || e == androidx.lifecycle.Lifecycle.Event.ON_STOP) FmDnd.cancel() }
-        owner.lifecycle.addObserver(ob)
-        onDispose { owner.lifecycle.removeObserver(ob); FmDnd.cancel() }
-    }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().onPreviewKeyEvent { e ->
         // пульт: «Меню» или «Info» при отмеченном переводит фокус на нижнюю панель значков (с неё «Назад» возвращает на список)
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FmRootCfg.sel.isNotEmpty() && (e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU || e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_INFO)) runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess else false
-    }.onGloballyPositioned { FmDnd.rootOrigin = it.positionInRoot() }.pointerInput(Unit) {
-        // ведущий слой перетаскивания: события указателя приходят сюда независимо от того, какая панель сейчас на экране
-        awaitPointerEventScope {
-            while (true) {
-                val ev = awaitPointerEvent(PointerEventPass.Initial)
-                if (!FmDnd.active) continue
-                FmDnd.lastEvent = System.nanoTime() / 1_000_000
-                val mine = ev.changes.firstOrNull { it.id.value == FmDnd.pointerId }
-                // новое нажатие другим пальцем при незавершённом перетаскивании, потеря указателя или отпускание: сброс либо завершение
-                if (mine == null || ev.changes.any { it.pressed && !it.previousPressed && it.id.value != FmDnd.pointerId }) { FmDnd.cancel(); continue }
-                ev.changes.forEach { it.consume() }
-                if (!mine.pressed) FmDnd.end() else FmDnd.move(mine.position + FmDnd.rootOrigin)
-            }
-        }
     }.onPreviewKeyEvent { e ->
         // Tab или Ctrl+стрелки влево/вправо: переключение панелей (пульт, клавиатура)
         val k = e.key
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && (k == Key.Tab || (e.isCtrlPressed && (k == Key.DirectionLeft || k == Key.DirectionRight)))) {
             Fm.active = if (k == Key.DirectionLeft) 0 else if (k == Key.DirectionRight) 1 else 1 - Fm.active; true
-        } else if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && k == Key.Escape && FmDnd.active) { FmDnd.cancel(); true }
-        else if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && (k == Key.F5 || k == Key.F6)) {
+        } else if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && (k == Key.F5 || k == Key.F6)) {
             // как в двухпанельных менеджерах: F5 копировать, F6 переместить выделенное в другую панель
             val names = Fm.targets(Fm.cur)
-            if (names.isEmpty()) Fm.say(Fm.str(R.string.fm_select_first)) else Fm.copyMove(k == Key.F6, Fm.cur, Fm.other, names)
+            if (names.isEmpty()) Fm.say(Fm.str(R.string.fm_select_first)) else RootSelOps.toOther(Fm.cur, names, k == Key.F6)
             true
         } else false
     }) {
@@ -1743,8 +1836,9 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
             // портрет: на экране одна панель; вкладки сверху и узкая полоса слева переключают панели мгновенно, свайп по списку тоже
             Column(Modifier.fillMaxSize().padding(horizontal = FmMetrics.OUTER_PAD), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 FmTabs()
-                // полоса кнопок с той же стороны, что и в ландшафте (настройка «Панели управления»); у края справа отступ от системного жеста «назад»
-                val stripRight = Cfg.rightHanded(ctx) && !Marq.tv
+                // 10.0 (fm1, владелица): в портрете колонка кнопок у края активной панели: правая панель — справа, левая — слева (на приставке как было, слева);
+                // у края справа отступ от системного жеста «назад»
+                val stripRight = !Marq.tv && Fm.active == 1
                 Row(Modifier.weight(1f).fillMaxWidth().padding(end = if (stripRight) FmMetrics.STRIP_END else 0.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!stripRight) FmStrip(actions, Modifier.width(FmMetrics.STRIP_W).fillMaxHeight())
                     FmPaneView(Fm.cur, Modifier.weight(1f).fillMaxHeight(), swipe = true)
@@ -1754,7 +1848,6 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
         }
         MiniPlayer(Modifier.align(Alignment.BottomCenter))
         FmOverlay(Modifier.align(Alignment.BottomCenter).padding(bottom = if (AudioState.active) 84.dp else 0.dp))
-        FmDndOverlay()
     }
     FmDialogs()
 }
@@ -1835,7 +1928,7 @@ fun FmButtonsDialog(onClose: () -> Unit) {
                 all.forEach { a ->
                     val k = FmButtons.key(ctx, a.label)
                     Row(Modifier.fillMaxWidth().clickable { FmButtons.toggle(ctx, k) }, verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.Checkbox(k !in FmButtons.hidden, { FmButtons.toggle(ctx, k) })
+                        BigCheckbox(k !in FmButtons.hidden, { FmButtons.toggle(ctx, k) })
                         val csB = CustomIcons.spec("s:" + k)
                         val lbl = stringResource(if (k == "fm_mode") R.string.fm_mode_list else a.label)
                         Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = .12f)).clickable { pickBtn = k to lbl }, contentAlignment = Alignment.Center) {
@@ -1938,8 +2031,8 @@ private fun FmTabs() {
             val on = Fm.active == p.id
             val name = Fm.paneLabel(p)
             Row(
-                Modifier.weight(1f).dndTarget(p, p.path, 5, name).clip(RoundedCornerShape(8.dp))
-                    .background(if (on) MaterialTheme.colorScheme.primary else if (dndHot(p, p.path, 5)) MaterialTheme.colorScheme.primary.copy(alpha = .35f) else MaterialTheme.colorScheme.primary.copy(alpha = .10f))
+                Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                    .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = .10f))
                     .clickable { Fm.active = p.id }.padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -2091,20 +2184,7 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androi
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if (Marq.tv) {
         // 9.2 (только приставка): шапка панели в три строки по центру: «Левая/Правая», «Объектов: N», «Выбрано: M»; шрифт чуть крупнее прежнего, ничего не обрезается
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val hs = if (Marq.tv) 14.sp else 11.sp; val hl = if (Marq.tv) 17.sp else 13.sp
-            // обе метки рядом на одной строке; активная панель ярче и жирнее
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                val pc = MaterialTheme.colorScheme.primary
-                Text(stringResource(R.string.fm_pane_left), fontSize = hs, lineHeight = hl, color = if (Fm.active == 0) pc else pc.copy(alpha = .55f), fontWeight = if (Fm.active == 0) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
-                Text(" · ", fontSize = hs, lineHeight = hl, color = pc.copy(alpha = .55f), maxLines = 1)
-                Text(stringResource(R.string.fm_pane_right), fontSize = hs, lineHeight = hl, color = if (Fm.active == 1) pc else pc.copy(alpha = .55f), fontWeight = if (Fm.active == 1) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
-            }
-            Text(stringResource(R.string.fm_count_n, Fm.shown(p).size), Modifier.fillMaxWidth(),
-                fontSize = hs, lineHeight = hl, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
-            Text(stringResource(R.string.fm_count_sel, p.selected.size), Modifier.fillMaxWidth(),
-                fontSize = hs, lineHeight = hl, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
-        }
+        FmTvHead(p)
         } else {
         Text(stringResource(if (Fm.active == 0) R.string.fm_pane_left else R.string.fm_pane_right) + "  ·  " + stringResource(R.string.fm_count, Fm.shown(p).size, p.selected.size),
             fontSize = 11.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2129,6 +2209,23 @@ private fun FmStrip(actions: List<FmAction>, modifier: Modifier) {
     Column(modifier.tabScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
         actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.let { vis -> val ks = vis.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; vis.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmMetrics.BTN_W, 21.dp, 7.5.sp, reorderKeys = ks) } } }
+    }
+}
+
+/** 10.0: крупная яркая стрелка вниз с чёрной обводкой, слегка пульсирует; общая для подсказок. */
+@Composable
+internal fun HintArrow(sizeDp: Int, modifier: Modifier = Modifier) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "hint")
+    val s by t.animateFloat(0.88f, 1.14f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(550), androidx.compose.animation.core.RepeatMode.Reverse), label = "s")
+    androidx.compose.foundation.Canvas(modifier.size(sizeDp.dp)) {
+        val w = size.width; val h = size.height
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * .5f, h); lineTo(w, h * .52f); lineTo(w * .7f, h * .52f); lineTo(w * .7f, 0f); lineTo(w * .3f, 0f); lineTo(w * .3f, h * .52f); lineTo(0f, h * .52f); close()
+        }
+        withTransform({ scale(s, s, androidx.compose.ui.geometry.Offset(w / 2, h / 2)) }) {
+            drawPath(path, androidx.compose.ui.graphics.Color.Black, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawPath(path, androidx.compose.ui.graphics.Color(0xFFFFEA00))
+        }
     }
 }
 
@@ -2226,8 +2323,8 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
         }
     }
     Column(
-        modifier.then(if (p.root) Modifier else Modifier.dndTarget(p, p.path, 0)).clip(RoundedCornerShape(10.dp)).border(if (active || dndHot(p, p.path, 0)) 2.dp else 1.dp,
-            if (dndHot(p, p.path, 0)) MaterialTheme.colorScheme.tertiary else if (active) prim else MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(10.dp))
+        modifier.clip(RoundedCornerShape(10.dp)).border(if (active) 2.dp else 1.dp,
+            if (active) prim else MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(10.dp))
             .pointerInput(p.id) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); Fm.active = p.id } }
             .onFocusChanged { if (it.hasFocus) Fm.active = p.id },
     ) {
@@ -2271,7 +2368,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
         p.tagNote?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1) }
         val emptyKey = "\u0000empty"
         if (p.menuFor == emptyKey) LDropdownMenu(true, { p.menuFor = null }) { CreateMenu(p, p.path) { p.menuFor = null } }
-        if (p.parked == null && !(p.src == "local" && !Fm.granted)) Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().then(swipeMod).combinedClickable(onClick = {}, onLongClick = { Fm.active = p.id; p.menuFor = emptyKey }).onGloballyPositioned { FmDnd.lists[p.id] = DndList(state, it.boundsInRoot()) }.verticalScrollbar(state), state = state, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (Marq.tv) 3.dp else 0.dp)) {
+        if (p.parked == null && !(p.src == "local" && !Fm.granted)) Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().then(swipeMod).combinedClickable(onClick = {}, onLongClick = { Fm.active = p.id; p.menuFor = emptyKey }).verticalScrollbar(state), state = state, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (Marq.tv) 3.dp else 0.dp)) {
             items(rows, key = { it.key }) { r ->
                 when (r) {
                     is HeadRow -> FmGroupHeader(r.g, r.count, r.closed) { val c = r.g.ch.toString(); if (c in p.collapsed) p.collapsed.remove(c) else p.collapsed.add(c) }
@@ -2354,12 +2451,11 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
         else if (p.src == "smb") Row(Modifier.weight(1f).horizontalScroll(scroll)) { Text(p.path, fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, maxLines = 1) }
         else Row(Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) {
             val parts = p.path.trim('/').split('/').filter { it.isNotEmpty() }
-            val hot = MaterialTheme.colorScheme.primary.copy(alpha = .3f)
-            Text("/", Modifier.clickable { Fm.load(p, "/") }.dndTarget(p, "/", 2).background(if (dndHot(p, "/", 2)) hot else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 4.dp, vertical = 2.dp),
+            Text("/", Modifier.clickable { Fm.load(p, "/") }.padding(horizontal = 4.dp, vertical = 2.dp),
                 fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, color = prim, lineHeight = fs * 1.05f)
             parts.forEachIndexed { i, s ->
                 val to = "/" + parts.take(i + 1).joinToString("/")
-                Text(s, Modifier.clickable { Fm.load(p, to) }.dndTarget(p, to, 2, s).background(if (dndHot(p, to, 2)) hot else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 3.dp, vertical = 2.dp),
+                Text(s, Modifier.clickable { Fm.load(p, to) }.padding(horizontal = 3.dp, vertical = 2.dp),
                     fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, lineHeight = fs * 1.05f, maxLines = 1,
                     color = if (i == parts.lastIndex) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
                 if (i < parts.lastIndex) Text("›", fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, lineHeight = fs * 1.05f, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .5f))
@@ -2415,7 +2511,7 @@ private fun flattenTree(p: FmPane, top: List<FmItem>): List<TNode> {
             val path = FmIo.join(dir, f.name)
             val chain = anc + (i == list.lastIndex)
             out.add(TNode(f, path, depth, chain))
-            if (f.isDir && path in p.expanded && depth < 12) p.kids[path]?.let { k -> walk(path, Fm.sortList(p, path, if (Fm.showHidden) k else k.filter { !it.hidden }), depth + 1, chain) }
+            if (f.isDir && path in p.expanded && depth < 12) p.kids[path]?.let { k -> walk(path, Fm.sortList(p, path, if (Fm.showHidden) k else k.filter { !it.hidden }, Fm.treeCfg(p, path)), depth + 1, chain) }
         }
     }
     walk(p.path, top, 0, listOf(true))
@@ -2479,7 +2575,7 @@ private fun FmTrashItemRow(p: FmPane, ti: CloudTrash.TItem) {
             Text(listOf(dirTxt, dateTxt).filter { it.isNotEmpty() }.joinToString("  ·  "), fontSize = 11.sp, fontFamily = UiPrefs.listFont, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
         }
         if (ti.size >= 0 && !ti.isDir) Text(fmSize(ti.size), fontSize = 13.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-        SmallCheck(sel, tv) { toggle() }
+        BigCheck(sel, tv) { toggle() }
     }
 }
 
@@ -2494,7 +2590,6 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     val menuKey = if (depth == 0) f.name else nodePath
     val tvRow = Marq.tv
     val sepColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .14f)
-    val rc = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     val longKey = remember { booleanArrayOf(false) }
     val rowClick: () -> Unit = {
         Fm.active = p.id
@@ -2510,7 +2605,10 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     val enterDir: (() -> Unit)? = if (f.isDir && Fm.treeMode && Fm.dirTapExpand) { { Fm.active = p.id; Fm.load(p, FmIo.join(p.path, f.name).takeIf { depth == 0 } ?: nodePath) } } else null
     val full = node?.path ?: FmIo.join(p.path, f.name)
     val selKey = if (depth > 0) nodePath.removePrefix(p.path.trimEnd('/') + "/") else f.name
-    val sel = selKey in p.selected
+    val sel = Fm.isSel(p, selKey)
+    val part = f.isDir && !sel && SelTree.partial(p.selected, selKey)
+    val rowFr = remember { FocusRequester() }
+    val chkFr = remember { FocusRequester() }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -2520,10 +2618,9 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (sel || hovered || pressed || focused)) {
     Box {
         Row(
-            Modifier.fillMaxWidth().then(if (f.isDir) Modifier.dndTarget(p, full, 1, f.name) else Modifier)
-                .onGloballyPositioned { rc[0] = it }
+            Modifier.fillMaxWidth()
                 .then(if (f.hidden) Modifier.graphicsLayer { alpha = 0.6f } else Modifier).heightIn(min = if (tvRow) 54.dp else if (dense) 0.dp else 46.dp)
-                .background(if (f.isDir && dndHot(p, full, 1)) prim.copy(alpha = .35f) else if (sel) prim.copy(alpha = .20f) else if (hovered) prim.copy(alpha = .08f) else androidx.compose.ui.graphics.Color.Transparent)
+                .background(if (sel) prim.copy(alpha = .20f) else if (hovered) prim.copy(alpha = .08f) else androidx.compose.ui.graphics.Color.Transparent)
                 .hoverable(hover)
                 .then(if (treeOn && depth > 0) Modifier.drawBehind {
                     // вертикальные линии ветвей и «колено» к значку папки
@@ -2547,59 +2644,45 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                             longKey[0] = true; Fm.active = p.id; p.menuFor = menuKey; return@onKeyEvent true
                         }
                     }
-                    // пульт и клавиатура: вправо раскрывает папку, влево сворачивает
+                    // пульт и клавиатура: вправо раскрывает папку, влево сворачивает; 10.0 (fm1): «вправо» на файле или раскрытой папке переходит на галочку
+                    if (ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && ev.key == Key.DirectionRight && !(treeOn && f.isDir && !isOpen)) return@onKeyEvent runCatching { chkFr.requestFocus() }.isSuccess
                     if (treeOn && f.isDir && ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) when (ev.key) {
                         Key.DirectionRight -> { Fm.expand(p, nodePath); true }
                         Key.DirectionLeft -> if (isOpen) { Fm.collapse(p, nodePath); true } else false
                         else -> false
                     } else false
                 }
-                .pointerInput(f.name, depth, FmDnd.on) {
-                    // правая кнопка мыши: меню; мышь: зажать левую и тянуть; сенсор: долгое касание, затем тянуть (перетаскивание) или отпустить (меню)
+                .pointerInput(f.name, depth) {
+                    // правая кнопка мыши: меню; сенсор: долгое касание открывает меню файла (10.0, fm1: перетаскивания между панелями больше нет, прокрутка не перехватывается)
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val mouse = down.type == androidx.compose.ui.input.pointer.PointerType.Mouse
-                        if (mouse && currentEvent.buttons.isSecondaryPressed) { Fm.active = p.id; p.menuFor = menuKey; return@awaitEachGesture }
-                        fun root(o: androidx.compose.ui.geometry.Offset) = rc[0]?.localToRoot(o) ?: o
-                        val slop = viewConfiguration.touchSlop
-                        var dragging = false
-                        if (!mouse) {
-                            // долгое касание считается здесь же, в первом проходе: дочерние обработчики нажатий не успевают «съесть» событие
-                            var early = false
-                            // допуск на дрожание пальца при удержании: у живого пальца на большом экране сдвиг за полсекунды превышает один touchSlop, и жест обрывался (перетаскивание «не работало»)
-                            val holdSlop = slop * 3f
-                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                                while (!early) {
-                                    val ev = awaitPointerEvent(PointerEventPass.Initial)
-                                    val ch = ev.changes.firstOrNull { it.id == down.id }
-                                    if (ch == null || !ch.pressed || (ch.position - down.position).getDistance() > holdSlop) early = true
-                                }
-                            }
-                            if (early) return@awaitEachGesture
-                            // отклик на долгое касание: короткая вибрация, дальше можно тянуть
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            down.consume()
-                            Fm.active = p.id
-                            val start = down.position
-                            while (true) {
+                        if (mouse && currentEvent.buttons.isSecondaryPressed) { down.consume(); Fm.active = p.id; p.menuFor = menuKey; return@awaitEachGesture }   // 10.0 (mouse): правая кнопка не отмечает и не открывает строку
+                        if (mouse) { if (fmMouseHoldRelease(down)) { Fm.active = p.id; p.menuFor = menuKey }; return@awaitEachGesture }   // 10.0 (mouse)
+                        // долгое касание считается здесь же, в первом проходе: дочерние обработчики нажатий не успевают «съесть» событие; сдвиг пальца = прокрутка, меню нет
+                        val holdSlop = viewConfiguration.touchSlop * 2f
+                        var early = false
+                        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (!early) {
                                 val ev = awaitPointerEvent(PointerEventPass.Initial)
-                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                ch.consume()
-                                if (!ch.pressed) { p.menuFor = menuKey; break }
-                                // перетаскивание дальше ведёт корневой слой экрана: он переживает смену панели и пересоздание строки
-                                if (FmDnd.on && (ch.position - start).getDistance() > slop) { FmDnd.begin(p, f, root(ch.position), down.id.value, selKey); return@awaitEachGesture }
-                            }
-                        } else if (FmDnd.on && currentEvent.buttons.isPrimaryPressed) {
-                            val start = down.position
-                            while (true) {
-                                val ev = awaitPointerEvent(PointerEventPass.Initial)
-                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!ch.pressed) break
-                                if ((ch.position - start).getDistance() > slop) { Fm.active = p.id; ch.consume(); FmDnd.begin(p, f, root(ch.position), down.id.value, selKey); return@awaitEachGesture }
+                                val ch = ev.changes.firstOrNull { it.id == down.id }
+                                if (ch == null || !ch.pressed || (ch.position - down.position).getDistance() > holdSlop) early = true
                             }
                         }
+                        if (early) return@awaitEachGesture
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        down.consume()
+                        Fm.active = p.id
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            ch.consume()
+                            if (!ch.pressed) break
+                        }
+                        p.menuFor = menuKey
                     }
                 }
+                .focusRequester(rowFr)
                 .combinedClickable(
                     interactionSource = hover, indication = androidx.compose.foundation.LocalIndication.current,
                     onClick = rowClick,
@@ -2627,8 +2710,10 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }?.let { fmDate(it) }).joinToString("  ·  ")
                 if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
-            SmallCheck(sel, false) { Fm.active = p.id; Fm.toggleSel(p, selKey) }   // 10.11.2026: маленькая галочка у края, как в «домике»
+            // 10.0 (fm1): квадратик крупнее (26 dp, приставка 32), нажимается вся правая часть строки (SelZone)
+            Box(Modifier.padding(start = 4.dp, end = 4.dp)) { SelBox(sel, part, tvRow) }
         }
+        SelZone(tvRow, chkFr, rowFr, stringResource(if (sel) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.menuFor = menuKey }) { Fm.active = p.id; Fm.toggleSel(p, selKey) }
         FmItemMenu(p, f, node)
     }
     }
@@ -2646,7 +2731,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
     val rel = if (nested) node!!.path.removePrefix(p.path.trimEnd('/') + "/") else f0.name
     val f = if (nested) f0.copy(name = rel) else f0
     val o = Fm.panes[1 - p.id]
-    val names = if (rel in p.selected) Fm.targets(p) else listOf(rel)
+    val names = if (Fm.isSel(p, rel)) Fm.targets(p) else listOf(rel)
     val multi = names.size > 1
     val full = FmIo.join(p.path, rel)
     val createDir = if (f.isDir) full else full.substringBeforeLast(Char(47)).ifEmpty { Char(47).toString() }
@@ -2660,8 +2745,8 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
             if (!f.isDir) item(R.string.fm_open_in_system) { ApkInstall.showPicker(p, f) }
         }
         item(R.string.fm_share, p.src != "adb") { Fm.share(p, names) }
-        item(R.string.fm_copy) { Fm.copyMove(false, p, o, names) }
-        item(R.string.fm_move) { Fm.copyMove(true, p, o, names) }
+        item(R.string.fm_copy) { RootSelOps.toOther(p, names, false) }
+        item(R.string.fm_move) { RootSelOps.toOther(p, names, true) }
         item(R.string.fm_delete) { Fm.askDelete(p, names) }
         if (!multi && !nested) item(R.string.fm_rename) { Fm.dlg = FmDlg.Rename(p, f.name) }
         if (!multi && !nested && (p.src == "local" || p.src == "adb")) item(R.string.fm_duplicate) {
@@ -2675,6 +2760,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
         if (!multi && !f.isDir) item(R.string.fm_open_as) { Fm.dlg = FmDlg.OpenAs(p, f) }
         if (!multi && !f.isDir && f.ext == "apk") item(R.string.fm_install) { Fm.openFile(p, f) }
         if (!multi && !f.isDir && f.ext == "apk" && p.src == "local" && ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarket(p, f) }
+        if (!multi && !f.isDir && f.ext in setOf("apks", "xapk", "apkm")) item(R.string.rp_menu) { Fm.repackFile(p, f) }
         if (!multi && !f.isDir && Fm.isArchive(f.name)) {
             item(R.string.arc_open_as_archive) { Fm.openArchive(p, f.name) }
             if (!nested) {
@@ -2685,7 +2771,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
             item(R.string.arc_test) { Fm.testArc(p, f.name) }
         }
         if (!nested && p.src == "local") item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(p, names) }
-        item(if (rel in p.selected) R.string.fm_unselect else R.string.fm_select) { Fm.toggleSel(p, rel) }
+        item(if (Fm.isSel(p, rel)) R.string.fm_unselect else R.string.fm_select) { Fm.toggleSel(p, rel) }
         if (!multi && !f.isDir && p.src == "local") item(R.string.ic_item) { Fm.dlg = FmDlg.FileIcon("p:" + full, f.name) }
         if (!multi && f.isDir) {
             item(R.string.fm_play_folder) { Fm.playFolder(p, rel) }
@@ -2771,7 +2857,6 @@ private fun FmDialogs() {
         is FmDlg.ArcPass -> ArcPassDialog(d, close)
         is FmDlg.ArcConflict -> ArcConflictDialog(d, close)
         is FmDlg.ArcCharset -> ArcCharsetDialog(d, close)
-        is FmDlg.Drop -> DropDialog(d, close)
         is FmDlg.OpenAs -> OpenAsDialog(d.pane, d.item, close)
         is FmDlg.View -> LAlertDialog(
             onDismissRequest = close, title = { Text(stringResource(R.string.fm_sort)) },
@@ -2788,14 +2873,14 @@ private fun FmDialogs() {
                     }
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth().clickable { Fm.choosePriv(!Fm.privOn) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(Fm.privOn, { Fm.choosePriv(it) }); Text(stringResource(R.string.fm_priv_opt), fontSize = 13.sp)
+                        BigCheckbox(Fm.privOn, { Fm.choosePriv(it) }); Text(stringResource(R.string.fm_priv_opt), fontSize = 13.sp)
                     }
                 }
             },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_apply)) } },
         )
         is FmDlg.Bookmarks -> PathListDlg(R.string.fm_bookmarks, Fm.bookmarks(), R.string.fm_bm_empty, close,
-            extra = { TextButton({ Fm.toggleBookmark(Fm.cur.path); Fm.dlg = FmDlg.Bookmarks() }) { Text(stringResource(R.string.fm_bm_add)) } }) { Fm.load(Fm.cur, it) }
+            extra = { TextButton({ Fm.toggleBookmark(Fm.cur.path); Fm.dlg = FmDlg.Bookmarks() }) { Text(stringResource(R.string.fm_bm_add)) } }, iconKey = { MiscIconKeys.bookmark(it) }) { Fm.load(Fm.cur, it) }
         is FmDlg.History -> PathListDlg(R.string.fm_history, Fm.history(), R.string.fm_hist_empty, close) { Fm.load(Fm.cur, it) }
         is FmDlg.Storage -> StorageDlg(close)
         is FmDlg.WifiServer -> WifiServerDialog(d.dir, close)
@@ -2855,11 +2940,11 @@ private fun FmDialogs() {
                 }
             } } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } })
-        is FmDlg.Props -> LAlertDialog(onDismissRequest = close, title = { Text(d.title) }, text = { Column(Modifier.barScroll()) { PropsBody(d.body) } },
-            confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
+        is FmDlg.Props -> PropsDialog(d.title, d.body, close)
         is FmDlg.TextView -> LAlertDialog(onDismissRequest = close, title = { Text(d.title, maxLines = 1) },
             text = { Column(Modifier.heightIn(max = 420.dp).barScroll()) { Text(d.body, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } },
             confirmButton = { TextButton(close) { Text(stringResource(R.string.fm_close)) } })
+        is FmDlg.Repack -> RepackDialog(d.spec, { f, sg -> Fm.repackRun(d.spec, f, sg) }, close)
         is FmDlg.Archive -> LAlertDialog(onDismissRequest = close, title = { Text(d.name, maxLines = 1) },
             text = { BarLazyColumn(Modifier.heightIn(max = 380.dp)) { items(d.lines) { Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } },
             confirmButton = { TextButton({ close(); Fm.extract(d.pane, d.name, Fm.panes[1 - d.pane.id]) }) { Text(stringResource(R.string.fm_extract_other)) } },
@@ -2879,7 +2964,7 @@ private fun TextDlg(title: Int, init: String, hint: Int, close: () -> Unit, ok: 
 }
 
 @Composable
-private fun PathListDlg(title: Int, list: List<String>, emptyText: Int, close: () -> Unit, subtitle: String? = null, extra: (@Composable () -> Unit)? = null, pick: (String) -> Unit) {
+private fun PathListDlg(title: Int, list: List<String>, emptyText: Int, close: () -> Unit, subtitle: String? = null, extra: (@Composable () -> Unit)? = null, iconKey: ((String) -> String)? = null, pick: (String) -> Unit) {
     LAlertDialog(
         onDismissRequest = close, title = { Text(stringResource(title)) },
         text = {
@@ -2893,8 +2978,11 @@ private fun PathListDlg(title: Int, list: List<String>, emptyText: Int, close: (
                         val act by src.collectIsPressedAsState()
                         val foc by src.collectIsFocusedAsState()
                         val hov by src.collectIsHoveredAsState()
-                        MqText(path, active = act || foc || hov, modifier = Modifier.fillMaxWidth().hoverable(src).clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current) { close(); pick(path) }.padding(vertical = 9.dp),
-                            fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                        val rowText: @Composable (Modifier) -> Unit = { m -> MqText(path, active = act || foc || hov, modifier = m.hoverable(src).clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current) { close(); pick(path) }.padding(vertical = 9.dp),
+                            fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
+                        // 10.0: закладки: «Изменить значок…» по долгому нажатию и свой значок слева (MiscUi.kt)
+                        val ik = iconKey?.invoke(path)
+                        if (ik != null) MiscIconRow(ik, path.trimEnd('/').substringAfterLast('/').ifEmpty { "/" }) { rowText(Modifier.weight(1f)) } else rowText(Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -2996,8 +3084,10 @@ private fun PickTargetDlg(d: FmDlg.PickTarget, close: () -> Unit) {
                             androidx.compose.material3.IconButton({ toggle(r.path) }, Modifier.size(34.dp)) {
                                 Icon(if (r.open) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(20.dp))
                             }
-                            Text(r.label, Modifier.weight(1f).clickable { sel = r.path }.background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = .18f) else Color.Transparent).padding(vertical = 9.dp, horizontal = 4.dp),
-                                fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // 10.0 (chk): выбранная папка отмечается крупной галочкой справа, нажимается вся строка (CheckRow, BigCheck.kt)
+                            CheckRow(on, Modifier.weight(1f), onClick = { sel = r.path }) {
+                                Text(r.label, Modifier.weight(1f), fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
