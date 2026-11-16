@@ -24,6 +24,7 @@ SHA-256: `85543278150c0f76c89162637ba802fea473f916806ff05ccec602453250ddf7`
 
 - Video and music from network folders and clouds play right away, without copying
 - Built-in player: gestures (volume, brightness, seeking, next/previous), “Fit to screen” button and panel hide time
+- Console: the run mode (ADB / helper / root) is shown in the title
 - Player settings in a separate group
 
 **Requirements and limits**
