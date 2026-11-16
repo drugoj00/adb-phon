@@ -1848,4 +1848,24 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="dw_create">Create</string>
     <string name="fm_type_dir">Folder (%1$d items)</string>
     <string name="fm_type_file">File</string>
+    <string name="stream_channel">Playing from network</string>
+    <string name="stream_notif_title">Streaming a file to the player</string>
+    <string name="stream_notif_text">Video or music from a network folder or cloud is playing</string>
+    <string name="fm_open_copying">Copying the file, then it will open…</string>
+    <string name="sub_console_adb">Console · ADB</string>
+    <string name="sub_console_helper">Console · helper</string>
+    <string name="sub_console_root">Console · root</string>
+    <string name="vp_fit">Fit to screen</string>
+    <string name="vp_fit_fit">fit</string>
+    <string name="vp_fit_fill">fill</string>
+    <string name="vp_fit_stretch">stretch</string>
+    <string name="vp_fit_hint">Fit to screen: %1$s</string>
+    <string name="vp_bright">Brightness %1$d %%</string>
+    <string name="vp_volume">Volume %1$d/%2$d</string>
+    <string name="vp_no_next">No next file</string>
+    <string name="vp_no_prev">No previous file</string>
+    <string name="set_vp_hide">Hide the player panel after</string>
+    <string name="set_vp_hide_hint">The control panel of the built-in video player hides by itself after the chosen time. “Never” keeps it on screen until you tap the screen again.</string>
+    <string name="vp_hide_sec">%1$d s</string>
+    <string name="vp_hide_never">Never</string>
 </resources>

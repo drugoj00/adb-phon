@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_grp_player">Player</string>
+    <string name="set_grp_player_sub">Video and music: panel and gestures</string>
+    <string name="set_vp_gest_vol">Volume gesture</string>
+    <string name="set_vp_gest_vol_hint">Swipe up or down with a finger or mouse on the volume side of the screen: the volume changes and its value shows on screen.</string>
+    <string name="set_vp_gest_bri">Brightness gesture</string>
+    <string name="set_vp_gest_bri_hint">Swipe up or down with a finger or mouse on the brightness side of the screen: the brightness changes and its value shows on screen.</string>
+    <string name="set_vp_side">Gesture sides</string>
+    <string name="set_vp_side_hint">Which half of the screen controls brightness and which controls volume.</string>
+    <string name="set_vp_side_a">Brightness left, volume right</string>
+    <string name="set_vp_side_b">Volume left, brightness right</string>
+    <string name="set_vp_gest_seek">Seek by dragging</string>
+    <string name="set_vp_gest_seek_hint">Drag left or right and keep your finger down: the new time is shown, and the jump is made when you let go.</string>
+    <string name="set_vp_gest_fling">Next or previous file by fling</string>
+    <string name="set_vp_gest_fling_hint">A quick fling to the left opens the next file of the list, to the right the previous one.</string>
+    <string name="set_vp_sens">Seek sensitivity</string>
+    <string name="set_vp_sens_hint">How many seconds of video fit into the full screen width when you drag.</string>
+    <string name="vp_sens_sec">%1$d s per screen</string>
+    <string name="set_vp_reset">Reset player settings</string>
+    <string name="set_vp_reset_hint">Return the panel, gestures and music in background to the default values.</string>
+    <string name="set_vp_reset_btn">Reset</string>
+    <string name="set_vp_keep">Remember picture size</string>
+    <string name="set_vp_keep_hint">On: the mode chosen with the “Fit to screen” button is remembered and used for the next videos and launches. Off: every video opens as “fit”, and the button works only while that video plays.</string>
+</resources>
