@@ -66,7 +66,7 @@ class ClashLogicTest {
     @Test fun planSkipMergeAddsOnlyNew() {
         val src = Fake(mapOf("/s/p" to d(), "/s/p/a.txt" to f(), "/s/p/new.txt" to f(), "/s/p/sub" to d(), "/s/p/sub/x" to f(), "/s/p/sub/y" to f()))
         val dst = Fake(mapOf("/d/p" to d(), "/d/p/a.txt" to f(), "/d/p/sub" to d(), "/d/p/sub/x" to f()))
-        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.SKIP)) { it } }
+        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.SKIP)) { n, _ -> n } }
         assertEquals(setOf("p/new.txt", "p/sub/y"), p.ops.map { it.from }.toSet())
         assertEquals(listOf("p"), p.merged)
     }
@@ -74,28 +74,28 @@ class ClashLogicTest {
     @Test fun planReplaceMergeOverwritesBoth() {
         val src = Fake(mapOf("/s/p" to d(), "/s/p/a.txt" to f(), "/s/p/new.txt" to f()))
         val dst = Fake(mapOf("/d/p" to d(), "/d/p/a.txt" to f()))
-        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.REPLACE)) { it } }
+        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.REPLACE)) { n, _ -> n } }
         assertEquals(setOf("p/a.txt", "p/new.txt"), p.ops.map { it.from }.toSet())
     }
 
     @Test fun planRenameUsesFreeName() {
         val src = Fake(mapOf("/s/a.txt" to f()))
         val dst = Fake(mapOf("/d/a.txt" to f(), "/d/a (1).txt" to f()))
-        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("a.txt"), mapOf("a.txt" to CAct.RENAME)) { n -> ClashLogic.freeName(n) { dst.stat("/d/$it") != null } } }
+        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("a.txt"), mapOf("a.txt" to CAct.RENAME)) { n, d -> ClashLogic.freeName(n, d) { dst.stat("/d/$it") != null } } }
         assertEquals("a (2).txt", p.ops.single().to)
     }
 
     @Test fun planDefaultIsSkipAndNewIsCopied() {
         val src = Fake(mapOf("/s/a.txt" to f(), "/s/b.txt" to f()))
         val dst = Fake(mapOf("/d/a.txt" to f()))
-        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("a.txt", "b.txt"), emptyMap()) { it } }
+        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("a.txt", "b.txt"), emptyMap()) { n, _ -> n } }
         assertEquals(listOf("b.txt"), p.ops.map { it.from })
     }
 
     @Test fun replaceDifferentTypeDeletesFirst() {
         val src = Fake(mapOf("/s/p" to d()))
         val dst = Fake(mapOf("/d/p" to f()))
-        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.REPLACE)) { it } }
+        val p = run { ClashLogic.plan(src, "/s", dst, "/d", listOf("p"), mapOf("p" to CAct.REPLACE)) { n, _ -> n } }
         assertTrue(p.ops.single().deleteFirst)
     }
 
