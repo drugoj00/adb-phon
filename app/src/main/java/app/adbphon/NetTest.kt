@@ -20,6 +20,7 @@ import java.io.File
 class NetTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!StandGuard.allowed(this)) { finish(); return }
         val i = intent
         FmIo.app = applicationContext; Fm.sctx = applicationContext
         val kind = i.getStringExtra("kind") ?: "smb"
@@ -31,6 +32,8 @@ class NetTestActivity : Activity() {
         if (i.getBooleanExtra("tofront", false)) { Thread { Thread.sleep(i.getIntExtra("delay", 4) * 1000L); android.os.Handler(android.os.Looper.getMainLooper()).post { CloudReturn.toFront(applicationContext, i.getBooleanExtra("skipdirect", false)) } }.start(); finish(); return }
         i.getStringExtra("fakeadd")?.let { v -> CloudTestHook.fakeAdd = if (v == "0") null else NetStore.list(applicationContext).firstOrNull { it.kind == "cloud" }; Log.i("NetTest", "fakeadd=" + v + " " + (CloudTestHook.fakeAdd != null)); finish(); return }
         i.getStringExtra("fakequota")?.let { v -> CloudErr.fakeQuota = v == "1"; Log.i("NetTest", "fakequota=" + v); finish(); return }
+        // 10.0: подмена текста ошибки движка облаков (форма входа и открытие облака): --es fakeerr "ТЕКСТ", снять: --es fakeerr 0; yadav = образец 402 Яндекса
+        i.getStringExtra("fakeerr")?.let { v -> CloudTestHook.fakeErr = when (v) { "0", "" -> null; "yadav" -> NetErrSamples.YANDEX_402; else -> v }; Log.i("NetTest", "fakeerr=" + (CloudTestHook.fakeErr?.take(80) ?: "off") + " :: " + (CloudTestHook.fakeErr?.let { CloudCatalog.explain(applicationContext, it) } ?: "")); finish(); return }
         if (i.getBooleanExtra("save", false)) { NetStore.save(this, c); Log.i("NetTest", "SAVED ${c.title}"); finish(); return }
         if (i.getBooleanExtra("forget", false)) { NetStore.remove(this, c); Log.i("NetTest", "FORGOT ${c.title}"); finish(); return }
         val legacy = i.getBooleanExtra("legacy", false)
@@ -211,6 +214,12 @@ class NetTestActivity : Activity() {
                         "mv" -> { val a = parts[1].split('|'); (fs as KeepFs).renameRemote(a[0], a[1], false); "renamed" }
                         "wdel" -> { val a = parts[1].split('|'); (fs as KeepFs).removeRemote(a[0], a.getOrNull(1) == "1"); "removed" }
                         "lclean" -> { cacheDir.listFiles()?.filter { it.name.startsWith("wt_") }?.forEach { it.delete() }; if (parts.size > 1) filesDir.listFiles()?.filter { it.name.startsWith("wt_srv_") }?.forEach { it.deleteRecursively() }; "cleaned" }
+                        // put ИМЯ|КБ: загрузка файла на сервер, чтение назад и сравнение; rmr ИМЯ: удаление файла на сервере
+                        "put" -> { val a = parts[1].split('|'); val kb = a[1].toInt(); val src = File(cacheDir, "nt_put.bin"); src.writeBytes(ByteArray(kb * 1024) { (it % 251).toByte() })
+                            val dst = path.trimEnd('/') + "/" + a[0]; fs.putFile(src, dst, null)
+                            val back = File(cacheDir, "nt_back.bin"); fs.copyTo(dst, back)
+                            val same = back.length() == src.length() && back.readBytes().contentEquals(src.readBytes()); src.delete(); back.delete(); "put+get sameBytes=$same size=${kb * 1024}" }
+                        "rmr" -> { fs.removeRemote(path.trimEnd('/') + "/" + parts[1], false); "removed" }
                         "copy" -> { val d = File(cacheDir, "nettest.bin"); fs.copyTo(path.trimEnd('/') + "/" + parts[1], d); "bytes=${d.length()}".also { d.delete() } }
                         "mark" -> parts.getOrNull(1).orEmpty()
                         else -> "?"

@@ -146,7 +146,7 @@ class SftpFs(private val host: String, private val port: Int, private val user: 
         use { c ->
             (c.ls(path) as Iterable<*>).map { it as ChannelSftp.LsEntry }.filter { it.filename != "." && it.filename != ".." }.map { e ->
                 val dir = e.attrs.isDir || (e.attrs.isLink && runCatching { c.stat(join(path, e.filename)).isDir }.getOrDefault(false))
-                FsEntry(e.filename, join(path, e.filename), dir, if (dir) 0L else e.attrs.size)
+                FsEntry(e.filename, join(path, e.filename), dir, if (dir) 0L else e.attrs.size, FmDates.ofMillis(e.attrs.mTime * 1000L))   // 10.0 (chk): дата для сортировки «по дате»
             }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
         }
     }
@@ -200,7 +200,7 @@ class DavFs(private val url: String, private val user: String, private val pass:
 
     override suspend fun list(path: String): List<FsEntry> = withContext(Dispatchers.IO) {
         val dirPath = if (path.endsWith("/")) path else "$path/"
-        val body = "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:displayname/></d:prop></d:propfind>"
+        val body = "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:displayname/><d:getlastmodified/></d:prop></d:propfind>"
         val r = req(dirPath).header("Depth", "1").method("PROPFIND", body.toRequestBody("application/xml".toMediaType())).build()
         client.newCall(r).execute().use { resp ->
             if (resp.code == 401) error("401: нужен логин и пароль")
@@ -213,21 +213,21 @@ class DavFs(private val url: String, private val user: String, private val pass:
     private fun parse(xml: String, dir: String): List<FsEntry> {
         val p = android.util.Xml.newPullParser().apply { setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true); setInput(xml.reader()) }
         val out = ArrayList<FsEntry>()
-        var href = ""; var isDir = false; var size = 0L; var inResp = false; var tag = ""
+        var href = ""; var isDir = false; var size = 0L; var inResp = false; var tag = ""; var mod = ""
         var ev = p.eventType
         while (ev != XmlPullParser.END_DOCUMENT) {
             when (ev) {
                 XmlPullParser.START_TAG -> {
                     tag = p.name
-                    if (tag == "response") { inResp = true; href = ""; isDir = false; size = 0L }
+                    if (tag == "response") { inResp = true; href = ""; isDir = false; size = 0L; mod = "" }
                     if (inResp && tag == "collection") isDir = true
                 }
-                XmlPullParser.TEXT -> if (inResp) { val t = p.text.trim(); if (t.isNotEmpty()) { if (tag == "href") href += t; if (tag == "getcontentlength") size = t.toLongOrNull() ?: 0L } }
+                XmlPullParser.TEXT -> if (inResp) { val t = p.text.trim(); if (t.isNotEmpty()) { if (tag == "href") href += t; if (tag == "getcontentlength") size = t.toLongOrNull() ?: 0L; if (tag == "getlastmodified") mod = t } }
                 XmlPullParser.END_TAG -> if (p.name == "response") {
                     inResp = false
                     val full = runCatching { java.net.URI(href).rawPath }.getOrDefault(href).let { URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }
                     val norm = full.trimEnd('/')
-                    if (norm != dir.trimEnd('/') && norm.isNotEmpty()) out.add(FsEntry(norm.substringAfterLast('/'), if (isDir) "$norm/" else norm, isDir, size))
+                    if (norm != dir.trimEnd('/') && norm.isNotEmpty()) out.add(FsEntry(norm.substringAfterLast('/'), if (isDir) "$norm/" else norm, isDir, size, FmDates.ofMillis(FmDates.httpMillis(mod))))
                 }
             }
             ev = p.next()
@@ -280,9 +280,10 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
     override val root get() = "/"
     override val label get() = (if (tls) "ftps://" else "ftp://") + host + if (port != 21) ":$port" else ""
 
-    private class Ctl(var sock: Socket, var rd: BufferedReader, var wr: OutputStream)
+    private class Ctl(var sock: Socket, var rd: BufferedReader, var wr: OutputStream) { var dataTls = false }
 
-    private fun sslFactory() = SSLContext.getInstance("TLS").apply { init(null, if (isPrivateHost(host)) arrayOf<TrustManager>(trustAll) else null, null) }.socketFactory
+    // один контекст на подключение: канал данных продолжает TLS-сессию управляющего канала (так требуют vsftpd и др. «require_ssl_reuse»)
+    private val sslCtx by lazy { SSLContext.getInstance("TLS").apply { init(null, if (isPrivateHost(host)) arrayOf<TrustManager>(trustAll) else null, null) } }
 
     private fun reply(c: Ctl): Pair<Int, String> {
         var line = c.rd.readLine() ?: error("FTP: соединение закрыто")
@@ -302,10 +303,13 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
         reply(c)
         if (tls) {
             val (a, _) = cmd(c, "AUTH TLS"); if (a !in 200..299) error("FTPS не поддерживается сервером")
-            val ss = sslFactory().createSocket(s, host, port, true) as javax.net.ssl.SSLSocket
-            ss.startHandshake()
-            c.sock = ss; c.rd = BufferedReader(InputStreamReader(ss.inputStream, Charsets.UTF_8)); c.wr = ss.outputStream
-            cmd(c, "PBSZ 0"); cmd(c, "PROT P")
+            // управляющий канал тоже через SSLEngine: сессия SSLSocket не продолжается в SSLEngine (BoringSSL: ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT)
+            val ss = FtpTlsData(s, sslCtx, host, port).handshake()
+            c.rd = BufferedReader(InputStreamReader(ss.getInputStream(), Charsets.UTF_8)); c.wr = ss.getOutputStream()
+            cmd(c, "PBSZ 0")
+            // защита канала данных (PROT P); если сервер её не принимает, данные идут открыто (PROT C), управление остаётся под TLS
+            val (pr, _) = cmd(c, "PROT P")
+            if (pr in 200..299) c.dataTls = true else cmd(c, "PROT C")
         }
         var (code, text) = cmd(c, "USER " + user.ifBlank { "anonymous" })
         if (code == 331) { val r = cmd(c, "PASS " + if (user.isBlank()) "anonymous@" else pass); code = r.first; text = r.second }
@@ -327,8 +331,13 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
             d.connect(InetSocketAddress(host, n[4] * 256 + n[5]), 5000)
         }
         d.soTimeout = 8000
-        return if (tls) (sslFactory().createSocket(d, host, d.port, true) as javax.net.ssl.SSLSocket).also { it.startHandshake() } else d
+        return d
     }
+
+    /** Защита канала данных включается после того, как сервер принял команду (150): узел и порт управляющего канала нужны, чтобы продолжить его TLS-сессию.
+     *  TLS ведётся через SSLEngine ([FtpTlsData]), чтобы в конце загрузки сервер получил close_notify. */
+    private fun secure(c: Ctl, d: Socket): FtpData =
+        if (c.dataTls) { d.soTimeout = 15000; try { FtpTlsData(d, sslCtx, host, port).handshake().also { d.soTimeout = 8000 } } catch (e: Throwable) { runCatching { d.close() }; throw e } } else FtpPlainData(d)
 
     private fun <T> session(block: (Ctl) -> T): T {
         val c = open()
@@ -349,9 +358,11 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
                 d.close()
                 val d2 = dataSocket(c); mlsd = false
                 val (c2, t2) = cmd(c, "LIST " + quote(path)); if (c2 !in 100..199) error("FTP: $t2".take(200))
-                lines = BufferedReader(InputStreamReader(d2.getInputStream(), Charsets.UTF_8)).readLines(); d2.close(); reply(c)
+                val s2 = secure(c, d2)
+                lines = BufferedReader(InputStreamReader(s2.getInputStream(), Charsets.UTF_8)).readLines(); s2.close(); reply(c)
             } else {
-                lines = BufferedReader(InputStreamReader(d.getInputStream(), Charsets.UTF_8)).readLines(); d.close(); reply(c)
+                val s1 = secure(c, d)
+                lines = BufferedReader(InputStreamReader(s1.getInputStream(), Charsets.UTF_8)).readLines(); s1.close(); reply(c)
             }
             val out = if (mlsd) lines.mapNotNull { mlsdEntry(it, path) } else lines.mapNotNull { listEntry(it, path) }
             out.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
@@ -368,30 +379,31 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
         val type = facts["type"]?.lowercase() ?: return null
         if (type == "cdir" || type == "pdir" || name == "." || name == "..") return null
         val isDir = type == "dir"
-        return FsEntry(name, join(dir, name), isDir, if (isDir) 0L else facts["size"]?.toLongOrNull() ?: 0L)
+        return FsEntry(name, join(dir, name), isDir, if (isDir) 0L else facts["size"]?.toLongOrNull() ?: 0L, FmDates.ofMillis(FmDates.mlsdMillis(facts["modify"])))
     }
 
     private fun listEntry(line: String, dir: String): FsEntry? {
         if (line.isBlank() || line.startsWith("total")) return null
         // unix: drwxr-xr-x 2 u g 4096 Jan 1 12:00 name
-        val m = Regex("^([\\-dl])[rwxsStT\\-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+\\w{3}\\s+\\d+\\s+[\\d:]+\\s+(.+)$").find(line)
+        val m = Regex("^([\\-dl])[rwxsStT\\-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\w{3})\\s+(\\d+)\\s+([\\d:]+)\\s+(.+)$").find(line)
         if (m != null) {
-            var name = m.groupValues[3]; if (name == "." || name == "..") return null
+            var name = m.groupValues[6]; if (name == "." || name == "..") return null
             if (m.groupValues[1] == "l") name = name.substringBefore(" -> ")
             val isDir = m.groupValues[1] == "d" || m.groupValues[1] == "l"
-            return FsEntry(name, join(dir, name), isDir, if (isDir) 0L else m.groupValues[2].toLongOrNull() ?: 0L)
+            return FsEntry(name, join(dir, name), isDir, if (isDir) 0L else m.groupValues[2].toLongOrNull() ?: 0L, FmDates.ofMillis(FmDates.unixLsMillis(m.groupValues[3], m.groupValues[4], m.groupValues[5])))
         }
         // DOS: 01-02-26 03:04PM <DIR> name
-        val w = Regex("^\\S+\\s+\\S+\\s+(<DIR>|\\d+)\\s+(.+)$").find(line) ?: return null
-        val isDir = w.groupValues[1] == "<DIR>"
-        return FsEntry(w.groupValues[2], join(dir, w.groupValues[2]), isDir, if (isDir) 0L else w.groupValues[1].toLongOrNull() ?: 0L)
+        val w = Regex("^(\\S+)\\s+(\\S+)\\s+(<DIR>|\\d+)\\s+(.+)$").find(line) ?: return null
+        val isDir = w.groupValues[3] == "<DIR>"
+        return FsEntry(w.groupValues[4], join(dir, w.groupValues[4]), isDir, if (isDir) 0L else w.groupValues[3].toLongOrNull() ?: 0L, FmDates.ofMillis(FmDates.dosMillis(w.groupValues[1], w.groupValues[2])))
     }
 
     override suspend fun copyTo(path: String, dest: File) {
         withContext(Dispatchers.IO) {
             session { c ->
-                val d = dataSocket(c)
+                val d0 = dataSocket(c)
                 val (code, t) = cmd(c, "RETR $path"); if (code !in 100..199) error("FTP: $t".take(200))
+                val d = secure(c, d0)
                 d.getInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }; d.close(); reply(c)
             }
         }
@@ -399,8 +411,9 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
 
     override suspend fun head(path: String, n: Int): ByteArray = withContext(Dispatchers.IO) {
         session { c ->
-            val d = dataSocket(c)
+            val d0 = dataSocket(c)
             val (code, t) = cmd(c, "RETR $path"); if (code !in 100..199) error("FTP: $t".take(200))
+            val d = secure(c, d0)
             val b = cut(n, d.getInputStream()); runCatching { d.close() }; b
         }
     }
@@ -420,10 +433,13 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
     } } }
     override suspend fun removeRemote(path: String, isDir: Boolean) { withContext(Dispatchers.IO) { session { c -> val (code, t) = cmd(c, (if (isDir) "RMD " else "DELE ") + quote(path)); if (code !in 200..299) throw wfail(code, t) } } }
     override suspend fun putFile(src: File, dest: String, j: OpProgress?) { withContext(Dispatchers.IO) { session { c ->
-        val d = dataSocket(c)
-        val (code, t) = cmd(c, "STOR " + quote(dest)); if (code !in 100..199) { runCatching { d.close() }; throw wfail(code, t) }
-        try { d.getOutputStream().use { o -> UpStream(src, j).use { i -> i.copyTo(o, 128 * 1024) } } } catch (e: Throwable) { runCatching { d.close() }; throw e }
-        runCatching { d.close() }
+        val d0 = dataSocket(c)
+        val (code, t) = cmd(c, "STOR " + quote(dest)); if (code !in 100..199) { runCatching { d0.close() }; throw wfail(code, t) }
+        val d = secure(c, d0)
+        try { val o = d.getOutputStream(); UpStream(src, j).use { i -> i.copyTo(o, 128 * 1024) }; o.flush() } catch (e: Throwable) { d.close(); throw e }
+        d.finish()      // TLS: close_notify и ожидание ответа сервера, иначе строгие серверы не подтверждают загрузку
+        d.close()
+        c.sock.soTimeout = 60_000      // сервер может долго закрывать файл после большой загрузки
         val (fin, tf) = reply(c); if (fin !in 200..299) throw wfail(fin, tf)
     } } }
 }
@@ -496,7 +512,7 @@ object NetStore {
 
     fun save(ctx: Context, c: NetConn) {
         val cur = list(ctx)
-        writeList(ctx, cur, cur.filterNot { it.kind == c.kind && it.host == c.host && it.user == c.user } + c, "save")
+        writeList(ctx, cur, CloudAccounts.upsert(cur, c), "save")
     }
 
     /** Заменить весь список подключений (восстановление копии): пароли шифруются ключом Keystore этого устройства. */
