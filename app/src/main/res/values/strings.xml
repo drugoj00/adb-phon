@@ -935,16 +935,11 @@
     <string name="fm_op_file_n">file %1$d of %2$d</string>
     <string name="fm_protected">System folder: operation not allowed</string>
     <string name="fm_cancelled">Cancelled</string>
-    <string name="fm_drop_hint">Drag onto a folder</string>
-    <string name="fm_drop_to_hint">Release over: %1$s</string>
-    <string name="fm_drop_from">From:</string>
-    <string name="fm_drop_to">To:</string>
     <string name="fm_drop_and_more">and %1$d more</string>
-    <string name="fm_drop_size">Size: %1$s</string>
     <string name="fm_select_first">Select files first</string>
     <string name="set_dnd">Drag and drop</string>
     <string name="set_dnd_hint">Hold the mouse button on a file or folder and drag it to another folder or pane; by touch: press and hold, then drag. After dropping, a window asks: copy or move.</string>
-    <string name="fm_root_title">Devices</string>
+    <string name="fm_root_title">Sources</string>
     <string name="rt_internal">Device storage</string>
     <string name="rt_recent">Recent files</string>
     <string name="rt_lan">LAN</string>
@@ -1089,7 +1084,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-RAR support: UnRAR source code (https://www.rarlab.com), © Alexander Roshal, used under the UnRAR license: for extraction only. Not used to create RAR archives.</string>
+RAR support: UnRAR source code (https://www.rarlab.com), © Alexander Roshal, used under the UnRAR license: for extraction only. Not used to create RAR archives.
+
+Screen sound: scrcpy-server (https://github.com/Genymobile/scrcpy), Apache License 2.0, Copyright (C) Genymobile; APK signing: apksig (Android Open Source Project), Apache License 2.0. Both are used unmodified. License text: https://www.apache.org/licenses/LICENSE-2.0</string>
     <string name="fm_smb_version">SMB version</string>
     <string name="fm_smb_ver_auto">Auto</string>
     <string name="fm_smb_ver_unsupported">The server does not support this SMB version (%1$s). Choose another version.</string>
@@ -1224,7 +1221,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="cl_overlay_hint">Allow ADB-phon to open over other windows or to show notifications, so it returns by itself after signing in to a cloud. Not required: the Done page has a link.</string>
     <string name="cl_overlay_later">Not now</string>
     <string name="cl_notif_btn">Turn on notifications</string>
-    <string name="perm_overlay_why">To return automatically after signing in, ADB-phon needs the "Display over other apps" permission</string>
+    <string name="perm_overlay_why">To show a hint over the browser while you sign in and to return automatically afterwards, ADB-phon needs the "Display over other apps" permission. Without it a hint is shown only inside the sign-in window.</string>
     <string name="perm_notif_why">Allow notifications: ADB-phon will tell you when the cloud is added</string>
     <string name="cl_e_head">Could not read %1$s</string>
     <string name="cl_e_quota">the shared sign-in key of this app hit the provider\'s request limit (many users at once). It passes by itself later.</string>
@@ -1283,7 +1280,6 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="tr_drive">Cloud drive</string>
     <string name="ap_need_root">No access. Root is needed.</string>
     <string name="tr_restore_fail">Could not restore: the item stays in the trash.</string>
-    <string name="sel_need_target">Expand the target folder in the other panel</string>
     <string name="sel_one_source">Selected items come from different sources: act on one source at a time</string>
     <string name="sb_copy">Copy</string>
     <string name="sb_move">Move</string>
@@ -1415,12 +1411,6 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="ssh_key_clear">Remove key</string>
     <string name="fm_op_left">%1$s of %2$s left</string>
     <string name="fm_op_speed_wait">speed…</string>
-    <string name="drop_title_copy">Copy</string>
-    <string name="drop_title_move">Move</string>
-    <string name="drop_move_mode">Move mode (delete the files from the source)</string>
-    <string name="drop_copy_to">Copy to</string>
-    <string name="drop_move_to">Move to</string>
-    <string name="drop_ok">OK</string>
     <string name="perm_title">Permissions</string>
     <string name="perm_read">Read</string>
     <string name="perm_write">Write</string>
@@ -1759,7 +1749,7 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="pc_name">Name</string>
     <string name="pc_add_hint">On the PC: “Phone in Window with Sound” → tray → “Access to this screen: on”. The program code is in the “People” list on that PC. Files and screen go over Tailscale.</string>
     <string name="pc_busy">The PC has too many file sessions open.</string>
-    <string name="dev_files">Files</string>
+    <string name="dev_files">Device files</string>
     <string name="dev_video">Video window</string>
     <string name="dev_add_title">Device</string>
     <string name="dev_kind_pc">Windows PC</string>
@@ -1797,4 +1787,65 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="pk_pick">Pick a folder (tap its name)</string>
     <string name="pk_copying_to">Copying to: %1$s</string>
     <string name="pk_moving_to">Moving to: %1$s</string>
+    <string name="cl_already">Account (%1$s) was already added, sign-in refreshed.</string>
+    <string name="cl_hint_google">Google says “not verified”? 1) “Advanced” 2) “Go to ADB-phon (unsafe)” 3) scroll down and tap “Continue”.</string>
+    <string name="cl_ov_title">If Google says “app not verified”</string>
+    <string name="cl_ov_1">1. Tap here</string>
+    <string name="cl_ov_2">2. Then “Go to ADB-phon (unsafe)”</string>
+    <string name="cl_ov_3">3. Scroll down, “Continue”</string>
+    <string name="cl_ov_close">Close</string>
+    <string name="cl_restart">Start over</string>
+    <string name="cl_no_login">Could not get the account email: no connection was created. Try signing in again.</string>
+    <string name="cl_g_title">If Google says “app not verified”:</string>
+    <string name="cl_g_1">At the bottom left there is small grey text “Advanced”: it is a link, tap it.</string>
+    <string name="cl_g_2">Another grey link appears, “Go to ADB-phon (unsafe)”: tap it too.</string>
+    <string name="cl_g_3">Scroll down and tap “Continue”.</string>
+    <string name="cl_g_fake">Google has not verified this app</string>
+    <string name="cl_g_l1">Advanced</string>
+    <string name="cl_g_l2">Go to ADB-phon (unsafe)</string>
+    <string name="cl_g_b3">Continue</string>
+    <string name="cw_back">Back</string>
+    <string name="cw_close">Close</string>
+    <string name="cw_error">The page did not load</string>
+    <string name="cl_chrome_open">Open sign-in in Chrome</string>
+    <string name="cl_chrome_need">Arrow hints need Chrome: this browser does not share the page text, so only the text hint is shown.</string>
+    <string name="cl_more">More</string>
+    <string name="rp_menu">Repack…</string>
+    <string name="rp_menu_app">Extract / repack…</string>
+    <string name="rp_title">Repack: %1$s</string>
+    <string name="rp_fmt_asis">As is (files)</string>
+    <string name="rp_fmt_zip">ZIP</string>
+    <string name="rp_fmt_apk">One APK (merge)</string>
+    <string name="rp_fmt_apks">APKS</string>
+    <string name="rp_fmt_xapk">XAPK</string>
+    <string name="rp_h_asis">The parts are copied unchanged into a folder. Signatures are intact.</string>
+    <string name="rp_h_zip">The parts go unchanged into one ZIP. Signatures of the parts are intact.</string>
+    <string name="rp_h_apk">The parts for this device are merged into one APK. The signature has to change (next step), so it will not install over the original.</string>
+    <string name="rp_h_apks">Original signed parts in an .apks archive: installs over the original, updates and data are kept.</string>
+    <string name="rp_h_xapk">Original signed parts in an .xapk archive: installs over the original, updates and data are kept.</string>
+    <string name="rp_sign_title">Signature of the merged APK</string>
+    <string name="rp_sign_own">Our signature (program key)</string>
+    <string name="rp_sign_none">No signature</string>
+    <string name="rp_sign_note">The original signature is impossible for a merge: it protects the contents, and merging changes them. Our signature: the APK installs, but not over the original, and the original data is not kept. No signature: the file does not install as is (for your own signing or analysis).</string>
+    <string name="rp_to">Result goes to: %1$s</string>
+    <string name="rp_go">Done</string>
+    <string name="rp_job">Repacking</string>
+    <string name="rp_saved">Saved: %1$s</string>
+    <string name="rp_copy_asis">Single APK: copied as is, signature intact.</string>
+    <string name="ai_icon">Icon…</string>
+    <string name="ai_copy">Copy</string>
+    <string name="asc_sound_on">Sound: on</string>
+    <string name="asc_sound_off">Sound: off</string>
+    <string name="asc_audio_old">No sound: the device needs Android 11 or newer</string>
+    <string name="asc_audio_fail">Sound did not start: %1$s</string>
+    <string name="dw_screen">Screen</string>
+    <string name="dw_files">Files</string>
+    <string name="dw_up">Up</string>
+    <string name="dw_refresh">Refresh</string>
+    <string name="dw_empty">Empty folder</string>
+    <string name="dw_download">Save to phone</string>
+    <string name="dw_saved">Saved to Downloads: %1$s</string>
+    <string name="dw_create">Create</string>
+    <string name="fm_type_dir">Folder (%1$d items)</string>
+    <string name="fm_type_file">File</string>
 </resources>

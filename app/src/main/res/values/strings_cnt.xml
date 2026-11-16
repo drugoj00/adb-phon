@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cnt_title">Enter a number</string>
+    <string name="cnt_range">From %1$s to %2$s</string>
+    <string name="cnt_apply">Apply</string>
+    <string name="cnt_cancel">Cancel</string>
+    <string name="cnt_edit_cd">Enter a number</string>
+    <string name="cnt_dec_cd">Less</string>
+    <string name="cnt_inc_cd">More</string>
+    <string name="cnt_zoom">Zoom</string>
+</resources>

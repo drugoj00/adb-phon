@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set2_hero_upd">Check for updates</string>
+    <string name="set2_hero_bk">Backup</string>
+    <string name="set2_hero_bk_h">Save settings to a file</string>
+    <string name="set2_hero_restore">Restore from backup</string>
+    <string name="set2_hero_restore_h">Bring settings back from a backup file</string>
+    <string name="set2_hero_about">About</string>
+    <string name="set2_hero_about_h">Version, links, licenses</string>
+    <string name="set2_info">Explanation</string>
+</resources>

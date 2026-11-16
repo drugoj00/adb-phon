@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (wad72, 4PDA): понятные ошибки облаков и сети, источник установки во вкладке «Софт», переподключение консоли -->
+<resources>
+    <string name="cld_e_yandex_free">Yandex does not provide WebDAV on the free plan. Connect Yandex Disk through browser sign-in (your own key).</string>
+    <string name="cld_e_payment">The service requires payment (402): this access is closed on the current plan.</string>
+    <string name="cld_e_space">The cloud is out of space. Free up space or change the plan.</string>
+    <string name="cld_e_rate">Too many requests (429). Wait a minute and try again.</string>
+    <string name="cld_e_auth">Sign-in was not accepted (401): check the login and password or sign in again.</string>
+    <string name="cld_e_forbidden">Access denied (403): this sign-in has no rights to this folder or action.</string>
+    <string name="cld_e_notfound">Not found (404): check the server address and folder path.</string>
+    <string name="cld_e_tls">Secure connection error: the server certificate was not accepted. Check the date and time on the device and the server address.</string>
+    <string name="cld_e_timeout">The server did not respond in time. Check the internet connection and try again.</string>
+    <string name="cld_e_nonet">No connection to the server: check the internet, Wi-Fi and address.</string>
+    <string name="cld_e_server">Service-side failure (5xx). Try again later.</string>
+
+    <string name="cld_is_title">Source</string>
+    <string name="cld_is_filter">Source</string>
+    <string name="cld_is_filter_on">Source: %1$s</string>
+    <string name="cld_is_all">All sources</string>
+    <string name="cld_is_started_by">Started by: %1$s</string>
+    <string name="cld_is_play" translatable="false">Google Play</string>
+    <string name="cld_is_rustore" translatable="false">RuStore</string>
+    <string name="cld_is_galaxy" translatable="false">Galaxy Store</string>
+    <string name="cld_is_huawei" translatable="false">Huawei AppGallery</string>
+    <string name="cld_is_xiaomi" translatable="false">Xiaomi GetApps</string>
+    <string name="cld_is_amazon" translatable="false">Amazon Appstore</string>
+    <string name="cld_is_fdroid" translatable="false">F-Droid / Aurora Store</string>
+    <string name="cld_is_shell">Shell (ADB)</string>
+    <string name="cld_is_file">APK file (package installer)</string>
+    <string name="cld_is_pre">Preinstalled (firmware)</string>
+    <string name="cld_is_other">Another app</string>
+    <string name="cld_is_unknown">Unknown</string>
+    <string name="cld_iss_play" translatable="false">Play</string>
+    <string name="cld_iss_rustore" translatable="false">RuStore</string>
+    <string name="cld_iss_galaxy" translatable="false">Galaxy</string>
+    <string name="cld_iss_huawei" translatable="false">AppGallery</string>
+    <string name="cld_iss_xiaomi" translatable="false">GetApps</string>
+    <string name="cld_iss_amazon" translatable="false">Amazon</string>
+    <string name="cld_iss_fdroid" translatable="false">F-Droid</string>
+    <string name="cld_iss_shell" translatable="false">ADB</string>
+    <string name="cld_iss_file" translatable="false">APK</string>
+    <string name="cld_iss_other">other</string>
+
+    <string name="cld_tc_lost_auto">connection to the shell was lost, reconnecting…</string>
+    <string name="cld_tc_lost">connection to the shell was lost: press “Reconnect”</string>
+    <string name="cld_tc_back">connected again</string>
+    <string name="cld_tc_reconnect">Reconnect</string>
+</resources>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (bk3): one "Create backup…" window with a choice of contents and one "Restore…" window for any backup type -->
+<resources>
+    <string name="bk3_create_title">Create backup</string>
+    <string name="bk3_what">What to include</string>
+    <string name="bk3_inc_settings">ADB-phon settings</string>
+    <string name="bk3_inc_settings_sub">devices, connections, clouds, passwords, ADB key</string>
+    <string name="bk3_inc_apk">App APKs</string>
+    <string name="bk3_inc_apk_sub">install files of the chosen apps, works without root and ADB</string>
+    <string name="bk3_inc_data">App data</string>
+    <string name="bk3_inc_data_sub">with root all data; over ADB only for apps that allow the system backup</string>
+    <string name="bk3_apps">Apps: %1$d chosen</string>
+    <string name="bk3_search">Find an app</string>
+    <string name="bk3_no_apps_found">Nothing found</string>
+    <string name="bk3_apps_loading">Loading the app list…</string>
+    <string name="bk3_way_root">data: everything (root)</string>
+    <string name="bk3_way_system">data: system backup (ADB)</string>
+    <string name="bk3_way_no_priv">data: root or ADB needed</string>
+    <string name="bk3_way_not_allowed">data: the app forbids backups, without root only external data</string>
+    <string name="bk3_way_sdk12">data: Android 12+, without root only external data</string>
+    <string name="bk3_priv_wait">Checking root and ADB…</string>
+    <string name="bk3_priv_none">App data needs root or ADB (wireless debugging): connect in the Link tab. Settings and APKs are copied without them.</string>
+    <string name="bk3_enc">Encrypt with password</string>
+    <string name="bk3_enc_sub">AES-256. The password is remembered for next backups and the auto backup</string>
+    <string name="bk3_plain_warn">Without a password, connection passwords and the ADB key are readable in the file</string>
+    <string name="bk3_folder">Backup folder</string>
+    <string name="bk3_err_nothing">Tick what to include in the backup</string>
+    <string name="bk3_err_no_apps">Choose apps in the list</string>
+    <string name="bk3_enc_need_pass">Enter a password or turn encryption off</string>
+    <string name="bk3_skipped">%1$s: skipped, data is not available without root and ADB</string>
+    <string name="bk3_user_n">user %1$d</string>
+
+    <string name="bk3_restore_title">Restore backup</string>
+    <string name="bk3_k_settings">ADB-phon settings</string>
+    <string name="bk3_k_app">%1$s: %2$s</string>
+    <string name="bk3_k_data">data</string>
+    <string name="bk3_k_app_enc">App backup</string>
+    <string name="bk3_k_foreign">System adb backup (not ADB-phon)</string>
+    <string name="bk3_k_unknown">Format not recognized</string>
+    <string name="bk3_old_btn">Old backups with data…</string>
+    <string name="bk3_foreign_text">This is a system adb backup made outside ADB-phon. ADB-phon does not restore it: on a PC use adb restore file.ab.</string>
+    <string name="bk3_unknown_text">The file does not look like an ADB-phon backup.</string>
+    <string name="bk3_r_what">What to restore</string>
+    <string name="bk3_r_apk">App (APK)</string>
+    <string name="bk3_r_apk_sub">install the app from the backup</string>
+    <string name="bk3_r_data">App data</string>
+    <string name="bk3_r_data_sub">the current app data is replaced with the backup</string>
+    <string name="bk3_r_apk_nopriv">Without root and ADB the APK is installed by the system installer: Android asks for confirmation</string>
+    <string name="bk3_b_nothing">Tick what to restore</string>
+    <string name="bk3_b_not_installed">The app is not installed: tick App (APK) or install it first</string>
+    <string name="bk3_b_other_user">For another user the APK is installed only with root or ADB</string>
+
+    <string name="bk3_err_not_ours">this is not an ADB-phon backup</string>
+    <string name="bk3_err_newer">the backup was made by a newer ADB-phon, update the app</string>
+    <string name="bk3_err_damaged">the file is damaged or not fully written</string>
+    <string name="bk3_err_need_pass">a password is needed</string>
+    <string name="bk3_err_wrong_pass">wrong password</string>
+    <string name="bk3_err_no_stage">could not prepare the temporary backup folder</string>
+    <string name="bk3_err_timeout">the wait timed out</string>
+    <string name="bk3_err_install">installation failed</string>
+    <string name="bk3_apk_installed">%1$s: the app is installed</string>
+    <string name="bk3_apk_cancelled">%1$s: installation cancelled</string>
+
+    <string name="bk3_n_ext_fail">external data not copied</string>
+    <string name="bk3_n_obb_fail">obb files not copied</string>
+    <string name="bk3_n_internal_fail">app data not copied</string>
+    <string name="bk3_n_unpack_fail">data unpacking failed: the app data may be missing, run the restore again</string>
+    <string name="bk3_n_apk_newer">a newer version is installed, the APK from the backup was not installed</string>
+    <string name="bk3_n_install_fail">installation failed: %1$s</string>
+
+    <string name="bk3_old_title">Old backups with data</string>
+    <string name="bk3_old_hint">Backups as folders in ADB-phon/Backups made before version 10.0. New backups are made with Create backup….</string>
+    <string name="bk3_old_none">No old backups</string>
+    <string name="bk3_delete_q">Delete the backup of %1$s from %2$s? This cannot be undone.</string>
+    <string name="bk3_into_user">The data goes back to user %1$d, the one it was taken from.</string>
+</resources>

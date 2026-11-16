@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="num_custom">Own value…</string>
+    <string name="num_custom_val">Own: %1$s</string>
+    <string name="num_u_days">d</string>
+    <string name="num_u_mb">MB</string>
+    <string name="num_u_min">min</string>
+    <string name="num_u_sec">s</string>
+    <string name="num_volume">Volume</string>
+    <string name="num_position">Position</string>
+</resources>

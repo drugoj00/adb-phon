@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_grp_upd">Updates and backups</string>
+    <string name="set_grp_upd_sub">New version, roll back, backup</string>
+    <string name="set_grp_ui">Interface</string>
+    <string name="set_grp_ui_sub">Theme, language, sizes, colors</string>
+    <string name="set_grp_files">Files</string>
+    <string name="set_grp_files_sub">Folders, icons, deleting, trash</string>
+    <string name="set_grp_adb">Connection and ADB</string>
+    <string name="set_grp_adb_sub">Helper without debugging, Shizuku, terminal</string>
+    <string name="set_grp_cloud">Clouds</string>
+    <string name="set_grp_cloud_sub">Clouds module and its updates</string>
+    <string name="set_grp_panels">Panels and calls</string>
+    <string name="set_grp_panels_sub">Panel side, buttons, avatar</string>
+    <string name="set_grp_sys">System</string>
+    <string name="set_grp_sys_sub">Startup, screen, exit, log</string>
+    <string name="set_search">Search settings</string>
+    <string name="set_search_none">Nothing found</string>
+    <string name="set_all_groups">All sections</string>
+    <string name="set_about">About</string>
+    <string name="set_cmod_title">Clouds module</string>
+    <string name="set_h_upd">Now: %1$s</string>
+    <string name="set_h_versions">Install an earlier or newer version</string>
+    <string name="set_h_ver_clear">Free up space taken by old files</string>
+    <string name="set_h_bk_make">A dated file in the backup folder</string>
+    <string name="set_h_bk_restore">Pick a backup from the folder</string>
+    <string name="set_h_copies">App copies and their versions</string>
+</resources>

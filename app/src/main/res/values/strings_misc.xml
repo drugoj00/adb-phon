@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="misc_cloud_dropbox" translatable="false">Dropbox</string>
+    <string name="misc_cloud_box" translatable="false">Box</string>
+    <string name="misc_cloud_onedrive" translatable="false">OneDrive</string>
+    <string name="misc_cloud_pcloud" translatable="false">pCloud</string>
+    <string name="misc_cloud_zoho" translatable="false">Zoho</string>
+    <string name="misc_cloud_mega" translatable="false">MEGA</string>
+    <string name="misc_cloud_hidrive" translatable="false">HiDrive</string>
+    <string name="misc_cloud_putio" translatable="false">put.io</string>
+    <string name="misc_cloud_drive">Google Drive</string>
+    <string name="misc_cloud_google_photos">Google Photos</string>
+    <string name="misc_cloud_yandex">Yandex Disk</string>
+    <string name="misc_inv_send_btn">Invite…</string>
+    <string name="misc_inv_title">Invite to Tailscale network</string>
+    <string name="misc_inv_hint">Tailscale sends an email with a link. After signing in with it, the person\'s devices join your network.</string>
+    <string name="misc_inv_email">Invitee email</string>
+    <string name="misc_inv_send">Send</string>
+    <string name="misc_inv_sending">Sending…</string>
+    <string name="misc_inv_sent">Invite sent to %1$s</string>
+    <string name="misc_inv_sent_nomail">Invite created for %1$s, Tailscale did not confirm the email. The link can be passed on manually.</string>
+    <string name="misc_inv_copy_link">Copy link</string>
+    <string name="misc_inv_link_copied">Link copied</string>
+    <string name="misc_inv_token_btn">API token…</string>
+    <string name="misc_tok_title">Tailscale API token needed</string>
+    <string name="misc_tok_step1">1. Open login.tailscale.com/admin/settings/keys (sign in as network owner or admin).</string>
+    <string name="misc_tok_step2">2. Tap «Generate access token…», set the expiry and tap «Generate».</string>
+    <string name="misc_tok_step3">3. Copy the token (tskey-api-…) and paste it below.</string>
+    <string name="misc_tok_open">Open page</string>
+    <string name="misc_tok_field">API token</string>
+    <string name="misc_tok_save">Save</string>
+    <string name="misc_tok_delete">Delete token</string>
+    <string name="misc_tok_bad">The token looks wrong</string>
+    <string name="misc_tok_note">The token is stored encrypted on this device only and is not included in the settings backup.</string>
+    <string name="misc_inv_e_email">Check the email address</string>
+    <string name="misc_inv_e_token">Tailscale API token needed</string>
+    <string name="misc_inv_e_auth">Error 401: the token is wrong or expired. Enter a new token.</string>
+    <string name="misc_inv_e_forbidden">Error 403: this token cannot invite. A user API token with owner or admin rights is needed (not OAuth).</string>
+    <string name="misc_inv_e_notfound">Error 404: Tailscale network not found.</string>
+    <string name="misc_inv_e_exists">Error %1$d: this address is already invited or already in the network.</string>
+    <string name="misc_inv_e_bad">Error %1$d: Tailscale rejected the request.</string>
+    <string name="misc_inv_e_rate">Error 429: too many requests. Try again in a minute.</string>
+    <string name="misc_inv_e_server">Error %1$d: Tailscale server failure. Try again later.</string>
+    <string name="misc_inv_e_net">No connection to Tailscale. Check the internet.</string>
+    <string name="misc_inv_e_other">Error %1$d.</string>
+    <string name="misc_inv_e_detail">Tailscale reply: %1$s</string>
+</resources>

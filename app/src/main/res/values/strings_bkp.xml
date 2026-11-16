@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0: backups with a chosen place (storage, SD, USB, network, cloud), encrypted "Backup with data", auto backup, users and restore on another device -->
+<resources>
+    <string name="bkp_settings_hint">A full copy of the app: settings, device lists, LAN connections, cloud drives with sign-in, passwords and the ADB key. “Create backup” saves a dated file to the backup folder at once, “Restore…” lists the backups from that folder. The folder is changed with “Change…”: storage, SD card, USB, a network folder (SMB, SFTP, FTP, WebDAV) or a cloud.</string>
+    <string name="bkp_restore">Restore…</string>
+    <string name="bkp_pick_file">Choose file…</string>
+    <string name="bkp_pick_where">Choose storage, a network source or a cloud</string>
+    <string name="bkp_pick_no_files">No backups here</string>
+    <string name="bkp_new_folder">New folder</string>
+    <string name="bkp_cloud">Cloud</string>
+    <string name="bkp_pass">Password</string>
+    <string name="bkp_enter_pass">Backup password</string>
+    <string name="bkp_wrong_pass">Wrong password. The file is not changed, try again.</string>
+    <string name="bkp_create">Create</string>
+    <string name="bkp_working">Working…</string>
+    <string name="bkp_saved">Saved: %1$s, %2$s</string>
+    <string name="bkp_sum">Inside: %1$d settings, %2$d connections, %3$d clouds, %4$d devices</string>
+    <string name="bkp_enc_settings_yes">The file is encrypted with the password (AES-256)</string>
+    <string name="bkp_enc_yes">Encrypted with password: Android Backup, AES-256</string>
+    <string name="bkp_enc_no">No password</string>
+    <string name="bkp_failed">%1$s: backup not created (%2$s)</string>
+    <string name="bkp_bad_file">The file did not open: %1$s</string>
+    <string name="bkp_back">Back</string>
+
+    <string name="bkp_err_no_conn">Connection %1$s is not among the saved ones. Add it in Files or choose another place.</string>
+    <string name="bkp_err_cloud_module">Clouds need the “ADB-phon Clouds” module: open a cloud in Files and the app offers to install it.</string>
+    <string name="bkp_err_all_files">No access to folder %1$s: give the app access to all files (Settings, Apps, ADB-phon, All files access) or choose a network folder.</string>
+    <string name="bkp_err_no_folder">Folder not available: %1$s</string>
+    <string name="bkp_err_empty">The file is empty or was not created</string>
+    <string name="bkp_err_size">Written %1$d of %2$d bytes: the file is incomplete, the backup is not counted</string>
+
+    <string name="bkp_step_settings">Settings backup…</string>
+    <string name="bkp_step_pack">%1$s: packing…</string>
+    <string name="bkp_step_pack_pct">%1$s: packing %2$d%%</string>
+    <string name="bkp_step_check">%1$s: checking the file…</string>
+    <string name="bkp_step_upload">Writing to %1$s…</string>
+    <string name="bkp_step_upload_pct">Writing to %1$s: %2$d%%</string>
+    <string name="bkp_step_download">Reading %1$s…</string>
+    <string name="bkp_step_unpack_pct">Unpacking %1$d%%</string>
+
+    <string name="bkp_keep">Keep last auto backups</string>
+    <string name="bkp_auto_only_settings">App settings only</string>
+    <string name="bkp_auto_with_data">Settings and backups with data (root or ADB needed)</string>
+    <string name="bkp_auto_info">%1$s. Next: %2$s</string>
+    <string name="bkp_auto_pass_yes">With password</string>
+    <string name="bkp_auto_pass_no">No password</string>
+    <string name="bkp_auto_data_info">Backups with data: apps from the last manual backup: %1$d</string>
+    <string name="bkp_auto_last">Last auto backup: %1$s</string>
+    <string name="bkp_run_now">Run now</string>
+    <string name="bkp_rotated">Old auto backups deleted: %1$d</string>
+    <string name="bkp_auto_failed">Auto backup not created: %1$s</string>
+    <string name="bkp_auto_no_apps">Backups with data: make one backup with data manually first, the auto backup takes the same apps</string>
+    <string name="bkp_auto_data_skipped">Backups with data skipped: root and ADB are not available now (noted in the log)</string>
+    <string name="bkp_auto_done">Auto backup ready</string>
+    <string name="bkp_auto_error">Auto backup: error</string>
+    <string name="bkp_channel">Auto backup</string>
+
+    <string name="bkp_user">Device user</string>
+    <string name="bkp_need_priv">Root or ADB (wireless debugging) is needed. The connection failed: open the Link tab.</string>
+    <string name="bkp_about_title">Format and moving to another device</string>
+    <string name="bkp_about_data">The backup is saved as one .ab file in Android Backup format (AES-256 with a password). On a PC it opens with android-backup-extractor (java -jar abe.jar unpack file.ab file.tar password); inside is a tar with the backup parts. ADB-phon restores the data. Also inside: user, app version, Android version, model and app signature. Moving to another device: choose a network folder, a cloud or a USB drive, then on the other device open Backups with data, Restore from file….</string>
+    <string name="bkp_about_restore">Data goes back only into an installed app with the same signature. If the app is missing, install it first (the Install from backup button appears when the backup has the APK). Without root internal data is not restored, and the system backup (bu, adb restore) does not work for many apps on Android 12 and newer.</string>
+    <string name="bkp_restore_from_file">Restore from file…</string>
+    <string name="bkp_restore_data_title">Restore backup with data</string>
+    <string name="bkp_restore_btn">Restore</string>
+    <string name="bkp_install_from_copy">Install from backup</string>
+    <string name="bkp_installed">%1$s: the app is installed. Now the data can be restored.</string>
+    <string name="bkp_no_apk">The backup has no APK: install the app from a store, then restore the data</string>
+    <string name="bkp_checking">Checking compatibility…</string>
+    <string name="bkp_meta_line">%1$s, version %2$s, taken %3$s</string>
+    <string name="bkp_meta_dev">Device: %1$s, Android %2$s, user %3$s, method: %4$s</string>
+    <string name="bkp_meta_signer">Signature SHA-256: %1$s</string>
+    <string name="bkp_c_all_ok">Compatible: ready to restore</string>
+    <string name="bkp_c_no_priv">No root and no ADB: data cannot be restored. Connect ADB in the Link tab.</string>
+    <string name="bkp_c_user_missing">This user does not exist on this device: choose another one</string>
+    <string name="bkp_c_not_installed">The app is not installed for this user. Data is not restored without the app: install it first.</string>
+    <string name="bkp_c_signer_mismatch">The installed app signature differs from the one in the backup: the data will not fit (another build of the same app)</string>
+    <string name="bkp_c_signer_unknown">Signature not checked (no signature info in the backup or on the device)</string>
+    <string name="bkp_c_version_lower">An older version is installed (code %2$s) than in the backup (%1$s): data of the newer version may not open. Better install the version from the backup first.</string>
+    <string name="bkp_c_version_higher">A newer version is installed than in the backup: the app usually upgrades old data itself</string>
+    <string name="bkp_c_sdk_diff">The backup was taken on Android %1$s, here Android API %2$s: data that depends on the system (notifications, permissions, keys) may not fit</string>
+    <string name="bkp_c_other_device">The backup is from another device (%1$s): device-bound keys and account sign-ins may ask to sign in again</string>
+    <string name="bkp_c_no_root_internal">Internal data in the backup was taken with root: without root it is not restored, only the APK and external data come back</string>
+    <string name="bkp_c_ab_limited">System backup: on Android 12 and newer without root the system may refuse the data of this app</string>
+    <string name="bkp_c_only_apk">The backup has only the APK, no data</string>
+</resources>

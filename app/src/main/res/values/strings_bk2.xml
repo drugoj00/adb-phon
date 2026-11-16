@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (bk2): simple backup flow: remembered folder, create at once, restore from the list -->
+<resources>
+    <string name="bk2_dir_settings">Backup folder</string>
+    <string name="bk2_dir_data">Folder for backups with data</string>
+    <string name="bk2_change">Change…</string>
+    <string name="bk2_pick_dir">Backup folder</string>
+    <string name="bk2_make_now">Create backup</string>
+    <string name="bk2_not_saved">Backup not saved</string>
+    <string name="bk2_open_folder">Open folder</string>
+    <string name="bk2_pick_other">Choose another folder</string>
+    <string name="bk2_give_access">Grant access</string>
+    <string name="bk2_failed">Could not write: %1$s</string>
+    <string name="bk2_err_space">Not enough space: the backup needs %1$s, %2$s free. Free up space or choose another folder.</string>
+    <string name="bk2_err_space_short">Not enough space in %1$s. Free up space or choose another folder.</string>
+    <string name="bk2_err_net">Network folder unavailable (%1$s): %2$s. Check the network and the connection or choose another folder.</string>
+    <string name="bk2_enc">Encrypt with password</string>
+    <string name="bk2_enc_hint">Settings backups, backups with data and auto backups are encrypted with this password (AES-256). The password is kept on the device in encrypted form and is not part of the backup. Without it the backup cannot be opened. Without encryption, connection passwords and the ADB key are readable in the backup file.</string>
+    <string name="bk2_pass_later">The password is asked once when a backup is created</string>
+    <string name="bk2_pass_title">Password for backups</string>
+    <string name="bk2_pass_once">Password encryption is on. The password is remembered for next backups; without it a backup cannot be opened.</string>
+    <string name="bk2_enc_on">Password encryption: on (Settings, Backup)</string>
+    <string name="bk2_enc_off">No encryption (turned on in Settings, Backup)</string>
+    <string name="bk2_need_pass_auto">encryption is on but no password is set. Set it in Settings, Backup.</string>
+    <string name="bk2_in_folder">Folder: %1$s</string>
+    <string name="bk2_refresh">Refresh</string>
+    <string name="bk2_change_dir">Change folder</string>
+    <string name="bk2_empty">No backups in this folder. Press “Change folder” or “Choose a file…”.</string>
+    <string name="bk2_in_counts">%1$d settings, %2$d connections, %3$d clouds</string>
+    <string name="bk2_in_app">%1$s, user %2$d</string>
+    <string name="bk2_in_enc">encrypted</string>
+    <string name="bk2_in_auto">auto backup</string>
+</resources>

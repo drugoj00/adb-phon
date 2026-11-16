@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 10.0 (fm1): app data folder in Files -->
+    <string name="fm1_data_none">This app has no Android/data folder (it keeps no files there)</string>
+    <string name="fm1_data_closed">Android %1$s closed the Android/data folder to apps. Root or an ADB connection is needed (Connection tab)</string>
+    <string name="fm1_data_remote">ADB is connected to another device. This phone\'s data folder opens with root or ADB to this phone itself</string>
+    <string name="fm1_data_priv_off">Turn on access to system folders via root or ADB in the Files settings</string>
+</resources>

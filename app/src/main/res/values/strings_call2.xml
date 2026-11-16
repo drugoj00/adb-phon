@@ -34,7 +34,7 @@
     <string name="ring_wait_note">Only the caller hears the tone, until the other side answers.</string>
     <string name="dev_call_video">Video call</string>
     <string name="dev_call_audio">Audio call</string>
-    <string name="dev_window">Device window</string>
+    <string name="dev_window">Device video window</string>
     <string name="dev_call_code_title">Program code</string>
     <string name="dev_call_code_hint">“%1$s” has no program code yet. Enter it (XXXX-XXXX-XXXX): it is shown in the “Connection over the internet” window of the program on that device. The code is saved in the People list.</string>
     <string name="dev_call_go">Call</string>

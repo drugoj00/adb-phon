@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kbtn_switch">On-screen buttons</string>
+    <string name="kbtn_switch_sub">For games without gamepad support: overlay buttons tap points on the game screen</string>
+    <string name="kbtn_dlg_text">The overlay does not create a controller. It taps points on the game screen through the ADB-phon accessibility service. ADB is not needed.
+
+Setup: start the overlay, open the game, tap the crosshair icon in the overlay and drag the marks onto the game buttons. The layout is saved per game, separately for portrait and landscape.</string>
+    <string name="kbtn_limits">Limits: Android 7.0 or newer. The game does not see a controller (no analog triggers, no controller hints). While a finger moves on the screen, Android interrupts a held tap and the button is pressed again. Up to 10 touches at once. Games with protection against auto clickers may ignore these taps.</string>
+    <string name="kbtn_need_service">The ADB-phon accessibility service is needed (one time). On Android 13 and newer its switch may be grey: open App info, menu ⋮, Allow restricted settings, then turn the service on. With ADB connected to this phone the service turns on by itself.</string>
+    <string name="kbtn_enable">Turn on service</string>
+    <string name="kbtn_app_info">App info</string>
+    <string name="kbtn_ok">OK</string>
+    <string name="kbtn_cancel">Cancel</string>
+    <string name="kbtn_enabled_toast">Service is on</string>
+    <string name="kbtn_open_settings_toast">Turn on the ADB-phon service in the accessibility list</string>
+    <string name="kbtn_toast_no_service">On-screen buttons: turn on the ADB-phon accessibility service in the Gamepad section</string>
+    <string name="kbtn_toast_no_profile">No points for this game yet: tap the crosshair icon</string>
+    <string name="kbtn_toast_open_game">Open the game first, then tap the crosshair icon</string>
+    <string name="kbtn_ed_title">Layout: %1$s</string>
+    <string name="kbtn_ed_hint">Drag the marks onto the game buttons. Long press returns a mark. A red mark lies under an overlay button and will not work.</string>
+    <string name="kbtn_ed_minus">Stick −</string>
+    <string name="kbtn_ed_plus">Stick +</string>
+    <string name="kbtn_ed_clear">Clear</string>
+    <string name="kbtn_ed_save">Save</string>
+    <string name="kbtn_ed_saved">Layout saved</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="inst_u_quiet">ADB-phon, no confirmations</string>
+    <string name="inst_u_quiet_adb">Quietly over ADB: window with versions and install progress</string>
+    <string name="inst_u_quiet_root">Quietly with root: window with versions and install progress</string>
+    <string name="inst_u_quiet_d">Quietly over ADB or root, split packages and OBB too</string>
+    <string name="inst_u_r_noadb">No ADB connection and no root</string>
+    <string name="inst_u_session">ADB-phon with Android confirmation</string>
+    <string name="inst_u_session_d">Window with versions, then Android asks to confirm. No ADB or root needed</string>
+    <string name="inst_u_system_d">Android’s own install window. One .apk file only</string>
+    <string name="inst_u_ext_d">Another installer app on this device</string>
+    <string name="inst_u_archive_d">View the contents without installing</string>
+    <string name="inst_u_r_bundle">Can’t install split packages (.apks, .xapk, .apkm)</string>
+    <string name="inst_u_r_one">Installs only one file at a time</string>
+    <string name="inst_u_saved_off">The saved installer is not available now. Pick another one</string>
+    <string name="inst_u_remember">Remember the choice</string>
+    <string name="inst_u_remember_note">For .apk, .apks, .xapk and .apkm. Change or reset: Settings, “Default installer”</string>
+    <string name="inst_u_default">Default installer</string>
+    <string name="inst_u_default_hint">How to install .apk, .apks, .xapk and .apkm everywhere: Files, Apps, restore and updates. If the chosen way is not available, the choice window shows again</string>
+    <string name="inst_u_ask">Ask every time</string>
+    <string name="inst_u_change">Change</string>
+    <string name="inst_u_reset">Reset</string>
+    <string name="inst_u_now">Current choice</string>
+</resources>
