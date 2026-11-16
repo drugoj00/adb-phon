@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "note": "Подсказки со стрелкой поверх браузера. find: фразы (без учёта регистра), которые ищутся в тексте или описании элемента на экране; exact: искать только точное совпадение; wizard: номер шага мастера (необязательно); label: подпись у стрелки; text: полная строка шага (показывается, если элемент на экране не найден). Языки: ru, uk, en.",
+  "services": {
+    "drive": {
+      "steps": [
+        {
+          "find": ["Дополнительные настройки", "Дополнительно", "Додаткові налаштування", "Додатково", "Advanced"],
+          "label": {"ru": "1. Жми сюда", "uk": "1. Тисни тут", "en": "1. Tap here"},
+          "text": {"ru": "1. Нажми серую ссылку «Дополнительные настройки» (слева внизу)", "uk": "1. Натисни сіре посилання «Додаткові налаштування» (ліворуч унизу)", "en": "1. Tap the small grey link “Advanced” (bottom left)"}
+        },
+        {
+          "find": ["(небезопасно)", "(небезпечно)", "(unsafe)"],
+          "label": {"ru": "2. Потом сюда", "uk": "2. Потім сюди", "en": "2. Then here"},
+          "text": {"ru": "2. Потом «Перейти на страницу ADB-phon»", "uk": "2. Потім «Перейти на сторінку ADB-phon»", "en": "2. Then “Go to ADB-phon (unsafe)”"}
+        },
+        {
+          "find": ["Продолжить", "Продовжити", "Continue", "Разрешить", "Дозволити", "Allow"],
+          "exact": true,
+          "label": {"ru": "3. Жми сюда", "uk": "3. Тисни тут", "en": "3. Tap here"},
+          "text": {"ru": "3. Прокрути вниз, «Продолжить»", "uk": "3. Прокрути вниз, «Продовжити»", "en": "3. Scroll down, “Continue”"}
+        }
+      ]
+    },
+    "yandex_key": {
+      "steps": [
+        {
+          "wizard": 0,
+          "find": ["Создать приложение", "Створити застосунок", "Create app", "Create application"],
+          "label": {"ru": "1. Жми сюда", "uk": "1. Тисни тут", "en": "1. Tap here"},
+          "text": {"ru": "1. Нажми «Создать приложение»", "uk": "1. Натисни «Створити застосунок»", "en": "1. Tap “Create app”"}
+        },
+        {
+          "wizard": 0,
+          "find": ["Веб-сервисы", "Веб-сервіси", "Web services"],
+          "label": {"ru": "2. Отметь здесь", "uk": "2. Познач тут", "en": "2. Tick here"},
+          "text": {"ru": "2. Платформа «Веб-сервисы»", "uk": "2. Платформа «Веб-сервіси»", "en": "2. Platform “Web services”"}
+        },
+        {
+          "wizard": 1,
+          "find": ["Callback URI", "Redirect URI"],
+          "label": {"ru": "3. Вставь адрес ниже", "uk": "3. Встав адресу нижче", "en": "3. Paste the address below"},
+          "text": {"ru": "3. Callback URI: вставь адрес (он скопирован)", "uk": "3. Callback URI: встав адресу (її скопійовано)", "en": "3. Callback URI: paste the address (it is copied)"}
+        },
+        {
+          "wizard": 1,
+          "find": ["Яндекс Диск", "Yandex Disk", "Яндекс.Диск"],
+          "label": {"ru": "4. Права на Диск", "uk": "4. Права на Диск", "en": "4. Disk permissions"},
+          "text": {"ru": "4. Доступ к данным: Яндекс Диск", "uk": "4. Доступ до даних: Яндекс Диск", "en": "4. Data access: Yandex Disk"}
+        },
+        {
+          "wizard": 2,
+          "find": ["ClientID", "Client ID", "Client secret", "Пароль", "Password"],
+          "label": {"ru": "5. Скопируй", "uk": "5. Скопіюй", "en": "5. Copy"},
+          "text": {"ru": "5. Скопируй ClientID и Client secret", "uk": "5. Скопіюй ClientID і Client secret", "en": "5. Copy ClientID and Client secret"}
+        }
+      ]
+    }
+  }
+}
