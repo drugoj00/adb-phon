@@ -74,18 +74,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-            <!-- возврат со страницы «Готово» после входа в облако (ссылка в Chrome: intent://open#Intent;scheme=adbphon;package=app.adbphon;end) -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity>
+        <!-- 10.0: возврат со страницы «Готово» после входа в облако (intent://open#Intent;scheme=adbphon;package=app.adbphon;end): промежуточное окно без вида поднимает программу в её собственной задаче, а не поверх задачи браузера -->
+        <activity android:name=".ReturnActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="adbphon" android:host="open" />
             </intent-filter>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+        <!-- 10.0: отдельные окна устройства в «Недавних»: по одному на устройство и вид (documentLaunchMode=intoExisting + адрес в data) -->
+        <activity android:name=".DeviceScreenActivity" android:exported="false" android:documentLaunchMode="intoExisting" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".DeviceFilesActivity" android:exported="false" android:documentLaunchMode="intoExisting" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" android:windowSoftInputMode="adjustResize" />
         <receiver android:name=".VpnSessionReceiver" android:exported="false"><intent-filter><action android:name="app.adbphon.VPN_SESSION_END" /></intent-filter></receiver>
         <service android:name=".VpnRecoverJobService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <service android:name=".InviteJobService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
+        <!-- 10.0: автокопия по расписанию (BkAuto) -->
+        <service android:name=".BkJobService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <!-- 7.0 видеозвонок: окно звонка, фоновый приём (служба переднего плана), кнопка «Отклонить» в уведомлении, стенд проверки -->
         <activity
             android:supportsPictureInPicture="true"
@@ -161,6 +168,7 @@
         </activity>
         <service android:name=".FmOpService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".InstBgService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <activity android:name=".CloudWebActivity" android:exported="false" android:launchMode="singleTask" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
         <service android:name=".CloudLoginService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".PadOverlayTile" android:exported="true" android:label="@string/pad_overlay_label" android:icon="@drawable/ic_pad_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
