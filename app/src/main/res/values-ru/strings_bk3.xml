@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (bk3): одно окно «Создать копию…» с выбором содержимого и одно окно «Восстановить…» для любого типа копии -->
+<resources>
+    <string name="bk3_create_title">Создать копию</string>
+    <string name="bk3_what">Что включить</string>
+    <string name="bk3_inc_settings">Настройки ADB-phon</string>
+    <string name="bk3_inc_settings_sub">устройства, подключения, облака, пароли, ключ ADB</string>
+    <string name="bk3_inc_apk">APK приложений</string>
+    <string name="bk3_inc_apk_sub">файлы установки выбранных приложений, работает без root и ADB</string>
+    <string name="bk3_inc_data">Данные приложений</string>
+    <string name="bk3_inc_data_sub">с root все данные; по ADB только у приложений, которые разрешают системную копию</string>
+    <string name="bk3_apps">Приложения: выбрано %1$d</string>
+    <string name="bk3_search">Найти приложение</string>
+    <string name="bk3_no_apps_found">Ничего не найдено</string>
+    <string name="bk3_apps_loading">Список приложений загружается…</string>
+    <string name="bk3_way_root">данные: всё (root)</string>
+    <string name="bk3_way_system">данные: системная копия (ADB)</string>
+    <string name="bk3_way_no_priv">данные: нужен root или ADB</string>
+    <string name="bk3_way_not_allowed">данные: приложение запрещает копию, без root только внешние данные</string>
+    <string name="bk3_way_sdk12">данные: Android 12+, без root только внешние данные</string>
+    <string name="bk3_priv_wait">Проверка root и ADB…</string>
+    <string name="bk3_priv_none">Для данных приложений нужен root или ADB (беспроводная отладка): подключи во вкладке «Связь». Настройки и APK копируются и без них.</string>
+    <string name="bk3_enc">Шифровать паролем</string>
+    <string name="bk3_enc_sub">AES-256. Пароль запоминается для следующих копий и автокопии</string>
+    <string name="bk3_plain_warn">Без пароля пароли подключений и ключ ADB лежат в файле открыто</string>
+    <string name="bk3_folder">Папка для копий</string>
+    <string name="bk3_err_nothing">Отметь, что включить в копию</string>
+    <string name="bk3_err_no_apps">Выбери приложения в списке</string>
+    <string name="bk3_enc_need_pass">Введи пароль или выключи шифрование</string>
+    <string name="bk3_skipped">%1$s: пропущено, данные недоступны без root и ADB</string>
+    <string name="bk3_user_n">пользователь %1$d</string>
+
+    <string name="bk3_restore_title">Восстановить копию</string>
+    <string name="bk3_k_settings">Настройки ADB-phon</string>
+    <string name="bk3_k_app">%1$s: %2$s</string>
+    <string name="bk3_k_data">данные</string>
+    <string name="bk3_k_app_enc">Копия приложения</string>
+    <string name="bk3_k_foreign">Системная копия adb backup (не ADB-phon)</string>
+    <string name="bk3_k_unknown">Формат не распознан</string>
+    <string name="bk3_old_btn">Старые копии с данными…</string>
+    <string name="bk3_foreign_text">Это системная копия adb backup, сделанная не в ADB-phon. ADB-phon её не восстанавливает: на ПК подойдёт команда adb restore файл.ab.</string>
+    <string name="bk3_unknown_text">Файл не похож на копию ADB-phon.</string>
+    <string name="bk3_r_what">Что восстановить</string>
+    <string name="bk3_r_apk">Приложение (APK)</string>
+    <string name="bk3_r_apk_sub">установить приложение из копии</string>
+    <string name="bk3_r_data">Данные приложения</string>
+    <string name="bk3_r_data_sub">текущие данные приложения заменятся данными из копии</string>
+    <string name="bk3_r_apk_nopriv">Без root и ADB APK ставит системный установщик: Android спросит подтверждение</string>
+    <string name="bk3_b_nothing">Отметь, что восстановить</string>
+    <string name="bk3_b_not_installed">Приложения нет: отметь «Приложение (APK)» или сначала установи его</string>
+    <string name="bk3_b_other_user">Другому пользователю APK ставится только с root или ADB</string>
+
+    <string name="bk3_err_not_ours">это не копия ADB-phon</string>
+    <string name="bk3_err_newer">копия сделана более новой версией ADB-phon, обнови программу</string>
+    <string name="bk3_err_damaged">файл повреждён или записан не до конца</string>
+    <string name="bk3_err_need_pass">нужен пароль</string>
+    <string name="bk3_err_wrong_pass">неверный пароль</string>
+    <string name="bk3_err_no_stage">не удалось подготовить временную папку копии</string>
+    <string name="bk3_err_timeout">время ожидания вышло</string>
+    <string name="bk3_err_install">установка не прошла</string>
+    <string name="bk3_apk_installed">%1$s: приложение установлено</string>
+    <string name="bk3_apk_cancelled">%1$s: установка отменена</string>
+
+    <string name="bk3_n_ext_fail">внешние данные не скопированы</string>
+    <string name="bk3_n_obb_fail">файлы obb не скопированы</string>
+    <string name="bk3_n_internal_fail">данные приложения не скопированы</string>
+    <string name="bk3_n_unpack_fail">распаковка данных не прошла: данных приложения может не быть, запусти восстановление ещё раз</string>
+    <string name="bk3_n_apk_newer">установлена более новая версия, APK из копии не ставился</string>
+    <string name="bk3_n_install_fail">установка не прошла: %1$s</string>
+
+    <string name="bk3_old_title">Старые копии с данными</string>
+    <string name="bk3_old_hint">Копии папками в ADB-phon/Backups, сделанные до версии 10.0. Новые копии делает «Создать копию…».</string>
+    <string name="bk3_old_none">Старых копий нет</string>
+    <string name="bk3_delete_q">Удалить копию %1$s от %2$s? Это необратимо.</string>
+    <string name="bk3_into_user">Данные вернутся пользователю %1$d, у которого сняты.</string>
+</resources>

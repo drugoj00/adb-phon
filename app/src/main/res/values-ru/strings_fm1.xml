@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 10.0 (fm1): папка данных приложения в «Файлах» -->
+    <string name="fm1_data_none">У этого приложения нет папки Android/data (оно не хранит там файлы)</string>
+    <string name="fm1_data_closed">Android %1$s закрыл папку Android/data для программ. Нужен root или связь ADB (вкладка «Связь»)</string>
+    <string name="fm1_data_remote">ADB подключён к другому устройству. Папку данных этого телефона откроет root или ADB к нему самому</string>
+    <string name="fm1_data_priv_off">Включи в настройках «Файлов» доступ к системным папкам через root или ADB</string>
+</resources>

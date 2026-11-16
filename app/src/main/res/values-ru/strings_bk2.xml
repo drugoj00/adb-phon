@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (bk2): простой путь копий: запомненная папка, создание сразу, восстановление из списка -->
+<resources>
+    <string name="bk2_dir_settings">Папка для копий</string>
+    <string name="bk2_dir_data">Папка для копий с данными</string>
+    <string name="bk2_change">Изменить…</string>
+    <string name="bk2_pick_dir">Папка для копий</string>
+    <string name="bk2_make_now">Создать копию</string>
+    <string name="bk2_not_saved">Копия не сохранена</string>
+    <string name="bk2_open_folder">Открыть папку</string>
+    <string name="bk2_pick_other">Выбрать другую папку</string>
+    <string name="bk2_give_access">Дать доступ</string>
+    <string name="bk2_failed">Не удалось записать: %1$s</string>
+    <string name="bk2_err_space">Не хватает места: копия занимает %1$s, свободно %2$s. Освободи место или выбери другую папку.</string>
+    <string name="bk2_err_space_short">Не хватает места в папке %1$s. Освободи место или выбери другую папку.</string>
+    <string name="bk2_err_net">Сетевая папка недоступна (%1$s): %2$s. Проверь сеть и подключение или выбери другую папку.</string>
+    <string name="bk2_enc">Шифровать паролем</string>
+    <string name="bk2_enc_hint">Копии настроек, копии с данными и автокопии шифруются этим паролем (AES-256). Пароль хранится на устройстве в зашифрованном виде и в копию не входит. Без пароля копию не открыть. Без шифрования пароли подключений и ключ ADB лежат в файле копии открыто.</string>
+    <string name="bk2_pass_later">Пароль спросится один раз при создании копии</string>
+    <string name="bk2_pass_title">Пароль для копий</string>
+    <string name="bk2_pass_once">Шифрование паролем включено. Пароль запоминается для следующих копий, без него копию не открыть.</string>
+    <string name="bk2_enc_on">Шифрование паролем: включено (Настройки, Резервная копия)</string>
+    <string name="bk2_enc_off">Без шифрования (включается в Настройки, Резервная копия)</string>
+    <string name="bk2_need_pass_auto">шифрование включено, а пароль не задан. Задай пароль в Настройки, Резервная копия.</string>
+    <string name="bk2_in_folder">Папка: %1$s</string>
+    <string name="bk2_refresh">Обновить</string>
+    <string name="bk2_change_dir">Изменить папку</string>
+    <string name="bk2_empty">В этой папке копий нет. Нажми «Изменить папку» или «Выбрать файл…».</string>
+    <string name="bk2_in_counts">%1$d настроек, %2$d подключений, %3$d облаков</string>
+    <string name="bk2_in_app">%1$s, пользователь %2$d</string>
+    <string name="bk2_in_enc">зашифрована</string>
+    <string name="bk2_in_auto">автокопия</string>
+</resources>

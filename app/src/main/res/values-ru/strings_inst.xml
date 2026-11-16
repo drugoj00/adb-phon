@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="inst_u_quiet">ADB-phon без подтверждений</string>
+    <string name="inst_u_quiet_adb">Тихо через ADB: окно с версиями и ход установки</string>
+    <string name="inst_u_quiet_root">Тихо через root: окно с версиями и ход установки</string>
+    <string name="inst_u_quiet_d">Тихо через ADB или root, пакеты из частей и OBB тоже</string>
+    <string name="inst_u_r_noadb">Нет связи ADB и нет root</string>
+    <string name="inst_u_session">ADB-phon с подтверждением Android</string>
+    <string name="inst_u_session_d">Окно с версиями, потом Android просит подтвердить установку. ADB и root не нужны</string>
+    <string name="inst_u_system_d">Окно установки самого Android. Только один файл .apk</string>
+    <string name="inst_u_ext_d">Другая программа-установщик на этом устройстве</string>
+    <string name="inst_u_archive_d">Посмотреть содержимое, ничего не устанавливая</string>
+    <string name="inst_u_r_bundle">Не ставит пакеты из частей (.apks, .xapk, .apkm)</string>
+    <string name="inst_u_r_one">Ставит только один файл за раз</string>
+    <string name="inst_u_saved_off">Запомненный способ сейчас недоступен. Выбери другой</string>
+    <string name="inst_u_remember">Запомнить выбор</string>
+    <string name="inst_u_remember_note">Для .apk, .apks, .xapk и .apkm. Сменить или сбросить: Настройки, «Установщик по умолчанию»</string>
+    <string name="inst_u_default">Установщик по умолчанию</string>
+    <string name="inst_u_default_hint">Чем ставить .apk, .apks, .xapk и .apkm везде: в «Файлах», «Софте», при восстановлении и обновлении. Если выбранный способ сейчас недоступен, окно выбора появится снова</string>
+    <string name="inst_u_ask">Спрашивать каждый раз</string>
+    <string name="inst_u_change">Изменить</string>
+    <string name="inst_u_reset">Сбросить</string>
+    <string name="inst_u_now">Выбран сейчас</string>
+</resources>

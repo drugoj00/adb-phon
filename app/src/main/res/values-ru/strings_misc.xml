@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="misc_cloud_drive">Google Диск</string>
+    <string name="misc_cloud_google_photos">Google Фото</string>
+    <string name="misc_cloud_yandex">Яндекс Диск</string>
+    <string name="misc_inv_send_btn">Пригласить…</string>
+    <string name="misc_inv_title">Пригласить в сеть Tailscale</string>
+    <string name="misc_inv_hint">Tailscale отправит письмо со ссылкой. После входа по ней устройства этого человека появятся в твоей сети.</string>
+    <string name="misc_inv_email">Почта приглашаемого</string>
+    <string name="misc_inv_send">Отправить</string>
+    <string name="misc_inv_sending">Отправка…</string>
+    <string name="misc_inv_sent">Приглашение отправлено на %1$s</string>
+    <string name="misc_inv_sent_nomail">Приглашение создано для %1$s, письмо Tailscale не подтвердил. Ссылку можно передать вручную.</string>
+    <string name="misc_inv_copy_link">Копировать ссылку</string>
+    <string name="misc_inv_link_copied">Ссылка скопирована</string>
+    <string name="misc_inv_token_btn">Токен API…</string>
+    <string name="misc_tok_title">Нужен токен API Tailscale</string>
+    <string name="misc_tok_step1">1. Открой login.tailscale.com/admin/settings/keys (вход владельцем или админом сети).</string>
+    <string name="misc_tok_step2">2. Нажми «Generate access token…», задай срок и нажми «Generate».</string>
+    <string name="misc_tok_step3">3. Скопируй токен (tskey-api-…) и вставь в поле ниже.</string>
+    <string name="misc_tok_open">Открыть страницу</string>
+    <string name="misc_tok_field">Токен API</string>
+    <string name="misc_tok_save">Сохранить</string>
+    <string name="misc_tok_delete">Удалить токен</string>
+    <string name="misc_tok_bad">Токен выглядит неверно</string>
+    <string name="misc_tok_note">Токен хранится зашифрованным только на этом устройстве и в копию настроек не входит.</string>
+    <string name="misc_inv_e_email">Проверь адрес почты</string>
+    <string name="misc_inv_e_token">Нужен токен API Tailscale</string>
+    <string name="misc_inv_e_auth">Ошибка 401: токен неверный или просрочен. Введи новый токен.</string>
+    <string name="misc_inv_e_forbidden">Ошибка 403: этому токену приглашать нельзя. Нужен токен API пользователя с правами владельца или админа (не OAuth).</string>
+    <string name="misc_inv_e_notfound">Ошибка 404: сеть Tailscale не найдена.</string>
+    <string name="misc_inv_e_exists">Ошибка %1$d: этот адрес уже приглашён или уже в сети.</string>
+    <string name="misc_inv_e_bad">Ошибка %1$d: Tailscale не принял запрос.</string>
+    <string name="misc_inv_e_rate">Ошибка 429: слишком много запросов. Повтори через минуту.</string>
+    <string name="misc_inv_e_server">Ошибка %1$d: сбой на стороне Tailscale. Повтори позже.</string>
+    <string name="misc_inv_e_net">Нет связи с Tailscale. Проверь интернет.</string>
+    <string name="misc_inv_e_other">Ошибка %1$d.</string>
+    <string name="misc_inv_e_detail">Ответ Tailscale: %1$s</string>
+</resources>

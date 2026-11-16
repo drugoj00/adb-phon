@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cld_e_yandex_free">Яндекс не даёт WebDAV на бесплатном тарифе. Подключи Яндекс Диск через вход в браузере (свой ключ).</string>
+    <string name="cld_e_payment">Сервис требует оплату (402): на текущем тарифе этот доступ закрыт.</string>
+    <string name="cld_e_space">В облаке закончилось место. Освободи место или смени тариф.</string>
+    <string name="cld_e_rate">Слишком много запросов (429). Подожди минуту и повтори.</string>
+    <string name="cld_e_auth">Вход не принят (401): проверь логин и пароль или войди заново.</string>
+    <string name="cld_e_forbidden">Доступ запрещён (403): у этого входа нет прав на эту папку или действие.</string>
+    <string name="cld_e_notfound">Не найдено (404): проверь адрес сервера и путь к папке.</string>
+    <string name="cld_e_tls">Ошибка защищённого соединения: сертификат сервера не принят. Проверь дату и время на устройстве и адрес сервера.</string>
+    <string name="cld_e_timeout">Сервер не ответил вовремя. Проверь интернет и повтори.</string>
+    <string name="cld_e_nonet">Нет связи с сервером: проверь интернет, Wi-Fi и адрес.</string>
+    <string name="cld_e_server">Сбой на стороне сервиса (5xx). Повтори позже.</string>
+
+    <string name="cld_is_title">Источник</string>
+    <string name="cld_is_filter">Источник</string>
+    <string name="cld_is_filter_on">Источник: %1$s</string>
+    <string name="cld_is_all">Все источники</string>
+    <string name="cld_is_started_by">Установку начал: %1$s</string>
+    <string name="cld_is_shell">Оболочка (ADB)</string>
+    <string name="cld_is_file">APK из файла (установщик пакетов)</string>
+    <string name="cld_is_pre">Встроено в прошивку</string>
+    <string name="cld_is_other">Другая программа</string>
+    <string name="cld_is_unknown">Неизвестно</string>
+    <string name="cld_iss_other">иное</string>
+
+    <string name="cld_tc_lost_auto">связь с оболочкой прервалась, переподключение…</string>
+    <string name="cld_tc_lost">связь с оболочкой прервалась: нажми «Переподключить»</string>
+    <string name="cld_tc_back">снова на связи</string>
+    <string name="cld_tc_reconnect">Переподключить</string>
+</resources>

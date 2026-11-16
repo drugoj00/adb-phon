@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set2_hero_upd">Проверить обновления</string>
+    <string name="set2_hero_bk">Резервная копия</string>
+    <string name="set2_hero_bk_h">Сохранить настройки в файл</string>
+    <string name="set2_hero_restore">Восстановить из копии</string>
+    <string name="set2_hero_restore_h">Вернуть настройки из файла копии</string>
+    <string name="set2_hero_about">О программе</string>
+    <string name="set2_hero_about_h">Версия, ссылки, лицензии</string>
+    <string name="set2_info">Пояснение</string>
+</resources>

@@ -34,7 +34,7 @@
     <string name="ring_wait_note">Гудок слышит только звонящий, пока на другом конце не ответили.</string>
     <string name="dev_call_video">Видеозвонок</string>
     <string name="dev_call_audio">Аудиозвонок</string>
-    <string name="dev_window">Окно устройства</string>
+    <string name="dev_window">Видеоокно устройства</string>
     <string name="dev_call_code_title">Код программы</string>
     <string name="dev_call_code_hint">У «%1$s» ещё нет кода программы. Введи его (XXXX-XXXX-XXXX): он виден в окне «Связь по интернету» программы на том устройстве. Код запомнится в списке «Люди».</string>
     <string name="dev_call_go">Позвонить</string>
