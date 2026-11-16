@@ -16,21 +16,15 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 10.0.** [ADB-phon-10.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 10.1.** [ADB-phon-10.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `5cef31047e47c27198569edbe659ed29dd5aadec999e3e5656e5a7a7a6978d13`
+SHA-256: `85543278150c0f76c89162637ba802fea473f916806ff05ccec602453250ddf7`
 
-## What's new in 10.0
+## What's new in 10.1
 
-- Helper with “Tap here” arrows for connecting clouds
-- Settings in groups with search, two window halves on TV boxes and in landscape
-- “Create backup…”: one window, encryption, auto backup, moving to another device
-- One “Install with…” window, “Software” shows where an app was installed from
-- Files: “Sources”, large checkboxes, folder selection in the tree
-- Device screen with sound (Android 11+)
-- “On-screen buttons” mode for games
-- Tailscale invitations from Android
-- Mouse and air mouse in lists, FTPS, RAR5
+- Video and music from network folders and clouds play right away, without copying
+- Built-in player: gestures (volume, brightness, seeking, next/previous), “Fit to screen” button and panel hide time
+- Player settings in a separate group
 
 **Requirements and limits**
 
@@ -38,6 +32,7 @@ SHA-256: `5cef31047e47c27198569edbe659ed29dd5aadec999e3e5656e5a7a7a6978d13`
 - Device screen sound: Android 11 and newer
 - “On-screen buttons” work through the accessibility service
 - Moving a backup with data to another device needs the same app signature
+- Video and music from archives, ADB devices and root are still copied first
 
 ## Features
 
@@ -97,7 +92,7 @@ SHA-256: `5cef31047e47c27198569edbe659ed29dd5aadec999e3e5656e5a7a7a6978d13`
 
 ## Quick start
 
-1. Download ADB-phon-10.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-10.1.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
