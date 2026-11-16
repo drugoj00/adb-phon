@@ -160,22 +160,22 @@ private fun BtTopBar(ctx: Context, land: Boolean = false) {
         }
         if (opts) {
             Row(Modifier.fillMaxWidth().clickable { autoOn = !autoOn; BtPower.setAutoOn(ctx, autoOn) }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(autoOn, { autoOn = it; BtPower.setAutoOn(ctx, it) }); Text(stringResource(R.string.bt_pwr_auto_on), fontSize = 13.sp)
+                BigCheckbox(autoOn, { autoOn = it; BtPower.setAutoOn(ctx, it) }); Text(stringResource(R.string.bt_pwr_auto_on), fontSize = 13.sp)
             }
             Row(Modifier.fillMaxWidth().clickable { autoOff = !autoOff; BtPower.setAutoOff(ctx, autoOff) }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(autoOff, { autoOff = it; BtPower.setAutoOff(ctx, it) }); Text(stringResource(R.string.bt_pwr_auto_off), fontSize = 13.sp)
+                BigCheckbox(autoOff, { autoOff = it; BtPower.setAutoOff(ctx, it) }); Text(stringResource(R.string.bt_pwr_auto_off), fontSize = 13.sp)
             }
             var keeper by remember { mutableStateOf(PadKeeper.enabled(ctx)) }
             Row(Modifier.fillMaxWidth().clickable { keeper = !keeper; PadKeeper.setEnabled(ctx, keeper) }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(keeper, { keeper = it; PadKeeper.setEnabled(ctx, it) }); Text(stringResource(R.string.kpr_setting), fontSize = 13.sp)
+                BigCheckbox(keeper, { keeper = it; PadKeeper.setEnabled(ctx, it) }); Text(stringResource(R.string.kpr_setting), fontSize = 13.sp)
             }
             var autoLast by remember { mutableStateOf(BtAuto.autoLast(ctx)) }
             Row(Modifier.fillMaxWidth().clickable { autoLast = !autoLast; BtAuto.setAutoLast(ctx, autoLast) }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(autoLast, { autoLast = it; BtAuto.setAutoLast(ctx, it) }); Text(stringResource(R.string.bta_auto_last), fontSize = 13.sp)
+                BigCheckbox(autoLast, { autoLast = it; BtAuto.setAutoLast(ctx, it) }); Text(stringResource(R.string.bta_auto_last), fontSize = 13.sp)
             }
             var gamePrep by remember { mutableStateOf(GameHostPrep.enabled(ctx)) }
             Row(Modifier.fillMaxWidth().clickable { gamePrep = !gamePrep; GameHostPrep.setEnabled(ctx, gamePrep) }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(gamePrep, { gamePrep = it; GameHostPrep.setEnabled(ctx, it) }); Text(stringResource(R.string.gph_setting), fontSize = 13.sp)
+                BigCheckbox(gamePrep, { gamePrep = it; GameHostPrep.setEnabled(ctx, it) }); Text(stringResource(R.string.gph_setting), fontSize = 13.sp)
             }
         }
     }
@@ -231,7 +231,7 @@ private fun BtPairing(ctx: Context, land: Boolean = false, pad: Boolean = false,
         if (vm != null) OutlinedButton({ autoDlg = true }, enabled = !BtAuto.busy) { Text(stringResource(R.string.bta_btn)) }
         if (pad) OutlinedButton({ runCatching { ctx.startActivity(Intent(ctx, GamepadTestActivity::class.java)) } }) { Text(stringResource(R.string.gpt_open)) }
         if (pad) PadTrialButton()
-        if (pad) PadLocalButton()
+        if (pad) { PadLocalButton(); ScreenTouchSwitch() }      // 10.0 kbtn: режим «Кнопки на экран»
         Text(stringResource(if (BtHid.registered) R.string.bt_ready else R.string.bt_preparing), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
         Button({
             runCatching { ctx.startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(android.bluetooth.BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)) }
