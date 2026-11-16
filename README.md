@@ -16,56 +16,56 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 9.3.** [ADB-phon-9.3.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 10.0.** [ADB-phon-10.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `db9396c686471b23ea570f44837c9ba7010b0e36e07455ceadacebd8f4cd8096`
+SHA-256: `5cef31047e47c27198569edbe659ed29dd5aadec999e3e5656e5a7a7a6978d13`
 
-## What's new in 9.3
+## What's new in 10.0
 
-- **Yandex Disk:** the “Yandex Disk” tile without your own key opens the “Own key” wizard at once: Yandex rejects the shared sign-in key, so after signing in through the browser the disk did not open; the “Yandex Disk (app password)” option works without a key; after sign-in the connection name shows the login instead of “Account” (the same for Dropbox and Box)
-- **Own cloud key:** the “Own key” wizard for Yandex Disk, Dropbox, OneDrive, Box, pCloud, Zoho, HiDrive and put.io walks through the steps of that exact cloud: which form fields to fill, which rights to enable, which redirect address to enter (the needed address is copied for you), where to take the Client ID and secret from
-- **Key hint:** if after signing in through the browser the cloud does not open or rejects the shared sign-in key, the app itself offers “Connect my own key” for that cloud (before, this offer appeared only on a request limit)
-- **Remote:** settings, tabs and lists scroll with the Up arrow all the way to the start, the first row is visible
-- **Mouse:** any list, tab or window scrolls by dragging with the left button held (like a finger), with inertia; the wheel and dragging the scroll bar work, clicking rows and buttons is not affected
-- **Install:** in the “Install with…” window the “Remember choice” checkbox is always there and turns on with the remote and by touch
-- **Keyboard on TV boxes:** focusing an input field does not open the keyboard and the field no longer gets stuck (arrows move on); the keyboard opens with OK on the remote or a touch or click on the field itself, Back closes it
-- **Files:** sorting now works in the Devices tree on every level (by name, size, date, item count, color, ascending and descending)
-- **Tree:** after a delete and other updates the focus moves to the neighbouring row in the same place, the list does not jump or collapse
-- **Home:** the house icon in the panel header collapses all expanded folders and devices, the list returns to the top and the first row gets the focus
-- **Open with…:** “ADB-phon Notepad” comes first (view and edit text files, including files without an extension), then the installed text editors; service entries are removed
-- **Phone in landscape:** the side column buttons are larger; the size is chosen in “Side panel buttons…” (small, medium, large)
+- Helper with “Tap here” arrows for connecting clouds
+- Settings in groups with search, two window halves on TV boxes and in landscape
+- “Create backup…”: one window, encryption, auto backup, moving to another device
+- One “Install with…” window, “Software” shows where an app was installed from
+- Files: “Sources”, large checkboxes, folder selection in the tree
+- Device screen with sound (Android 11+)
+- “On-screen buttons” mode for games
+- Tailscale invitations from Android
+- Mouse and air mouse in lists, FTPS, RAR5
 
 **Requirements and limits**
 
-- For pCloud and HiDrive the steps follow the documentation and were not checked on a live account: field names on the site may differ
+- A merged APK is signed with the ADB-phon key: it does not install over an app with a different signature
+- Device screen sound: Android 11 and newer
+- “On-screen buttons” work through the accessibility service
+- Moving a backup with data to another device needs the same app signature
 
 ## Features
 
-- **Install APK over ADB.** Install or update apps through ADB, no computer needed. Sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search on the internet (F-Droid, GitHub, a link). Multi-part packages APKS, APKM, XAPK and ZIP with APK and OBB: the parts for your phone are picked automatically. Batch install.
+- **Install APK over ADB.** Install or update apps through ADB, no computer needed. Sources: a file, a folder, an archive (ZIP, 7z, RAR, TAR), the built-in file manager (including USB drives through ADB), network folders (SMB), files sent over Wi-Fi from a browser, search on the internet (F-Droid, GitHub, a link). Multi-part packages APKS, APKM, XAPK and ZIP with APK and OBB: the parts for your phone are picked automatically. Batch install. One “Install with…” window with a “Default installer” item. Repacking APK, APKS, XAPK and merging the parts into one APK.
 - **Air mouse and mouse.** The phone’s gyroscope works as a pointer. A real cursor appears on the screen of the controlled device (a helper creates a virtual mouse). The “Air” button works in two modes picked with a round switch: tap to turn on and tap again to turn off, or hold it while you move the phone. Click, scroll, OK, Back, Home, Menu, arrows, volume, sound and microphone on/off. Touch mode is instant too: the helper injects real touches, so taps and swipes work even on slow TV boxes.
 - **Special access, survives reboot.** Turn on an accessibility service, keep it enabled after a reboot (Android 13–14 often switch it off), remove “restricted settings”, allow writing secure settings, draw over other apps, notifications, usage stats, all files, install unknown apps, no battery limits.
 - **Remote control.** Four switchable modes: Keys, Swipe, Mouse, Air. Home, Back, Menu, D-pad and OK, volume, media keys, power, recents, text input. Swipes act as arrow keys, tap is OK, scroll buttons. Keys are instant. For phones, TVs and set-top boxes.
 - **SSH.** Connect to a computer or server over SSH (Linux, macOS, Windows with an SSH server): terminal and files over SFTP (browse, download, upload, delete). Login with a password or a key file; the server key is remembered on first connect.
 - **PC mouse.** The phone works as a Bluetooth mouse and keyboard for a computer, laptop, tablet, iPhone or TV (Android 9+): touch pad, clicks, scroll, Enter, Esc, arrows, Win, Ctrl+C/V, text input. Nothing to install on the computer.
 - **Easy connection.** Finds devices in the network and shows their names, favourites with your own names, manual IP. Android 11+: automatic pairing without typing a code (an accessibility service reads the code from the system window) or pairing by code. Android 8–10: one command from a computer once, then the app connects by itself. Control another device by IP; press and hold a device to disconnect.
-- **Apps.** Icons, search, filters (user, system, junk, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions (including batch uninstall), protection of critical packages, “Clean RAM” button.
+- **Apps.** Icons, search, filters (user, system, junk, disabled, removed), disable and enable, uninstall and restore, stop, clear data, save APK, permission switches, batch actions (including batch uninstall), protection of critical packages, “Clean RAM” button. Install source (Google Play, RuStore, Galaxy Store and others) and a filter by source.
 - **Cleaner for junk apps.** The “Junk” filter shows well-known unneeded system apps (Samsung, Google, Microsoft, Facebook services, partner apps) with marks “safe” and “careful”. “Select safe” and disable them; it is reversible (Disabled, then Enable).
 - **Copies and versions.** Before an app is uninstalled its APK is saved. The “Versions” button installs any version, including an older one, from saved copies, from F-Droid or from your own file.
-- **Backup with data.** A copy of any app together with its data, and restore. With root all data is saved; over ADB only what the system allows (external data and, for apps that allow it, internal data on Android 10 and older). The program taps the system confirmation window itself.
+- **Backup with data.** A copy of any app together with its data, and restore. With root all data is saved; over ADB only what the system allows (external data and, for apps that allow it, internal data on Android 10 and older). The program taps the system confirmation window itself. User choice (including “Dual app”), moving a backup to another device with a compatibility check.
 - **Safe launcher disabling.** The only home screen cannot be disabled or deleted by mistake: if there is no spare one, the program offers to download App Menu from GitHub and installs it in one tap (internet needed).
 - **Updates.** Checks GitHub for a new version on request and offers to update in one tap; in Settings you can switch on an automatic check once a day (off by default).
-- **Files.** Two-panel file manager: phone memory, memory card, USB drives, archives (ZIP, 7z, RAR, TAR), Android/data over ADB, network folders and cloud drives in one tree. Create, rename, copy, move, delete, ZIP, text files, built-in editor, selection by mask, drag and drop between panels, a recycle bin for the phone, card, clouds and network folders, and a “File already exists” window (Rename, Replace, Cancel, Apply to all). After a restart folders and places come back.
-- **Cloud drives.** Google Drive, MEGA, Dropbox, OneDrive, Yandex Disk, Box, pCloud and dozens of other services. Clouds work through a separate free module, “ADB-phon Clouds”, offered for download once when you add a cloud; the downloaded file deletes itself after installation. You sign in in the browser; if the shared key of the app is busy, the “Own key” wizard walks you through creating your own key, step by step.
+- **Files.** Two-panel file manager: phone memory, memory card, USB drives, archives (ZIP, 7z, RAR, TAR), Android/data over ADB, network folders and cloud drives in one tree. Create, rename, copy, move, delete, ZIP, text files, built-in editor, selection by mask, a recycle bin for the phone, card, clouds and network folders, and a “File already exists” window (Rename, Replace, Cancel, Apply to all). After a restart folders and places come back. The “Sources” root, large checkboxes, checking a folder with all its contents, an app data folder through ADB or root.
+- **Cloud drives.** Google Drive, MEGA, Dropbox, OneDrive, Yandex Disk, Box, pCloud and dozens of other services. Clouds work through a separate free module, “ADB-phon Clouds”, offered for download once when you add a cloud; the downloaded file deletes itself after installation. You sign in in the browser; if the shared key of the app is busy, the “Own key” wizard walks you through creating your own key, step by step. Helper with “Tap here” arrows for Google Drive and an own Yandex Disk key, clear error texts, cloud names in three languages.
 - **Network folders.** SMB, SFTP, FTP, FTPS and WebDAV: browse, copy and move in both directions, also directly between two network sources or from a cloud to the network. A file is written safely: the original survives a failure or cancel.
-- **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed.
+- **Gamepad.** The phone as a gamepad for a PC over Bluetooth (vibration from the PC) and an on-screen gamepad, “Play on this phone” (prototype): sticks, A/B/X/Y, triggers, Back, Guide and Start over any game; layout, dead zone, size and transparency can be changed. “On-screen buttons” mode for games without gamepad support.
 - **Phone.** Device info, monitor, screenshot, screen recording, clear all caches, quick settings (dark mode, Wi-Fi, data, Bluetooth, rotation, font, screen timeout, show touches, animations, DPI), reboot (normal, recovery, bootloader).
-- **Devices and Video window.** The Files tree has one “Devices” group: computers and Android devices together, each with Files and Video window folders. Video window shows and controls the screen of a computer or another Android device: auto-rotation, text input in any language.
+- **Devices and Video window.** The Files tree has one “Devices” group: computers and Android devices together, each with Files and Video window folders. Video window shows and controls the screen of a computer or another Android device: auto-rotation, text input in any language. Sound from the device (Android 11+); “Device files” and “Device video window” open as separate windows in Recents.
 - **Video call.** Video call between Android devices and computers (the Windows program “Phone in Window with Sound” 4.0). How to call: open Connection → Video calls, tap “Add person…”, enter a name and the code of their program (XXXX-XXXX-XXXX; it is shown in the other program: on Windows in “Connection over the internet”, on Android in this same section), then tap “Call”. The other person sees the “Calling…” window; the camera and microphone turn on only when they tap “Answer”. During the call: Sound, Speaker, Camera, End. Receiving calls is on by default (a small icon in the notification shade); the switch is in the same section.
 - **Small window, ringtones, avatars.** During a call a “Small window” (picture in picture) and “Hide, the call goes on”, the choice of an incoming ringtone, “My avatar”, the “Video call”, “Audio call”, “Device window” and “Files” rows for every device.
-- **Invitations.** Join a Tailscale network by an invitation from a PC. Another VPN is turned off for the duration of a session and restored afterwards.
+- **Invitations.** Join a Tailscale network by an invitation from a PC. Another VPN is turned off for the duration of a session and restored afterwards. Invitations are sent from Android too.
 - **Shizuku compatibility.** Apps that support Shizuku get shell permissions through ADB-phon.
-- **Console.** Live terminal: any shell command, history, Ctrl+C, Tab, “My commands”.
-- **Settings.** Theme (auto, light, dark), dynamic colors from the wallpaper and the main color, font size and element size, full screen mode, color settings (main color, bar color, bar contrast), custom icons for folders, files, drives, apps and side panel buttons, language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub.
+- **Console.** Live terminal: any shell command, history, Ctrl+C, Tab, “My commands”. Reconnects by itself after a drop.
+- **Settings.** Theme (auto, light, dark), dynamic colors from the wallpaper and the main color, font size and element size, full screen mode, color settings (main color, bar color, bar contrast), custom icons for folders, files, drives, apps and side panel buttons, language (English, Ukrainian, Russian), keep screen on, bug log, backup and restore of settings to a folder you choose, install any version of the program from GitHub. Groups by function and search, number entry for sliders; one “Create backup…” window (settings, APK, app data) and one “Restore…”, a “Backup folder”, password encryption, scheduled auto backup.
 - **Free.** No ads, open source.
 
 ## Screenshots
@@ -97,7 +97,7 @@ SHA-256: `db9396c686471b23ea570f44837c9ba7010b0e36e07455ceadacebd8f4cd8096`
 
 ## Quick start
 
-1. Download ADB-phon-7.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-10.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
@@ -112,7 +112,7 @@ Android 8.0 or newer (ARMv7, ARM64, x86, x86_64). Wi-Fi for wireless debugging (
 - ADB-phon works locally and sends nothing anywhere. The cursor helper and the remote control manage a whole device: connect only to your own devices.
 - The app is not on Google Play (it would not be allowed): download the APK here. Android may warn about installing from an unknown source.
 - Tested on three phones (Android 10 and 15) and TV boxes (Android 9, 11, 12). Not yet tested on Android 8 and on x86 devices; reports are welcome.
-- Cloud drives need the separate module “ADB-phon Clouds” (one download, internet needed). Google Drive: the app’s shared key is a trial one (first 100 users); then create your own key in the app. RAR5 archives are supported (also with a password). FTPS: browsing and downloading are tested, uploading only partly.
+- Cloud drives need the separate module “ADB-phon Clouds” (one download, internet needed). Google Drive: the app’s shared key is a trial one (first 100 users); then create your own key in the app. RAR5 archives are supported (also with a password). FTPS: browsing, downloading and uploading.
 - SSH and “PC mouse” are new and tested only partly: SSH against OpenSSH for Windows up to the password step, the Bluetooth mouse is not on every phone (some firmwares switch the HID profile off).
 - Special access settings can differ on Xiaomi, Huawei and other firmwares; on Xiaomi also turn on “USB debugging (security settings)”.
 - Video window at a Tailscale address (100.x) works when both devices are in the Tailscale network (with another permanent VPN on the phone, use the address of that network). Text input in the Video window in any layout needs ADB-phon 7.0 or newer on the target device.
