@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="num_custom">Своє значення…</string>
+    <string name="num_custom_val">Своє: %1$s</string>
+    <string name="num_u_days">дн.</string>
+    <string name="num_u_mb">МБ</string>
+    <string name="num_u_min">хв</string>
+    <string name="num_u_sec">с</string>
+    <string name="num_volume">Гучність</string>
+    <string name="num_position">Позиція</string>
+</resources>

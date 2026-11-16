@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0 (bk2): простий шлях копій: запам'ятована тека, створення одразу, відновлення зі списку -->
+<resources>
+    <string name="bk2_dir_settings">Тека для копій</string>
+    <string name="bk2_dir_data">Тека для копій з даними</string>
+    <string name="bk2_change">Змінити…</string>
+    <string name="bk2_pick_dir">Тека для копій</string>
+    <string name="bk2_make_now">Створити копію</string>
+    <string name="bk2_not_saved">Копію не збережено</string>
+    <string name="bk2_open_folder">Відкрити теку</string>
+    <string name="bk2_pick_other">Вибрати іншу теку</string>
+    <string name="bk2_give_access">Надати доступ</string>
+    <string name="bk2_failed">Не вдалося записати: %1$s</string>
+    <string name="bk2_err_space">Не вистачає місця: копія займає %1$s, вільно %2$s. Звільни місце або вибери іншу теку.</string>
+    <string name="bk2_err_space_short">Не вистачає місця в теці %1$s. Звільни місце або вибери іншу теку.</string>
+    <string name="bk2_err_net">Мережева тека недоступна (%1$s): %2$s. Перевір мережу й підключення або вибери іншу теку.</string>
+    <string name="bk2_enc">Шифрувати паролем</string>
+    <string name="bk2_enc_hint">Копії налаштувань, копії з даними й автокопії шифруються цим паролем (AES-256). Пароль зберігається на пристрої в зашифрованому вигляді й до копії не входить. Без пароля копію не відкрити. Без шифрування паролі підключень і ключ ADB лежать у файлі копії відкрито.</string>
+    <string name="bk2_pass_later">Пароль буде запитано один раз під час створення копії</string>
+    <string name="bk2_pass_title">Пароль для копій</string>
+    <string name="bk2_pass_once">Шифрування паролем увімкнено. Пароль запам\'ятовується для наступних копій, без нього копію не відкрити.</string>
+    <string name="bk2_enc_on">Шифрування паролем: увімкнено (Налаштування, Резервна копія)</string>
+    <string name="bk2_enc_off">Без шифрування (вмикається в Налаштування, Резервна копія)</string>
+    <string name="bk2_need_pass_auto">шифрування увімкнено, а пароль не задано. Задай пароль у Налаштування, Резервна копія.</string>
+    <string name="bk2_in_folder">Тека: %1$s</string>
+    <string name="bk2_refresh">Оновити</string>
+    <string name="bk2_change_dir">Змінити теку</string>
+    <string name="bk2_empty">У цій теці копій немає. Натисни «Змінити теку» або «Вибрати файл…».</string>
+    <string name="bk2_in_counts">%1$d налаштувань, %2$d підключень, %3$d хмар</string>
+    <string name="bk2_in_app">%1$s, користувач %2$d</string>
+    <string name="bk2_in_enc">зашифрована</string>
+    <string name="bk2_in_auto">автокопія</string>
+</resources>

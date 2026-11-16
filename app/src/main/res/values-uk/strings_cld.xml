@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cld_e_yandex_free">Яндекс не надає WebDAV на безкоштовному тарифі. Підключи Яндекс Диск через вхід у браузері (свій ключ).</string>
+    <string name="cld_e_payment">Сервіс вимагає оплату (402): на поточному тарифі цей доступ закрито.</string>
+    <string name="cld_e_space">У хмарі закінчилося місце. Звільни місце або зміни тариф.</string>
+    <string name="cld_e_rate">Забагато запитів (429). Зачекай хвилину й повтори.</string>
+    <string name="cld_e_auth">Вхід не прийнято (401): перевір логін і пароль або увійди знову.</string>
+    <string name="cld_e_forbidden">Доступ заборонено (403): цей вхід не має прав на цю папку або дію.</string>
+    <string name="cld_e_notfound">Не знайдено (404): перевір адресу сервера і шлях до папки.</string>
+    <string name="cld_e_tls">Помилка захищеного з\'єднання: сертифікат сервера не прийнято. Перевір дату й час на пристрої та адресу сервера.</string>
+    <string name="cld_e_timeout">Сервер не відповів вчасно. Перевір інтернет і повтори.</string>
+    <string name="cld_e_nonet">Немає зв\'язку з сервером: перевір інтернет, Wi-Fi і адресу.</string>
+    <string name="cld_e_server">Збій на боці сервісу (5xx). Повтори пізніше.</string>
+
+    <string name="cld_is_title">Джерело</string>
+    <string name="cld_is_filter">Джерело</string>
+    <string name="cld_is_filter_on">Джерело: %1$s</string>
+    <string name="cld_is_all">Усі джерела</string>
+    <string name="cld_is_started_by">Встановлення почав: %1$s</string>
+    <string name="cld_is_shell">Оболонка (ADB)</string>
+    <string name="cld_is_file">APK з файлу (інсталятор пакетів)</string>
+    <string name="cld_is_pre">Вбудовано в прошивку</string>
+    <string name="cld_is_other">Інша програма</string>
+    <string name="cld_is_unknown">Невідомо</string>
+    <string name="cld_iss_other">інше</string>
+
+    <string name="cld_tc_lost_auto">зв\'язок з оболонкою обірвався, перепідключення…</string>
+    <string name="cld_tc_lost">зв\'язок з оболонкою обірвався: натисни «Перепідключити»</string>
+    <string name="cld_tc_back">знову на зв\'язку</string>
+    <string name="cld_tc_reconnect">Перепідключити</string>
+</resources>

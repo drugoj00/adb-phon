@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 10.0 (fm1): тека даних застосунку у «Файлах» -->
+    <string name="fm1_data_none">У цього застосунку немає теки Android/data (він не зберігає там файли)</string>
+    <string name="fm1_data_closed">Android %1$s закрив теку Android/data для програм. Потрібен root або зв\'язок ADB (вкладка «Зв\'язок»)</string>
+    <string name="fm1_data_remote">ADB підключено до іншого пристрою. Теку даних цього телефона відкриє root або ADB до нього самого</string>
+    <string name="fm1_data_priv_off">Увімкни в налаштуваннях «Файлів» доступ до системних тек через root або ADB</string>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cnt_title">Введи число</string>
+    <string name="cnt_range">Від %1$s до %2$s</string>
+    <string name="cnt_apply">Застосувати</string>
+    <string name="cnt_cancel">Скасувати</string>
+    <string name="cnt_edit_cd">Ввести число</string>
+    <string name="cnt_dec_cd">Менше</string>
+    <string name="cnt_inc_cd">Більше</string>
+    <string name="cnt_zoom">Масштаб</string>
+</resources>

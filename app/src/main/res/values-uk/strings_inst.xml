@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="inst_u_quiet">ADB-phon без підтверджень</string>
+    <string name="inst_u_quiet_adb">Тихо через ADB: вікно з версіями та хід встановлення</string>
+    <string name="inst_u_quiet_root">Тихо через root: вікно з версіями та хід встановлення</string>
+    <string name="inst_u_quiet_d">Тихо через ADB або root, пакети з частин і OBB теж</string>
+    <string name="inst_u_r_noadb">Немає звʼязку ADB і немає root</string>
+    <string name="inst_u_session">ADB-phon з підтвердженням Android</string>
+    <string name="inst_u_session_d">Вікно з версіями, потім Android просить підтвердити встановлення. ADB і root не потрібні</string>
+    <string name="inst_u_system_d">Вікно встановлення самого Android. Лише один файл .apk</string>
+    <string name="inst_u_ext_d">Інша програма-встановлювач на цьому пристрої</string>
+    <string name="inst_u_archive_d">Переглянути вміст, нічого не встановлюючи</string>
+    <string name="inst_u_r_bundle">Не ставить пакети з частин (.apks, .xapk, .apkm)</string>
+    <string name="inst_u_r_one">Ставить лише один файл за раз</string>
+    <string name="inst_u_saved_off">Запамʼятований спосіб зараз недоступний. Обери інший</string>
+    <string name="inst_u_remember">Запамʼятати вибір</string>
+    <string name="inst_u_remember_note">Для .apk, .apks, .xapk і .apkm. Змінити або скинути: Налаштування, «Встановлювач за замовчуванням»</string>
+    <string name="inst_u_default">Встановлювач за замовчуванням</string>
+    <string name="inst_u_default_hint">Чим ставити .apk, .apks, .xapk і .apkm усюди: у «Файлах», «Софті», при відновленні та оновленні. Якщо вибраний спосіб зараз недоступний, вікно вибору зʼявиться знову</string>
+    <string name="inst_u_ask">Питати щоразу</string>
+    <string name="inst_u_change">Змінити</string>
+    <string name="inst_u_reset">Скинути</string>
+    <string name="inst_u_now">Вибраний зараз</string>
+</resources>

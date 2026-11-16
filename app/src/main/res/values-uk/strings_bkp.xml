@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10.0: резервні копії з вибором місця (пам'ять, SD, USB, мережа, хмара), шифрування «Копії з даними», автокопія, користувачі та перенесення на інший пристрій -->
+<resources>
+    <string name="bkp_settings_hint">Повна копія програми: налаштування, списки пристроїв, підключення LAN, хмарні диски з входом, паролі та ключ ADB. «Створити копію» одразу зберігає файл з датою в теку для копій, «Відновити…» показує копії з цієї теки. Теку змінює кнопка «Змінити…»: пам\'ять, SD-карта, USB, мережева тека (SMB, SFTP, FTP, WebDAV) або хмара.</string>
+    <string name="bkp_restore">Відновити…</string>
+    <string name="bkp_pick_file">Вибрати файл…</string>
+    <string name="bkp_pick_where">Вибери пам\'ять, мережеве джерело або хмару</string>
+    <string name="bkp_pick_no_files">Копій тут немає</string>
+    <string name="bkp_new_folder">Нова тека</string>
+    <string name="bkp_cloud">Хмара</string>
+    <string name="bkp_pass">Пароль</string>
+    <string name="bkp_enter_pass">Пароль копії</string>
+    <string name="bkp_wrong_pass">Невірний пароль. Файл не змінено, спробуй ще раз.</string>
+    <string name="bkp_create">Створити</string>
+    <string name="bkp_working">Триває робота…</string>
+    <string name="bkp_saved">Збережено: %1$s, %2$s</string>
+    <string name="bkp_sum">У копії: %1$d налаштувань, %2$d підключень, %3$d хмар, %4$d пристроїв</string>
+    <string name="bkp_enc_settings_yes">Файл зашифровано паролем (AES-256)</string>
+    <string name="bkp_enc_yes">Зашифровано паролем: Android Backup, AES-256</string>
+    <string name="bkp_enc_no">Без пароля</string>
+    <string name="bkp_failed">%1$s: копію не створено (%2$s)</string>
+    <string name="bkp_bad_file">Файл не відкрився: %1$s</string>
+    <string name="bkp_back">Назад</string>
+
+    <string name="bkp_err_no_conn">Підключення %1$s не знайдено серед збережених. Додай його у «Файлах» або вибери інше місце.</string>
+    <string name="bkp_err_cloud_module">Для хмари потрібен модуль «ADB-phon Хмари»: відкрий хмару у «Файлах», програма запропонує його встановити.</string>
+    <string name="bkp_err_all_files">Немає доступу до теки %1$s: дай програмі доступ до всіх файлів (Налаштування, Застосунки, ADB-phon, Доступ до всіх файлів) або вибери мережеву теку.</string>
+    <string name="bkp_err_no_folder">Тека недоступна: %1$s</string>
+    <string name="bkp_err_empty">Файл порожній або не створений</string>
+    <string name="bkp_err_size">Записано %1$d байт із %2$d: файл неповний, копію не зараховано</string>
+
+    <string name="bkp_step_settings">Копія налаштувань…</string>
+    <string name="bkp_step_pack">%1$s: пакування…</string>
+    <string name="bkp_step_pack_pct">%1$s: пакування %2$d%%</string>
+    <string name="bkp_step_check">%1$s: перевірка файлу…</string>
+    <string name="bkp_step_upload">Запис у %1$s…</string>
+    <string name="bkp_step_upload_pct">Запис у %1$s: %2$d%%</string>
+    <string name="bkp_step_download">Читання %1$s…</string>
+    <string name="bkp_step_unpack_pct">Розпакування %1$d%%</string>
+
+    <string name="bkp_keep">Зберігати останніх автокопій</string>
+    <string name="bkp_auto_only_settings">Лише налаштування програми</string>
+    <string name="bkp_auto_with_data">Налаштування та копії з даними (потрібні root або ADB)</string>
+    <string name="bkp_auto_info">%1$s. Наступна: %2$s</string>
+    <string name="bkp_auto_pass_yes">З паролем</string>
+    <string name="bkp_auto_pass_no">Без пароля</string>
+    <string name="bkp_auto_data_info">Копії з даними: застосунків з останньої ручної копії: %1$d</string>
+    <string name="bkp_auto_last">Остання автокопія: %1$s</string>
+    <string name="bkp_run_now">Виконати зараз</string>
+    <string name="bkp_rotated">Видалено старих автокопій: %1$d</string>
+    <string name="bkp_auto_failed">Автокопію не створено: %1$s</string>
+    <string name="bkp_auto_no_apps">Копії з даними: спершу зроби одну копію з даними вручну, автокопія візьме ті самі застосунки</string>
+    <string name="bkp_auto_data_skipped">Копії з даними пропущено: root і ADB зараз недоступні (запис у журналі)</string>
+    <string name="bkp_auto_done">Автокопія готова</string>
+    <string name="bkp_auto_error">Автокопія: помилка</string>
+    <string name="bkp_channel">Автокопія</string>
+
+    <string name="bkp_user">Користувач пристрою</string>
+    <string name="bkp_need_priv">Потрібні root або ADB (налагодження через Wi-Fi). Підключення не вдалося: відкрий вкладку «Зв’язок».</string>
+    <string name="bkp_about_title">Формат і перенесення на інший пристрій</string>
+    <string name="bkp_about_data">Копія зберігається одним файлом .ab у форматі Android Backup (з паролем AES-256). На ПК його відкриває android-backup-extractor (java -jar abe.jar unpack файл.ab файл.tar пароль), всередині tar із частинами копії. Відновлює дані ADB-phon. Всередині також: користувач, версія застосунку, версія Android, модель і підпис застосунку. Перенесення на інший пристрій: вибери мережеву теку, хмару або USB-накопичувач, потім на іншому пристрої відкрий «Копії з даними», «Відновити з файлу…».</string>
+    <string name="bkp_about_restore">Дані повертаються лише в уже встановлений застосунок із тим самим підписом. Якщо застосунку немає, спершу встанови його (кнопка «Встановити з копії» з\'явиться, якщо APK є в копії). Без root внутрішні дані не відновлюються, а системна копія (bu, adb restore) на Android 12 і новіших для багатьох застосунків не працює.</string>
+    <string name="bkp_restore_from_file">Відновити з файлу…</string>
+    <string name="bkp_restore_data_title">Відновити копію з даними</string>
+    <string name="bkp_restore_btn">Відновити</string>
+    <string name="bkp_install_from_copy">Встановити з копії</string>
+    <string name="bkp_installed">%1$s: застосунок встановлено. Тепер можна повернути дані.</string>
+    <string name="bkp_no_apk">У копії немає APK: встанови застосунок із магазину, потім поверни дані</string>
+    <string name="bkp_checking">Перевірка сумісності…</string>
+    <string name="bkp_meta_line">%1$s, версія %2$s, знято %3$s</string>
+    <string name="bkp_meta_dev">Пристрій: %1$s, Android %2$s, користувач %3$s, спосіб: %4$s</string>
+    <string name="bkp_meta_signer">Підпис SHA-256: %1$s</string>
+    <string name="bkp_c_all_ok">Сумісно: можна відновлювати</string>
+    <string name="bkp_c_no_priv">Немає root і ADB: відновити дані не можна. Підключи ADB у вкладці «Зв’язок».</string>
+    <string name="bkp_c_user_missing">Такого користувача на цьому пристрої немає: вибери іншого</string>
+    <string name="bkp_c_not_installed">Застосунок не встановлено в цього користувача. Дані без застосунку не відновлюються: спершу встанови його.</string>
+    <string name="bkp_c_signer_mismatch">Підпис встановленого застосунку не збігається з підписом у копії: дані не підійдуть (це інша збірка того самого застосунку)</string>
+    <string name="bkp_c_signer_unknown">Підпис не перевірено (немає відомостей про підпис у копії або на пристрої)</string>
+    <string name="bkp_c_version_lower">Встановлено старішу версію (код %2$s), ніж у копії (%1$s): дані нової версії можуть не відкритися. Краще спершу встановити версію з копії.</string>
+    <string name="bkp_c_version_higher">Встановлено новішу версію, ніж у копії: зазвичай застосунок сам оновить старі дані</string>
+    <string name="bkp_c_sdk_diff">Копію знято на Android %1$s, тут Android API %2$s: дані, що залежать від системи (сповіщення, дозволи, ключі), можуть не підійти</string>
+    <string name="bkp_c_other_device">Копія з іншого пристрою (%1$s): ключі, прив\'язані до пристрою, і входи в акаунти можуть вимагати повторного входу</string>
+    <string name="bkp_c_no_root_internal">Внутрішні дані в копії знято з root: без root вони не відновляться, повернуться лише APK і зовнішні дані</string>
+    <string name="bkp_c_ab_limited">Системна копія: на Android 12 і новіших без root система може не прийняти дані цього застосунку</string>
+    <string name="bkp_c_only_apk">У копії лише APK, даних немає</string>
+</resources>

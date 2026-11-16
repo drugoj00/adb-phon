@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="misc_cloud_drive">Google Диск</string>
+    <string name="misc_cloud_google_photos">Google Фото</string>
+    <string name="misc_cloud_yandex">Яндекс Диск</string>
+    <string name="misc_inv_send_btn">Запросити…</string>
+    <string name="misc_inv_title">Запросити до мережі Tailscale</string>
+    <string name="misc_inv_hint">Tailscale надішле лист із посиланням. Після входу за ним пристрої цієї людини з\'являться у твоїй мережі.</string>
+    <string name="misc_inv_email">Пошта запрошеного</string>
+    <string name="misc_inv_send">Надіслати</string>
+    <string name="misc_inv_sending">Надсилання…</string>
+    <string name="misc_inv_sent">Запрошення надіслано на %1$s</string>
+    <string name="misc_inv_sent_nomail">Запрошення створено для %1$s, лист Tailscale не підтвердив. Посилання можна передати вручну.</string>
+    <string name="misc_inv_copy_link">Копіювати посилання</string>
+    <string name="misc_inv_link_copied">Посилання скопійовано</string>
+    <string name="misc_inv_token_btn">Токен API…</string>
+    <string name="misc_tok_title">Потрібен токен API Tailscale</string>
+    <string name="misc_tok_step1">1. Відкрий login.tailscale.com/admin/settings/keys (вхід власником або адміном мережі).</string>
+    <string name="misc_tok_step2">2. Натисни «Generate access token…», задай термін і натисни «Generate».</string>
+    <string name="misc_tok_step3">3. Скопіюй токен (tskey-api-…) і встав у поле нижче.</string>
+    <string name="misc_tok_open">Відкрити сторінку</string>
+    <string name="misc_tok_field">Токен API</string>
+    <string name="misc_tok_save">Зберегти</string>
+    <string name="misc_tok_delete">Видалити токен</string>
+    <string name="misc_tok_bad">Токен виглядає неправильно</string>
+    <string name="misc_tok_note">Токен зберігається зашифрованим лише на цьому пристрої і до копії налаштувань не входить.</string>
+    <string name="misc_inv_e_email">Перевір адресу пошти</string>
+    <string name="misc_inv_e_token">Потрібен токен API Tailscale</string>
+    <string name="misc_inv_e_auth">Помилка 401: токен неправильний або прострочений. Введи новий токен.</string>
+    <string name="misc_inv_e_forbidden">Помилка 403: цьому токену запрошувати не можна. Потрібен токен API користувача з правами власника або адміна (не OAuth).</string>
+    <string name="misc_inv_e_notfound">Помилка 404: мережу Tailscale не знайдено.</string>
+    <string name="misc_inv_e_exists">Помилка %1$d: цю адресу вже запрошено або вона вже в мережі.</string>
+    <string name="misc_inv_e_bad">Помилка %1$d: Tailscale не прийняв запит.</string>
+    <string name="misc_inv_e_rate">Помилка 429: забагато запитів. Повтори за хвилину.</string>
+    <string name="misc_inv_e_server">Помилка %1$d: збій на боці Tailscale. Повтори пізніше.</string>
+    <string name="misc_inv_e_net">Немає зв\'язку з Tailscale. Перевір інтернет.</string>
+    <string name="misc_inv_e_other">Помилка %1$d.</string>
+    <string name="misc_inv_e_detail">Відповідь Tailscale: %1$s</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_grp_upd">Оновлення та копії</string>
+    <string name="set_grp_upd_sub">Нова версія, відкат, резервна копія</string>
+    <string name="set_grp_ui">Інтерфейс</string>
+    <string name="set_grp_ui_sub">Тема, мова, розміри, кольори</string>
+    <string name="set_grp_files">Файли</string>
+    <string name="set_grp_files_sub">Теки, значки, видалення, кошик</string>
+    <string name="set_grp_adb">Зв\'язок і ADB</string>
+    <string name="set_grp_adb_sub">Помічник без налагодження, Shizuku, термінал</string>
+    <string name="set_grp_cloud">Хмари</string>
+    <string name="set_grp_cloud_sub">Модуль хмар і його оновлення</string>
+    <string name="set_grp_panels">Панелі та дзвінки</string>
+    <string name="set_grp_panels_sub">Бік панелей, кнопки, аватарка</string>
+    <string name="set_grp_sys">Система</string>
+    <string name="set_grp_sys_sub">Запуск, екран, вихід, журнал</string>
+    <string name="set_search">Пошук у налаштуваннях</string>
+    <string name="set_search_none">Нічого не знайдено</string>
+    <string name="set_all_groups">Усі розділи</string>
+    <string name="set_about">Про програму</string>
+    <string name="set_cmod_title">Модуль хмар</string>
+    <string name="set_h_upd">Зараз: %1$s</string>
+    <string name="set_h_versions">Встановити попередню або нову версію</string>
+    <string name="set_h_ver_clear">Звільнити місце від старих файлів</string>
+    <string name="set_h_bk_make">Файл із датою в теку для копій</string>
+    <string name="set_h_bk_restore">Вибрати копію з теки</string>
+    <string name="set_h_copies">Копії застосунків та їхні версії</string>
+</resources>

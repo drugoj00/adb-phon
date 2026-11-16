@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kbtn_switch">Кнопки на екран</string>
+    <string name="kbtn_switch_sub">Для ігор без підтримки геймпада: кнопки оверлею натискають у точки на екрані гри</string>
+    <string name="kbtn_dlg_text">Оверлей не створює контролер, а натискає в точки екрана гри через службу спеціальних можливостей ADB-phon. ADB не потрібен.
+
+Налаштування: запусти оверлей, відкрий гру, натисни значок приціла в оверлеї та перетягни мітки на кнопки гри. Розкладка зберігається для кожної гри окремо, для портрета й альбома своя.</string>
+    <string name="kbtn_limits">Обмеження: Android 7.0 і новіші. Гра не бачить контролер (немає аналогових курків і підказок контролера). Поки палець рухається екраном, Android перериває утримання, і кнопка натискається знову. До 10 дотиків одночасно. Ігри із захистом від автоклікерів можуть не приймати такі дотики.</string>
+    <string name="kbtn_need_service">Потрібна служба спеціальних можливостей ADB-phon (дозвіл один раз). На Android 13 і новіших її перемикач може бути сірим: відкрий «Про застосунок», меню ⋮, «Дозволити обмежені налаштування», потім увімкни службу. З ADB до цього телефона служба ввімкнеться сама.</string>
+    <string name="kbtn_enable">Увімкнути службу</string>
+    <string name="kbtn_app_info">Про застосунок</string>
+    <string name="kbtn_ok">Зрозуміло</string>
+    <string name="kbtn_cancel">Скасувати</string>
+    <string name="kbtn_enabled_toast">Службу ввімкнено</string>
+    <string name="kbtn_open_settings_toast">Увімкни службу ADB-phon у списку спеціальних можливостей</string>
+    <string name="kbtn_toast_no_service">Кнопки на екран: увімкни службу спеціальних можливостей ADB-phon у розділі «Геймпад»</string>
+    <string name="kbtn_toast_no_profile">Для цієї гри точки не розставлено: натисни значок приціла</string>
+    <string name="kbtn_toast_open_game">Спочатку відкрий гру, потім натисни значок приціла</string>
+    <string name="kbtn_ed_title">Розстановка: %1$s</string>
+    <string name="kbtn_ed_hint">Перетягни мітки на кнопки гри. Довге натискання прибирає мітку. Червона мітка лежить під кнопкою оверлею і не спрацює.</string>
+    <string name="kbtn_ed_minus">Стік −</string>
+    <string name="kbtn_ed_plus">Стік +</string>
+    <string name="kbtn_ed_clear">Очистити</string>
+    <string name="kbtn_ed_save">Зберегти</string>
+    <string name="kbtn_ed_saved">Розкладку збережено</string>
+</resources>
