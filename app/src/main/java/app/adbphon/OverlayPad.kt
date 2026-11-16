@@ -43,6 +43,8 @@ class OverlayPadService : Service() {
     private var builtH = 0
     private val views = ArrayList<View>()
     private lateinit var wm: WindowManager
+    private var touch = false               // 10.0 kbtn: режим «Кнопки на экран» (касания службой спецвозможностей вместо виртуального контроллера)
+    private var editor: StEditor? = null
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -63,17 +65,18 @@ class OverlayPadService : Service() {
         starting = true
         scope.launch {
             // подключение к помощнику (запуск через ADB только если он не жив) — вне главного потока
-            val ok = Settings.canDrawOverlays(this@OverlayPadService) && kotlinx.coroutines.withContext(Dispatchers.IO) { VirtualPad.start(applicationContext) }
+            touch = ScreenTouch.enabled(applicationContext)
+            val ok = Settings.canDrawOverlays(this@OverlayPadService) && (if (touch) ScreenTouch.ready(applicationContext) else kotlinx.coroutines.withContext(Dispatchers.IO) { VirtualPad.start(applicationContext) })
             starting = false
-            if (!ok) { android.widget.Toast.makeText(applicationContext, getString(R.string.pad_local_need_adb), android.widget.Toast.LENGTH_LONG).show(); shutdown(false); return@launch }
-            VirtualPad.on = true
+            if (!ok) { android.widget.Toast.makeText(applicationContext, if (touch) ScreenTouch.lctx(applicationContext).getString(R.string.kbtn_toast_no_service) else getString(R.string.pad_local_need_adb), android.widget.Toast.LENGTH_LONG).show(); shutdown(false); return@launch }
+            if (!touch) VirtualPad.on = true
             Pad.fg = true
             running = true
             // живучесть и батарея (тихо, только при ADB): исключение из Doze и «активная» корзина на время игры
             kotlinx.coroutines.withContext(Dispatchers.IO) { keepAlive(true) }
             // ориентацию экрана задаёт сама игра: оверлей её не меняет, а подстраивает раскладку под реальный экран
             build()
-            if (loop == null) loop = scope.launch { Pad.loop() }
+            if (loop == null) loop = scope.launch { if (touch) ScreenTouch.loop(applicationContext) else Pad.loop() }
             // автопереключение портрет/альбом без перезапуска службы: следим за реальными размерами дисплея
             if (watch == null) watch = scope.launch { while (true) { kotlinx.coroutines.delay(300); if (running) { val q = realSize(); val port = q.y > q.x; if (port != builtPortrait || q.x != builtW || q.y != builtH) { clear(); build() } } } }
         }
@@ -120,6 +123,19 @@ class OverlayPadService : Service() {
         val sz = Pad.scale.coerceIn(0.7f, 1.3f)
         builtPortrait = H > W; builtW = W; builtH = H
         if (H > W) buildPortrait(W, H, a, sz) else buildLandscape(W, H, a, sz)
+        if (touch) addTouchSetup()
+    }
+
+    /** 10.0 kbtn: значок прицела справа от крестика открывает расстановку точек для игры на переднем плане. */
+    private fun addTouchSetup() {
+        val cv = views.firstOrNull { it is CloseView } ?: return
+        val lp = cv.layoutParams as? WindowManager.LayoutParams ?: return
+        add(StSetupButton(this) {
+            val pkg = ScreenTouch.fgPkg
+            if (pkg.isEmpty() || pkg == packageName) { android.widget.Toast.makeText(applicationContext, ScreenTouch.lctx(applicationContext).getString(R.string.kbtn_toast_open_game), android.widget.Toast.LENGTH_LONG).show(); return@StSetupButton }
+            if (editor != null) return@StSetupButton
+            editor = StEditor(this, wm, pkg, { views.map { v -> val o = IntArray(2); v.getLocationOnScreen(o); floatArrayOf(o[0].toFloat(), o[1].toFloat(), (o[0] + v.width).toFloat(), (o[1] + v.height).toFloat()) } }) { editor = null }.also { it.show() }
+        }, lp.x + lp.width + lp.width / 3, lp.y, lp.width, lp.height)
     }
 
     /** Портрет: единица u = ширина. Внизу слева левый стик и крестовина, справа ABXY и правый стик, ряд LT/LB и RT/RB над ними, Back/Guide/Start по центру над системной навигацией. Отступы у краёв ≥ 0,07u (жесты). */
@@ -185,7 +201,8 @@ class OverlayPadService : Service() {
         getSharedPreferences("adbphon", MODE_PRIVATE).edit().putBoolean("overlay_on", false).apply()
         loop?.cancel(); loop = null; watch?.cancel(); watch = null
         runCatching { clear() }
-        VirtualPad.stop(kill)
+        editor?.dismiss(); editor = null
+        if (!touch) VirtualPad.stop(kill)
         Pad.fg = false
         scope.launch { kotlinx.coroutines.withContext(Dispatchers.IO) { keepAlive(false) } }
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
@@ -253,6 +270,7 @@ private class ButtonView(ctx: Context, val label: String, val bit: Int, val a: F
         if (down == on) return
         down = on
         when (bit) { -2 -> Pad.lt = on; -3 -> Pad.rt = on; else -> Pad.buttons = if (on) Pad.buttons or (1 shl bit) else Pad.buttons and (1 shl bit).inv() }
+        ScreenTouch.edge(bit, on)
         Pad.dirty = true; invalidate()
     }
     override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -288,7 +306,7 @@ private class DpadView(ctx: Context, val a: Float) : View(ctx) {
         arm(t, 0f, up); arm(t, 2 * t, down); arm(0f, t, left); arm(2 * t, t, right)
         val r = RectF(t + 7f, t + 7f, 2 * t - 7f, 2 * t - 7f); c.drawRoundRect(r, t / 5, t / 5, fill); c.drawRoundRect(r, t / 5, t / 5, line)
     }
-    private fun set(h: Int) { if (h != hat) { hat = h; Pad.hat = h; Pad.dirty = true; invalidate() } }
+    private fun set(h: Int) { if (h != hat) { hat = h; Pad.hat = h; Pad.dirty = true; ScreenTouch.edgeHat(h); invalidate() } }
     private fun dir(e: MotionEvent, i: Int): Int {
         val c = width / 2f; val dx = e.getX(i) - c; val dy = e.getY(i) - c
         if (hypot(dx, dy) < width * 0.12f) return 8

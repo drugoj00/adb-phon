@@ -103,6 +103,8 @@ object Pairing {
     fun start(ctx: Context) {
         if (mdns?.isRunning == true) return
         val app = ctx.applicationContext
+        // второе пространство (user 95) не отдаёт идентификатор устройства: поиск ADB по mDNS в нём падает (Ssaid settings not accessible), поэтому там он не запускается
+        if (runCatching { android.provider.Settings.Secure.getString(app.contentResolver, android.provider.Settings.Secure.ANDROID_ID) }.getOrNull() == null) return
         mdns = AdbMdns(app, AdbMdns.SERVICE_TYPE_TLS_PAIRING, AdbMdns.OnAdbDaemonDiscoveredListener { h, p ->
             host = h
             port = if (p > 0) p else 0

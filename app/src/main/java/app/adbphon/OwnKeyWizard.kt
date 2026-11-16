@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,7 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -161,6 +162,9 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
     val total = lines.size
     val last = step == total - 1
 
+    /** «Отмена»: выход из мастера, остановка входа (порт 53682 и служба освобождаются), подсказка поверх браузера закрывается. */
+    fun cancel() { CloudOverlay.disarm(); if (!started) { CloudAuth.reset(); LoginEcho.stop() }; close() }
+
     fun startLogin(i: String, s: String) {
         if (started) return
         started = true
@@ -213,7 +217,11 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
     // название проекта и адрес возврата кладутся в буфер при показе шага (запись в буфер разрешена и в переднем плане)
     fun openStep(copy: String?) {
         if (copy != null) { OwnKeyWizard.setClip(ctx, copy); note = ctx.getString(R.string.okw_copied) } else note = ""
-        CloudAuth.openUrl(ctx, OwnKeyWizard.stepUrl(type, if (google) step else 0))
+        val pageUrl = OwnKeyWizard.stepUrl(type, if (google) step else 0)
+        // 10.0: страницы Яндекса открываются в своём окне со стрелками-подсказками; нет WebView: внешний браузер и подсказка поверх него
+        if (type == "yandex" && CloudWeb.open(ctx, pageUrl, "yandex_key", step, false)) return
+        CloudAuth.openUrl(ctx, pageUrl)
+        if (type == "yandex") CloudOverlay.arm(ctx, "yandex_key", step)
     }
     val copyFor: String? = when {
         google && step == 0 -> OwnKeyWizard.APP_NAME
@@ -224,39 +232,65 @@ fun OwnKeyDlg(type: String, close: () -> Unit, startStep: Int = 0, sharedClosed:
     }
 
     LaunchedEffect(step) { copyFor?.let { OwnKeyWizard.setClip(ctx, it) } }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { CloudOverlay.disarm() } }
+
+    // 10.0: окно без прокрутки. Ландшафт: две колонки (слева шаг, справа действия и поля). Портрет: последний шаг в две страницы (инструкция, затем поля)
+    val land = isLandscapeUi()
+    var sub by remember { mutableIntStateOf(0) }
+    val fieldsOnly = last && !land && sub == 1
+    fun goBack() { if (fieldsOnly) { sub = 0; note = "" } else if (step > 0) { step--; sub = 0; note = "" } else cancel() }
+    /** «Начать заново»: шаг 1, введённое стирается, подсказка поверх браузера закрывается (сохранённый ключ не трогается: для него есть «Очистить»). */
+    fun restart() { CloudOverlay.disarm(); step = 0; sub = 0; id = ""; secret = ""; note = "" }
+
+    @Composable fun head() {
+        if (sharedClosed) Text(stringResource(R.string.okw_shared_closed), fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.okw_progress, step + 1, total), Modifier.weight(1f), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            if (step > 0 || id.isNotBlank() || secret.isNotBlank()) TextButton({ restart() }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(stringResource(R.string.cl_restart), fontSize = 12.sp, maxLines = 1) }
+        }
+        ThemedProgress({ (step + 1) / total.toFloat() }, Modifier.fillMaxWidth())
+        Text(stringResource(lines[step]), fontSize = 15.sp)
+    }
+    @Composable fun openRow() {
+        if (!last) OutlinedButton({ openStep(copyFor) }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text(stringResource(R.string.okw_open)) }
+        else OutlinedButton({ CloudAuth.openUrl(ctx, OwnKeyWizard.stepUrl(type, if (google) step else 0)) }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text(stringResource(R.string.okw_open)) }
+        if (google && step == OwnKeyWizard.PUBLISH_STEP) Text(stringResource(R.string.okw_gp_note), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+    }
+    @Composable fun noteRow() { if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
+    @Composable fun fields() {
+        // запасной ручной ввод: поля остаются
+        CField("Client ID", id, { id = it; note = "" })
+        CField("Client Secret", secret, { secret = it; note = "" }, password = true)
+        if (id.isNotBlank() && !OwnKeyWizard.validId(type, id)) Text(stringResource(R.string.okw_bad_id), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+        if (secret.isNotBlank() && !OwnKeyWizard.validSecret(type, secret)) Text(stringResource(R.string.okw_bad_secret), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+    }
+
     LAlertDialog(
         ime = true, wide = true,
-        onDismissRequest = close,
+        // 10.0: BACK пульта и касание вне окна: «Назад» на предыдущий шаг (введённое сохраняется), на первом шаге: отмена
+        onDismissRequest = { goBack() },
         title = { Text(stringResource(R.string.ok_title, CloudErr.providerName(ctx, type))) },
         text = {
-            Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (sharedClosed) Text(stringResource(R.string.okw_shared_closed), fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.okw_progress, step + 1, total), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                ThemedProgress({ (step + 1) / total.toFloat() }, Modifier.fillMaxWidth())
-                Text(stringResource(lines[step]), fontSize = 15.sp)
-                if (!last) OutlinedButton({ openStep(copyFor) }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text(stringResource(R.string.okw_open)) }
-                else OutlinedButton({ CloudAuth.openUrl(ctx, OwnKeyWizard.stepUrl(type, if (google) step else 0)) }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text(stringResource(R.string.okw_open)) }
-                if (google && step == OwnKeyWizard.PUBLISH_STEP) Text(stringResource(R.string.okw_gp_note), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
-                if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                if (last) {
-                    // запасной ручной ввод: поля остаются
-                    CField("Client ID", id, { id = it; note = "" })
-                    CField("Client Secret", secret, { secret = it; note = "" }, password = true)
-                    if (id.isNotBlank() && !OwnKeyWizard.validId(type, id)) Text(stringResource(R.string.okw_bad_id), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                    if (secret.isNotBlank() && !OwnKeyWizard.validSecret(type, secret)) Text(stringResource(R.string.okw_bad_secret), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                }
+            if (land) Row(Modifier.fillMaxWidth().tvFit(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {   // 10.0 (tvfont): tvFit на ТВ
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { head() }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { openRow(); noteRow(); if (last) fields() }
+            } else Column(Modifier.tvFit(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                head()
+                if (!fieldsOnly) openRow()
+                noteRow()
+                if (fieldsOnly) fields()
             }
         },
         confirmButton = {
-            if (last) TextButton({ if (OwnKeyWizard.validId(type, id.trim()) && OwnKeyWizard.validSecret(type, secret.trim())) startLogin(id.trim(), secret.trim()) },
+            if (last && (land || sub == 1)) TextButton({ if (OwnKeyWizard.validId(type, id.trim()) && OwnKeyWizard.validSecret(type, secret.trim())) startLogin(id.trim(), secret.trim()) },
                 enabled = id.isNotBlank() && secret.isNotBlank()) { Text(stringResource(R.string.ok_save)) }
-            else TextButton({ step++; note = "" }) { Text(stringResource(R.string.okw_next)) }
+            else TextButton({ if (last) { sub = 1; note = "" } else { step++; sub = 0; note = "" } }) { Text(stringResource(R.string.okw_next)) }
         },
         dismissButton = {
             Row {
-                if (step > 0) TextButton({ step--; note = "" }) { Text(stringResource(R.string.okw_back)) }
+                if (step > 0 || fieldsOnly) TextButton({ goBack() }) { Text(stringResource(R.string.okw_back)) }
                 if (OwnKeys.get(ctx, type) != null) TextButton({ OwnKeys.clear(ctx, type); close() }) { Text(stringResource(R.string.ok_clear)) }
-                TextButton(close) { Text(stringResource(R.string.btn_cancel)) }
+                TextButton({ cancel() }) { Text(stringResource(R.string.btn_cancel)) }
             }
         },
     )
