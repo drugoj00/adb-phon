@@ -18,6 +18,8 @@ static std::u16string w2u16(const wchar_t *w) {
 // Пароль для зашифрованных заголовков запрашивается при открытии: отдаём его через обратный вызов.
 static int CALLBACK pwCallback(UINT msg, LPARAM user, LPARAM p1, LPARAM p2) {
     const char *pw = (const char *)user;
+    // данные идут без пароля: обратный вызов UCM_PROCESSDATA обязан вернуть неотрицательное число, иначе распаковка прерывается (ошибка 21)
+    if (msg == UCM_PROCESSDATA) return 1;
     if (!pw || !*pw) return -1;
     if (msg == UCM_NEEDPASSWORD) { strncpy((char *)p1, pw, (size_t)p2 - 1); ((char *)p1)[p2 - 1] = 0; return 1; }
     if (msg == UCM_NEEDPASSWORDW) {
