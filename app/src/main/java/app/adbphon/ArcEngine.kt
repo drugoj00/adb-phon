@@ -674,8 +674,11 @@ class Rar5Arc(val file: File, private val password: CharArray?) : ArcReader() {
     override fun open(e: ArcEntry): InputStream {
         if (e.encrypted && pw == null) throw ArcNeedPassword()
         val tmp = File.createTempFile("rar5_", ".bin")
+        tmp.delete()      // UnRAR не должен спрашивать о замене существующего файла (в режиме библиотеки это ошибка 21)
         val rc = RarNative.extract(file.absolutePath, e.idx, tmp.absolutePath, pw)
-        if (rc != 0) { tmp.delete(); throw when (rc) { 22 -> ArcNeedPassword(); 24 -> ArcBadPassword(); else -> IOException("RAR5: $rc") } }
+        // 21 (ERAR_UNKNOWN) библиотека возвращает и при предупреждении после успешной распаковки (например, неизвестные служебные записи новых версий WinRAR): файл целый, если размер совпал
+        val okWithWarning = rc == 21 && e.size >= 0 && tmp.exists() && tmp.length() == e.size
+        if (rc != 0 && !okWithWarning) { tmp.delete(); throw when (rc) { 22 -> ArcNeedPassword(); 24 -> ArcBadPassword(); else -> IOException("RAR5: $rc") } }
         return object : FilterInputStream(tmp.inputStream().buffered(256 * 1024)) { override fun close() { super.close(); tmp.delete() } }
     }
     override fun close() {}

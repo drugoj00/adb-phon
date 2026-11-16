@@ -32,12 +32,13 @@ class AutoPairService : AccessibilityService() {
             // страницы настроек статичны: без новых событий проверяем окно раз в секунду, пока идёт автоподключение
             if (Pairing.autoWanted) evaluate() else { wasWanted = false; connectTryAt = 0L }
             if (TsLogin.wanted) TsLogin.step(rootInActiveWindow)
+            if (CloudOverlay.shown) CloudOverlay.scan(rootInActiveWindow)   // 10.0: стрелка подсказки по найденному на экране элементу
             SysVpn.step(this@AutoPairService, rootInActiveWindow)
             handler.postDelayed(this, 1000)
         }
     }
 
-    override fun onServiceConnected() { TsLogin.back = { performGlobalAction(GLOBAL_ACTION_BACK) }; Log.i("TVApps", "AutoPairService подключена"); handler.removeCallbacks(tick); handler.post(tick) }
+    override fun onServiceConnected() { ScreenTouch.svc = java.lang.ref.WeakReference(this); TsLogin.back = { performGlobalAction(GLOBAL_ACTION_BACK) }; Log.i("TVApps", "AutoPairService подключена"); handler.removeCallbacks(tick); handler.post(tick) }
     override fun onDestroy() { handler.removeCallbacks(tick); super.onDestroy() }
     override fun onInterrupt() {}
 
@@ -60,7 +61,7 @@ class AutoPairService : AccessibilityService() {
         return false
     }
 
-    override fun onAccessibilityEvent(e: AccessibilityEvent) { if (Pairing.autoWanted) evaluate(); if (TsLogin.wanted) TsLogin.step(rootInActiveWindow); SysVpn.step(this, rootInActiveWindow) }
+    override fun onAccessibilityEvent(e: AccessibilityEvent) { ScreenTouch.onEvent(this, e); if (Pairing.autoWanted) evaluate(); if (TsLogin.wanted) TsLogin.step(rootInActiveWindow); SysVpn.step(this, rootInActiveWindow) }
 
     private fun evaluateOff() {
         val root = rootInActiveWindow ?: return

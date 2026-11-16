@@ -368,14 +368,16 @@ object Adb {
         val id = Regex("\\[(\\d+)\\]").find(made)?.groupValues?.get(1) ?: return made
         val acc = java.util.concurrent.atomic.AtomicLong()
         for (f in files) {
-            val res = withContext(Dispatchers.IO) {
+            val res = try { withContext(Dispatchers.IO) {
                 if (rootOn) return@withContext f.inputStream().use { rootRun("cmd package install-write -S ${f.length()} $id ${q(f.name)} - < " + q(f.absolutePath), null, 600_000) }.also { onInstallBytes?.invoke(acc.addAndGet(f.length())) }
-                val s = mgr.openStream(AdbText.safe("exec:cmd package install-write -S ${f.length()} $id ${f.name} -"))
+                // помощник без отладки: части идут через него же, как install-create (у mgr связи нет)
+                if (useServer()) return@withContext f.inputStream().use { AdbServer.run("cmd package install-write -S ${f.length()} $id ${q(f.name)} -", counted(it, acc), f.length(), 600_000) }
+                val s = mgr.openStream(AdbText.safe("exec:cmd package install-write -S ${f.length()} $id ${q(f.name)} -"))
                 val out = s.openOutputStream()
                 f.inputStream().use { counted(it, acc).copyTo(out) }
                 out.flush()
                 readAll(s, 120_000, "install-write")
-            }
+            } } catch (e: Throwable) { runCatching { shell("cmd package install-abandon $id") }; throw e }
             if (!res.contains("Success", true)) { runCatching { shell("cmd package install-abandon $id") }; return res }
         }
         return shell("cmd package install-commit $id", 120_000)

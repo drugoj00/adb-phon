@@ -14,6 +14,7 @@ import java.io.File
 class ArcTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!StandGuard.allowed(this)) { finish(); return }
         val dir = File(intent.getStringExtra("dir") ?: "/sdcard/test_arc")
         val out = File(intent.getStringExtra("out") ?: "/sdcard/test_arc_out")
         val pass = intent.getStringExtra("pass")?.toCharArray()

@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 class AndroidTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!StandGuard.allowed(this)) { finish(); return }
         FmIo.app = applicationContext; Fm.sctx = applicationContext
         // Для проверки автоповорота: эта страница просит у системы поворот (land/port/rland/rport/sensor); на устройстве-цели её запускают командой am start
         intent.getStringExtra("orient")?.let { o -> requestedOrientation = when (o) { "land" -> 0; "port" -> 1; "rland" -> 8; "rport" -> 9; else -> 4 } }

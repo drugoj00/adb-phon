@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Один способ установки APK: системный установщик, наша тихая установка через ADB/root, сторонний установщик, открыть как архив. */
-class InstOpt(val id: String, val label: String, val hint: String?, val pkg: String?, val icon: ImageVector?, val ai: android.content.pm.ActivityInfo? = null, val rank: Int = 5, val enabled: Boolean = true, val recommended: Boolean = false) {
+class InstOpt(val id: String, val label: String, val hint: String?, val pkg: String?, val icon: ImageVector?, val ai: android.content.pm.ActivityInfo? = null, val rank: Int = 5, val enabled: Boolean = true, val recommended: Boolean = false, val reason: String? = null) {
     /** «пакет/класс» для запуска именно этого действия приложения. */
     val component: String? get() = ai?.let { it.packageName + "/" + it.name }
 }
@@ -69,19 +69,19 @@ object ApkInstall {
     /** Запомнить выбор: для APK в «inst_*», для остальных типов в общем списке «Открывать как» (значок файла = значок выбранного приложения). */
     /** Запомненный выбор для расширения (id способа) или null. */
     fun saved(ctx: Context, ext: String): String? {
-        if (ext == "apk" || isBundle(ext)) return mode(ctx, ext).takeIf { it != "ask" }
+        if (ext == "apk" || isBundle(ext)) return InstallerStore.get(ctx)   // 10.0: один выбор на все пакеты
         val v = UiPrefs.openAs[openKey(ext)] ?: return null
         return if (v == "builtin") "builtin" else "cmp:$v"
     }
 
     /** Сбросить запомненный выбор для расширения. */
     fun forget(ctx: Context, ext: String) {
-        if (ext == "apk" || isBundle(ext)) setMode(ctx, ext, "ask")
+        if (ext == "apk" || isBundle(ext)) InstallerStore.reset(ctx)
         else { UiPrefs.openAs.remove(openKey(ext)); sp(ctx).edit().remove("open_as_" + openKey(ext)).apply() }
     }
 
     fun remember(ctx: Context, ext: String, id: String) {
-        if (ext == "apk" || isBundle(ext)) setMode(ctx, ext, id)
+        if (ext == "apk" || isBundle(ext)) InstallerStore.set(ctx, id)
         else UiPrefs.setOpenAs(ctx, openKey(ext), if (id == "builtin") "builtin" else id.removePrefix("cmp:"))
     }
     fun setMode(ctx: Context, ext: String, v: String) {
@@ -90,7 +90,7 @@ object ApkInstall {
     }
 
     private var sysPkgCache: String? = null
-    private fun systemPkg(ctx: Context): String? = sysPkgCache ?: handlers(ctx, "apk").firstOrNull { it.ai.packageName in SYSTEM }?.ai?.packageName?.also { sysPkgCache = it }
+    fun systemPkg(ctx: Context): String? = sysPkgCache ?: handlers(ctx, "apk").firstOrNull { it.ai.packageName in SYSTEM }?.ai?.packageName?.also { sysPkgCache = it }
 
     /**
      * Откуда брать значок файлов с этим расширением, если для него запомнена программа: «c:пакет/класс», «i:пакет» или null (рисуется значок типа).
@@ -98,9 +98,9 @@ object ApkInstall {
      */
     fun iconRef(ctx: Context, ext: String): String? {
         if (ext == "apk" || isBundle(ext)) {
-            val m = UiPrefs.instMode[ext] ?: return null
+            val m = InstallerStore.get(ctx) ?: return null
             return when {
-                m == "adb" -> "i:" + ctx.packageName
+                m == "adb" || m == "session" -> "i:" + ctx.packageName
                 m == "system" -> systemPkg(ctx)?.let { "i:$it" }
                 m.startsWith("cmp:") -> "c:" + m.removePrefix("cmp:")
                 else -> null
@@ -188,7 +188,7 @@ object ApkInstall {
         }
         for (h in cand) {
             val (_, kind) = classify(h)
-            val title = if (installGroup || h.label.isBlank() || h.label == h.appLabel) h.appLabel else h.appLabel + " — " + h.label
+            val title = if (installGroup || h.label.isBlank() || h.label == h.appLabel) h.appLabel else h.appLabel + " · " + h.label
             val tag = when (kind) { "inst" -> ctx.getString(R.string.inst_kind_install); "analyze" -> ctx.getString(R.string.inst_kind_analyze); "explore" -> ctx.getString(R.string.inst_kind_explore); else -> if (installGroup) ctx.getString(R.string.inst_kind_install) else null }
             val hint = if (installGroup) tag else listOfNotNull(tag, h.ai.name.substringAfterLast(Char(46))).joinToString(" · ")
             out += InstOpt("cmp:" + h.ai.packageName + "/" + h.ai.name, title, hint, h.ai.packageName, null, h.ai, if (installGroup) 2 else 5)
@@ -202,22 +202,19 @@ object ApkInstall {
      * Выключено: запомненный способ, иначе способ по умолчанию без окна (ADB-phon при ADB/root, иначе системный).
      * Файл в панели «ADB» (оболочка) ставится только нашим способом: файл забирается во временную папку.
      */
-    fun start(p: FmPane, item: FmItem) {
+    fun start(p: FmPane, item: FmItem) = startInstall(p, item, false)
+
+    /**
+     * 10.0: единое окно «Установить через…» (см. [InstallerChoice]): запомненный и доступный способ применяется сразу,
+     * иначе (или [force], пункт меню) окно со всеми способами. Файл в панели «ADB» (оболочка) ставится только тихо.
+     */
+    fun startInstall(p: FmPane, item: FmItem, force: Boolean) {
         val ctx = Fm.sctx
-        val adbPane = p.src == "adb"
-        val canAdb = Adb.isConnected && (adbPane || (!FmIo.remote && p.src == "local"))
-        var opts = options(ctx, item.ext, canAdb)
-        if (adbPane) opts = opts.map { o -> if (o.id == "adb" || o.id == "archive") o else InstOpt(o.id, o.label, ctx.getString(R.string.via_adb_pane_only), o.pkg, o.icon, o.ai, o.rank, false, o.recommended) }
-        val shown = opts.filter { it.id != "archive" }
-        if (shown.isEmpty()) { Fm.openArchiveFor(p, item); return }
-        if (!UiPrefs.askInstaller) {
-            val saved = saved(ctx, item.ext)
-            val o = saved?.let { s -> opts.firstOrNull { it.id == s && it.enabled } }
-                ?: opts.firstOrNull { it.id == "adb" && it.enabled }
-                ?: shown.firstOrNull { it.enabled }
-            if (o != null) { run(p, item, o); return }
+        val opts = Installers.rows(ctx, item.ext, Installers.canQuietFm(p), adbPane = p.src == "adb", withArchive = true)
+        when (val d = InstallerChoice.decide(Installers.choiceOpts(opts), InstallerStore.get(ctx), force)) {
+            is InstallerChoice.Decision.Auto -> run(p, item, opts.first { it.id == d.id })
+            is InstallerChoice.Decision.Show -> Fm.dlg = FmDlg.InstallPick(p, item, opts)
         }
-        Fm.dlg = FmDlg.InstallPick(p, item, opts)
     }
 
     /** Полный список способов открыть файл: для APK и пакетов из частей установщики, для остальных встроенный и приложения. */
@@ -237,6 +234,7 @@ object ApkInstall {
 
     /** «Открыть через…» из меню: всегда полный список; галочка «Запомнить» отмечена, если для расширения уже есть выбор. */
     fun showPicker(p: FmPane, item: FmItem) {
+        if (item.ext == "apk" || isBundle(item.ext)) { startInstall(p, item, true); return }
         val opts = optionsFor(p, item)
         if (opts.isEmpty()) { Fm.openWith(p, item, null); return }
         Fm.dlg = FmDlg.InstallPick(p, item, opts)
@@ -298,8 +296,11 @@ object ApkInstall {
             o.id == "builtin" -> Fm.openBuiltinForce(p, item)
             o.id == "adb" && isBundle(item.ext) -> Fm.installBundleViaAdb(p, item)
             o.id == "adb" -> Fm.installViaAdb(p, item)
-            // 9.0: без ADB и без root системный установщик тоже сначала показывает окно с версиями (установленная и новая), потом ставит системной сессией
-            o.id == "system" && item.ext == "apk" && !(Adb.isConnected && !FmIo.remote) -> Fm.installViaAdb(p, item)
+            // 10.0: «ADB-phon с подтверждением»: окно с версиями, затем своя сессия установки с подтверждением Android, даже при связи ADB
+            o.id == "session" && isBundle(item.ext) -> Fm.installBundleViaAdb(p, item, quiet = false)
+            o.id == "session" -> Fm.installViaAdb(p, item, quiet = false)
+            // файл не на этом устройстве и не в сетевой папке: системному установщику его не передать, ставится сессией после окна с версиями
+            o.id == "system" && item.ext == "apk" && p.src != "local" && p.src != "smb" -> Fm.installViaAdb(p, item, quiet = false)
             else -> Fm.openWith(p, item, o.component ?: o.pkg, if (o.id == "system" || item.ext == "apk") APK_MIME else null)
         }
     }
@@ -308,6 +309,11 @@ object ApkInstall {
 @Composable
 fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    // 10.0: пакеты (.apk, .apks, .xapk, .apkm) открывают единое окно выбора установщика
+    if (d.item.ext == "apk" || ApkInstall.isBundle(d.item.ext)) {
+        InstallerDialog(d.opts, d.item.name, onPick = { o, rem -> InstallerStore.afterPick(ctx, o.id, rem); close(); ApkInstall.run(d.pane, d.item, o) }, onDismiss = close)
+        return
+    }
     val savedId = remember { ApkInstall.saved(ctx, d.item.ext) }
     var remember by remember { mutableStateOf(savedId != null) }
     val tv = Marq.tv
@@ -335,7 +341,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                 }
                 // 9.2: флажок «Запомнить» виден всегда (раньше только при выключенном «Спрашивать», когда окно не показывается); один фокус на всей строке: ОК пультом и касание переключают
                 Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
+                    BigCheckbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
                 }
                 Text(stringResource(R.string.inst_remember_note), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
             }

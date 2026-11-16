@@ -34,9 +34,11 @@ object AppBackup {
     private const val ITER = 300_000
 
     /** Файлы настроек, которые не входят в копию: адрес папки копий (он свой на каждом устройстве) и служебные отметки. */
-    val EXCLUDE_KEYS = setOf("adbphon:backup_tree", "adbphon:backup_auto_last", "adbphon:upd_last")
+    val EXCLUDE_KEYS = setOf("adbphon:backup_tree", "adbphon:backup_auto_last", "adbphon:upd_last",
+        // 10.0: пароль автокопии зашифрован ключом Keystore этого устройства (на другом не расшифруется), итог автокопии тоже свой
+        "adbphon:bkp_auto_pass", "adbphon:bkp_auto_result")
     /** net_fav хранится отдельно (пароли в нём шифрует Keystore этого устройства), служебные файлы библиотек пропускаются. */
-    private fun skipPrefs(n: String) = n == "net_fav" || n.startsWith("androidx.") || n.startsWith("WebView") || n.startsWith("com.") || n.contains("_preferences_")
+    private fun skipPrefs(n: String) = n == "net_fav" || n == "ts_api" || n.startsWith("androidx.") || n.startsWith("WebView") || n.startsWith("com.") || n.contains("_preferences_")
     /** Файлы filesDir, входящие в копию как секреты. */
     private val SECRET_FILES = listOf("adb_key.pk8", "adb_cert.der", "clouds.conf")
 
@@ -197,21 +199,8 @@ object AppBackup {
         return f.absolutePath to f
     }
 
-    /** Автокопия раз в сутки или неделю (настройка, по умолчанию выключена): полная, с паролями и токенами, без шифрования (фразы нет). */
-    fun autoIfDue(ctx: Context) {
-        val sp = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
-        val mode = sp.getInt("backup_auto", 0)
-        if (mode == 0) return
-        val period = if (mode == 1) 24L * 3600_000 else 7L * 24 * 3600_000
-        if (System.currentTimeMillis() - sp.getLong("backup_auto_last", 0L) < period) return
-        Thread {
-            runCatching {
-                val (data, _) = create(ctx, null)
-                saveAnywhere(ctx, data, "ADB-phon-backup-auto-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + "." + EXT)
-                sp.edit().putLong("backup_auto_last", System.currentTimeMillis()).apply()
-            }.onFailure { AppLog.e("ADBphon", "auto backup", it) }
-        }.start()
-    }
+    /** 10.0: автокопия по расписанию ведёт [BkAuto] (место и пароль последней копии, планировщик, ротация, уведомление). */
+    fun autoIfDue(ctx: Context) = BkAuto.onAppStart(ctx)
 
     // ------------------------------------------------------------------ восстановление
 

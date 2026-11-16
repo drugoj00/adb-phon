@@ -285,7 +285,8 @@ class AndroidFs(private val host: String, private val port: Int, private val alt
     override fun close() { /* соединение общее для панелей и экрана: закрывается командой «Отключить» */ }
     override suspend fun ping(path: String) { link().shell("echo ok", 8_000) }
 
-    private val line = Regex("""^(\S{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+(.+)$""")
+    private val line = Regex("""^(\S{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+(?:\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+(.+)$""")
+    private val lineDate = Regex("""\s(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s""")   // 10.0 (chk): дата строки ls для сортировки «по дате»
     private fun q(p: String) = AdbLink.q(p)
     private fun isApk(n: String) = n.lowercase().endsWith(".apk")
 
@@ -304,7 +305,7 @@ class AndroidFs(private val host: String, private val port: Int, private val alt
             val name = m.groupValues[3].substringBefore(" -> ")
             if (name.startsWith(".")) return@mapNotNull null
             val t = m.groupValues[1][0]
-            FsEntry(name, path.trimEnd('/') + "/" + name, t == 'd' || (t == 'l' && !isApk(name)), m.groupValues[2].toLongOrNull() ?: 0L)
+            FsEntry(name, path.trimEnd('/') + "/" + name, t == 'd' || (t == 'l' && !isApk(name)), m.groupValues[2].toLongOrNull() ?: 0L, lineDate.find(l.trim())?.let { d -> d.groupValues[1] + " " + d.groupValues[2] } ?: "")
         }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     }
 

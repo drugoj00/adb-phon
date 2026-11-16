@@ -17,6 +17,7 @@ import java.io.File
 class BackupTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!StandGuard.allowed(this)) { finish(); return }
         val cmd = intent.getStringExtra("cmd").orEmpty()
         val pass = intent.getStringExtra("pass")?.toCharArray()
         val file = intent.getStringExtra("file") ?: "/sdcard/Download/test.adbpb"
@@ -111,6 +112,33 @@ class BackupTestActivity : Activity() {
                     "wrongpass" -> {
                         val r = runCatching { AppBackup.parse(File(file).readBytes(), pass) }.exceptionOrNull()
                         log("wrongpass: ${r?.javaClass?.simpleName}")
+                    }
+                    // 10.0: автокопия сейчас (без проверки срока) и самопроверка файла «Копии с данными» (.ab): --es file путь [--es pass пароль]
+                    "autonow" -> log("autonow: " + kotlinx.coroutines.runBlocking { BkAuto.run(applicationContext, true) }.replace('\n', '|'))
+                    "abcheck" -> {
+                        val r = File(file).inputStream().buffered().use { BkPack.read(it, pass) }
+                        log("abcheck ok: ${r.meta.pkg} v${r.meta.versionName} user=${r.meta.user} model=${r.meta.model} sdk=${r.meta.sdk} signer=${r.meta.signer.take(16)} parts=${r.parts} bytes=${r.bytes}")
+                    }
+                    // 10.0 bk2: копия настроек в запомненную папку (как кнопка «Создать копию») и список копий оттуда с «что внутри»
+                    "bk2make" -> log("bk2make: " + kotlinx.coroutines.runBlocking { BkFlow.makeSettings(applicationContext, BkStore.last(applicationContext, BkStore.KEY_SETTINGS), BkStore.passForCopy(applicationContext)) {} }.text.replace('\n', '|'))
+                    "bk2list" -> kotlinx.coroutines.runBlocking {
+                        val key = if (intent.getStringExtra("kind") == "data") BkStore.KEY_DATA else BkStore.KEY_SETTINGS
+                        val p = BkStore.last(applicationContext, key)
+                        val o = BkStore.open(applicationContext, p)
+                        try {
+                            log("bk2list: " + BkStore.display(applicationContext, p))
+                            BkList.of(BkStore.list(o), if (key == BkStore.KEY_DATA) BkNames.DATA_EXT else BkNames.SETTINGS_EXT).forEach { e -> log("bk2list: " + BkList.timeText(e) + " " + e.size + " " + e.name + " " + BkFlow.inside(applicationContext, o, e)) }
+                        } finally { o.close() }
+                    }
+                    // 10.0 bk3: любой файл копии: что внутри по содержимому (--es file путь [--es pass пароль]) или все копии папки (без file)
+                    "bk3kind" -> kotlinx.coroutines.runBlocking {
+                        val one = intent.getStringExtra("file")
+                        val files = if (!one.isNullOrEmpty()) listOf(File(one)) else File(BkStore.last(applicationContext, BkStore.KEY_SETTINGS).path).listFiles()?.filter { it.isFile && BkDetect.isCopyName(it.name) }.orEmpty()
+                        for (f in files) {
+                            val head = f.inputStream().use { i -> val b = ByteArray(256 * 1024); var n = 0; while (n < b.size) { val r = i.read(b, n, b.size - n); if (r < 0) break; n += r }; b.copyOf(n) }
+                            val c = BkDetect.detect(f.name, head, pass)
+                            log("bk3kind: ${f.name} parts=${c.parts} enc=${c.encrypted} foreign=${c.foreign} unknown=${c.unknown} pkg=${c.meta?.pkg} user=${c.meta?.user}")
+                        }
                     }
                     else -> log("unknown cmd")
                 }

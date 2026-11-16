@@ -1,6 +1,9 @@
 package app.adbphon
 
 import android.graphics.Bitmap
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.graphics.BitmapFactory
 import android.media.MediaCodec
 import android.media.MediaFormat
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Button
@@ -27,7 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -117,7 +121,8 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
                 val wm = l.shell("wm size 2>&1")
                 val m = Regex("""(?:Override|Physical) size:\s*(\d+)x(\d+)""").findAll(wm).lastOrNull()
                 physW = m?.groupValues?.get(1)?.toIntOrNull() ?: 0; physH = m?.groupValues?.get(2)?.toIntOrNull() ?: 0
-                                state = 2; status = ""
+                state = 2; status = ""
+                startAudio(l, my)
                 while (isActive && gen == my) {
                     val t0 = System.currentTimeMillis()
                     val ok = runCatching { h264Round(l, my) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; false }
@@ -130,8 +135,107 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
         }
     }
 
+    // ---------- звук с устройства (10.0) ----------
+    // scrcpy-server (Apache-2.0, Genymobile) запускается на управляемом устройстве через то же ADB-подключение и отдаёт звук как PCM; воспроизводит AudioTrack.
+    // Видео и ввод остаются прежними (screenrecord, запасной screencap, input). Нужен Android 11 и новее на управляемом устройстве.
+    /** Звук включён (по умолчанию да); громкость относительна громкости самого управляющего устройства. */
+    var audioOn by mutableStateOf(true)
+    var volume by mutableStateOf(0.6f)
+    /** Пояснение под кнопками: «звук недоступен…» или причина неудачи; пусто: всё в порядке. */
+    var audioNote by mutableStateOf("")
+    /** 0 нет, 1 запускается, 2 звук идёт. */
+    var audioState by mutableStateOf(0)
+    private var audioJob: Job? = null
+    @Volatile private var track: AudioTrack? = null
+    @Volatile private var aSock: java.io.Closeable? = null
+
+    fun switchAudio(on: Boolean) { audioOn = on; val l = link; if (on && l != null && state == 2) startAudio(l, gen) else { stopAudio(); if (!on) audioNote = "" } }
+    fun changeVolume(v: Float) { volume = v; runCatching { track?.setVolume(v) } }
+
+    private fun stopAudio() {
+        audioJob?.cancel(); audioJob = null
+        runCatching { track?.pause(); track?.release() }; track = null
+        runCatching { aSock?.close() }; aSock = null
+        audioState = 0
+    }
+
+    private fun readN(i: java.io.InputStream, n: Int): ByteArray {
+        val b = ByteArray(n); var got = 0
+        while (got < n) { val r = i.read(b, got, n - got); if (r < 0) throw java.io.IOException("eof"); got += r }
+        return b
+    }
+
+    private fun startAudio(l: AdbLink, my: Int) {
+        stopAudio()
+        if (!audioOn) return
+        audioJob = scope.launch {
+            audioNote = ""; audioState = 1
+            var server: java.io.Closeable? = null
+            try {
+                val sdk = l.shell("getprop ro.build.version.sdk", 6_000).trim().toIntOrNull() ?: 0
+                android.util.Log.i("ScreenAudio", "sdk=$sdk")
+                if (sdk in 1..29) { audioNote = app().getString(R.string.asc_audio_old); audioState = 0; return@launch }
+                val jar = java.io.File(app().cacheDir, "scrcpy-server.jar")
+                if (!jar.exists() || jar.length() < 1000) app().assets.open("scrcpy-server.jar").use { i -> jar.outputStream().use { i.copyTo(it) } }
+                val dest = "/data/local/tmp/adbphon-scrcpy.jar"
+                val have = l.shell("wc -c < $dest 2>/dev/null", 6_000).trim().toLongOrNull()
+                android.util.Log.i("ScreenAudio", "jar on device: $have, local: ${jar.length()}")
+                if (have != jar.length()) l.push(jar, dest, null)
+                val scid = "%08x".format(kotlin.random.Random.nextInt(0x10000000, 0x7ffffff0))
+                val sv = l.open("exec:CLASSPATH=$dest app_process / com.genymobile.scrcpy.Server 5.0.1 scid=$scid log_level=error video=false audio=true control=false audio_codec=raw send_dummy_byte=false send_device_meta=false tunnel_forward=true cleanup=false 2>&1")
+                server = sv
+                android.util.Log.i("ScreenAudio", "server started scid=$scid")
+                val svOut = StringBuilder()
+                Thread { runCatching { val i = sv.openInputStream(); val b = ByteArray(2048); while (true) { val n = i.read(b); if (n < 0) break; synchronized(svOut) { if (svOut.length < 600) svOut.append(String(b, 0, n)) } } } }.also { it.isDaemon = true }.start()
+                var ins: java.io.InputStream? = null
+                for (k in 0 until 25) {
+                    delay(300)
+                    if (!isActive || gen != my) return@launch
+                    val st = runCatching { l.open("localabstract:scrcpy_$scid") }.onFailure { android.util.Log.i("ScreenAudio", "open $k failed: ${it.message}") }.getOrNull() ?: continue
+                    android.util.Log.i("ScreenAudio", "socket opened, try $k")
+                    val i = st.openInputStream()
+                    val head = runCatching { readN(i, 4) }.getOrNull()
+                    android.util.Log.i("ScreenAudio", "header: ${head?.joinToString("") { "%02x".format(it) }}")
+                    if (head != null) {
+                        aSock = st; ins = i
+                        if (!(head[1].toInt() == 0x72 && head[2].toInt() == 0x61 && head[3].toInt() == 0x77)) throw java.io.IOException("codec")
+                        break
+                    }
+                    runCatching { st.close() }
+                }
+                val inp = ins ?: run { audioNote = app().getString(R.string.asc_audio_fail, synchronized(svOut) { svOut.toString().trim() }.take(120)); return@launch }
+                val rate = 48000
+                val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
+                val t = AudioTrack.Builder()
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MOVIE).build())
+                    .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
+                    .setBufferSizeInBytes(maxOf(minBuf, rate * 4 / 5)).setTransferMode(AudioTrack.MODE_STREAM).build()
+                t.setVolume(volume); t.play(); track = t; audioState = 2
+                android.util.Log.i("ScreenAudio", "playing")
+                val buf = ByteArray(1 shl 16)
+                while (isActive && gen == my && audioOn) {
+                    val h = readN(inp, 12)
+                    val size = ((h[8].toInt() and 0xff) shl 24) or ((h[9].toInt() and 0xff) shl 16) or ((h[10].toInt() and 0xff) shl 8) or (h[11].toInt() and 0xff)
+                    if (size > buf.size) throw java.io.IOException("size")
+                    if (size <= 0) continue
+                    var got = 0
+                    while (got < size) { val n = inp.read(buf, got, size - got); if (n < 0) throw java.io.IOException("eof"); got += n }
+                    t.write(buf, 0, size)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Throwable) { if (gen == my && audioOn) audioNote = app().getString(R.string.asc_audio_fail, e.message ?: e.javaClass.simpleName)
+            } finally {
+                runCatching { server?.close() }; runCatching { aSock?.close() }; aSock = null
+                runCatching { track?.pause(); track?.release() }; track = null
+                audioState = 0
+                withContext(kotlinx.coroutines.NonCancellable) { runCatching { l.shell("pkill -f 'adbphon-[s]crcpy'", 4_000) } }
+            }
+        }
+    }
+
     fun stop() {
         gen++; job?.cancel(); job = null; preview = false; off = false
+        stopAudio()
         runCatching { codec?.stop() }; runCatching { codec?.release() }; codec = null
         runCatching { input?.close() }; input = null
         state = 0
@@ -321,7 +425,7 @@ class AndroidScreenClient(private val devAddrs: List<String>) {
     }
 
     /** Сводка для стенда проверки (AndroidTestActivity): состояние, режим, размер видео, поворот, автоперезапуски, кадры. */
-    fun info(): String { val (w, h) = dispSize(); return "state=$state mode=$mode video=${vw}x$vh rot=$curRot disp=${w}x$h autoRestarts=$autoRestarts frames=$framesOut status=$status note=$note" }
+    fun info(): String { val (w, h) = dispSize(); return "state=$state mode=$mode video=${vw}x$vh rot=$curRot disp=${w}x$h autoRestarts=$autoRestarts frames=$framesOut status=$status note=$note audio=$audioState audioNote=$audioNote" }
 
     // каждая команда ввода идёт отдельным коротким запросом (постоянная оболочка у части устройств проглатывала команды `input`)
     private fun send(cmd: String) { val l = link ?: return; scope.launch { runCatching { l.shell(cmd, 6_000) } } }
@@ -376,7 +480,7 @@ fun AndroidScreenDialog(d: AdbDev, close: () -> Unit) {
 }
 
 @Composable
-private fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () -> Unit) {
+internal fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () -> Unit) {
     val vc = LocalViewConfiguration.current
     val density = LocalDensity.current
     var size by remember { mutableStateOf(IntSize(1, 1)) }
@@ -398,10 +502,13 @@ private fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () -
                     DropdownMenuItem({ Text((if (c.quality == "sharp") "✓ " else "") + stringResource(R.string.spc_q_sharp)) }, { c.quality = "sharp"; qMenu = false; c.start() })
                 }
             }
+            OutlinedButton({ c.switchAudio(!c.audioOn) }) { Text(stringResource(if (c.audioOn) R.string.asc_sound_on else R.string.asc_sound_off), fontSize = 12.sp) }
+            if (c.audioOn) NumberSlider(c.volume, { c.changeVolume(it) }, NumberSliderRules.SCREEN_VOL, stringResource(R.string.num_volume), Modifier.width(170.dp))   // 10.0 (num): число громкости справа, нажатие = ввод
             OutlinedButton({ kbd = !kbd }) { Text(stringResource(R.string.spc_keys), fontSize = 12.sp) }
             OutlinedButton({ c.start() }) { Text(stringResource(R.string.asc_restart), fontSize = 12.sp) }
         }
         if (c.note.isNotEmpty()) Text(c.note, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
+        if (c.audioNote.isNotEmpty()) Text(c.audioNote, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
         if (kbd) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

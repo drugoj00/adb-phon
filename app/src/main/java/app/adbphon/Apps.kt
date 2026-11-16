@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
@@ -168,7 +168,7 @@ object AppActions {
     }
 
     suspend fun reinstall(pkg: String): String {
-        val out = adb("cmd package install-existing $pkg") ?: return AutoAdb.hint()
+        val out = adb("cmd package install-existing --user \$(am get-current-user) $pkg") ?: return AutoAdb.hint()
         return if (out.contains("installed", true)) Fm.str(R.string.ap_done) else out.lines().firstOrNull { it.isNotBlank() } ?: Fm.str(R.string.ap_done)
     }
 
@@ -235,7 +235,8 @@ object AppActions {
     suspend fun installCopy(c: BkCopy): String {
         val files = c.files
         if (files.isEmpty()) return Fm.str(R.string.ap_copy_gone)
-        val via = ViaAsk.ask(ctx(), files.size) ?: return Fm.str(R.string.via_cancelled)
+        val via = ViaAsk.ask(ctx(), files.size, parts = true) ?: return Fm.str(R.string.via_cancelled)
+        if (via.id == "session") { Fm.installFilesViaSession(files); return Fm.str(R.string.inst_installing) }
         if (via.id != "adb") return Fm.str(if (ViaAsk.launchExternal(ctx(), files.first(), via)) R.string.via_started else R.string.fm_no_app)
         if (Adb.isConnected) {
             val r = AppBackups.installFiles(ctx(), c.pkg, files, c.code)
@@ -351,12 +352,12 @@ fun AppMenuItems(p: FmPane, f: FmItem, other: FmPane, copy: Boolean = true, clos
     }
     item(R.string.ap_info) { AppActions.info(pkg) }
     if (copy) item(R.string.fm_copy) { Fm.copyMove(false, p, other, listOf(f.name)) }
+    if (!removed) item(R.string.rp_menu_app) { Fm.repackApp(p, other, pkg, label) }
     if (!removed) item(R.string.ap_uninstall) {
         if (system) Fm.dlg = FmDlg.AppConfirm(Fm.str(R.string.ap_warn_system, f.name.substringBefore(" (")), pkg) else scope.launchSay { AppActions.uninstall(pkg, false) }
     }
     item(R.string.ap_data) {
-        val d = AppActions.dataDir(pkg)
-        if (File(d).isDirectory) { Fm.setSource(other, "local"); Fm.load(other, d) } else Fm.say(Fm.str(R.string.ap_no_data))
+        FmAppData.open(other, pkg)   // 10.0 (fm1): Android 11+ через root/ADB, точная причина вместо «без ADB»
     }
 }
 

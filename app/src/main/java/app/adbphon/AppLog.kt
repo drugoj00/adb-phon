@@ -23,11 +23,23 @@ object AppLog {
         enabled = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("log_on", false)
         val old = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            // известный сбой библиотеки поиска ADB в сети во втором пространстве (user 95): поток поиска закрывается, приложение живёт дальше
+            if (isKnownMdnsCrash(e)) { runCatching { write("W", "поиск ADB в сети остановлен: ${e.message}", force = true) }; return@setDefaultUncaughtExceptionHandler }
             runCatching { crashFile()?.writeText("${fmt.format(Date())} поток ${t.name}\n" + Log.getStackTraceString(e)) }
             runCatching { write("F", "СБОЙ в потоке ${t.name}: ${e.javaClass.simpleName}: ${e.message}", force = true) }
             old?.uncaughtException(t, e)
         }
         write("I", "журнал: запуск, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}", force = false)
+    }
+
+    /** Сбой «Ssaid settings not accessible» внутри поиска ADB по mDNS (AdbMdns): во втором пространстве (user 95) идентификатор устройства недоступен. */
+    fun isKnownMdnsCrash(e: Throwable): Boolean {
+        var c: Throwable? = e
+        while (c != null) {
+            if (c is IllegalStateException && c.message?.contains("Ssaid", ignoreCase = true) == true && e.stackTrace.any { it.className.contains("AdbMdns") || it.className.contains("AndroidUtils") }) return true
+            c = c.cause
+        }
+        return false
     }
 
     fun setEnabled(ctx: Context, on: Boolean) {
