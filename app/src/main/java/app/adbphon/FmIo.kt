@@ -67,7 +67,7 @@ object FmIo {
     /** ADB смотрит на другое устройство: пути «local» и «adb» тогда относятся к разным устройствам. */
     var remote = false
 
-    private fun s(id: Int, vararg a: Any): String = runCatching { app.getString(id, *a) }.getOrDefault("")
+    private fun s(id: Int, vararg a: Any): String = runCatching { (runCatching { Fm.sctx }.getOrNull() ?: app).getString(id, *a) }.getOrDefault("")
     private fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
     /** Имя с адресом источника («smb://хост/папка/файл», так называются отмеченные в дереве сетевые элементы) уже полный путь: к папке не приклеивается. */
     fun join(dir: String, name: String) = if (name.contains("://")) name else dir.trimEnd('/') + "/" + name
@@ -76,7 +76,10 @@ object FmIo {
     /** Понятный текст ошибки без упоминания связи для обычного режима. */
     fun nice(e: Throwable): String {
         val m = e.message.orEmpty()
-        return if (m.contains("connect()") || m.contains("not connected", true)) s(R.string.fm_err_adb_need) else m.ifBlank { e.javaClass.simpleName }
+        if (m.contains("connect()") || m.contains("not connected", true)) return s(R.string.fm_err_adb_need)
+        // 10.0: сетевые источники (WebDAV, FTP, SFTP, SMB по сети): понятный текст вместо «HTTP 402», «UnknownHostException», «SSLHandshakeException»
+        runCatching { NetErrText.forThrowable(runCatching { Fm.sctx }.getOrNull() ?: app, e) }.getOrNull()?.let { return it }
+        return m.ifBlank { e.javaClass.simpleName }
     }
 
     private suspend fun sh(cmd: String, timeout: Long = 25_000): String = Adb.shell(cmd, timeout)
@@ -97,7 +100,7 @@ object FmIo {
             if (l.isEmpty() && (out.contains("Permission denied") || out.contains("No such file") || out.contains("Not a directory"))) error(out.lines().first { it.isNotBlank() })
             l
         }
-        "smb" -> (p.smb as? ArchiveFs)?.let { a -> withContext(Dispatchers.IO) { a.items(path) } } ?: (p.smb ?: error("smb")).list(path).map { FmItem(it.name, it.isDir, it.size, "") }
+        "smb" -> (p.smb as? ArchiveFs)?.let { a -> withContext(Dispatchers.IO) { a.items(path) } } ?: (p.smb ?: error("smb")).list(path).map { FmItem(it.name, it.isDir, it.size, it.date) }   // 10.0 (chk): дата сети не теряется (сортировка «по дате» в SMB/SFTP/FTP/WebDAV)
         else -> withContext(Dispatchers.IO) {
             if (restricted(path)) throw NeedPriv()
             val d = File(path)
@@ -396,7 +399,7 @@ object FmIo {
                 val f = File(path)
                 val size = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length()
                 val cnt = if (f.isDirectory) f.walkTopDown().count() - 1 else 0
-                sb.append(s(R.string.fm_type)).append(": ").append(if (f.isDirectory) "dir ($cnt)" else "file").append('\n')
+                sb.append(s(R.string.fm_type)).append(": ").append(if (f.isDirectory) s(R.string.fm_type_dir, cnt) else s(R.string.fm_type_file)).append('\n')
                 sb.append(s(R.string.fm_size)).append(": ").append(fmSize(size)).append('\n')
                 sb.append(s(R.string.fm_rights)).append(": ").append(if (f.canRead()) "r" else "-").append(if (f.canWrite()) "w" else "-").append(if (f.canExecute()) "x" else "-").append('\n')
                 sb.append(s(R.string.fm_modified)).append(": ").append(SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date(f.lastModified()))).append('\n')
