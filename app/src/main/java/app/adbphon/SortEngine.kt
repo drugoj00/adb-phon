@@ -128,13 +128,50 @@ class SortCtx(
 )
 
 object SortEngine {
+    // 10.0 (chk): кириллица по алфавиту (русский и украинский вместе): ґ после г, ё после е, є после ё, і и ї после и, ў после у.
+    // По номерам символов Юникода ґ, є, і, ї, ў шли после «я» (украинские имена сортировались неверно).
+    private const val CYR = "абвгґдеёєжзиіїйклмнопрстуўфхцчшщъыьэюя"
+    private val cyrW: IntArray = IntArray(0x100) { -1 }.also { t ->
+        CYR.forEachIndexed { i, c -> t[c.code - 0x400] = 0xF100 + i; t[c.uppercaseChar().code - 0x400] = 0xF000 + i }
+    }
+
+    /** Вес символа при сравнении: кириллица по алфавиту (заглавные блоком перед строчными, как у латиницы), остальное по номеру. */
+    private fun w(c: Char, ignoreCase: Boolean): Int {
+        val x = if (ignoreCase) c.lowercaseChar() else c
+        val k = x.code - 0x400
+        if (k in 0 until 0x100) { val v = cyrW[k]; if (v >= 0) return v }
+        return x.code
+    }
+
+    /** Папка [dir] лежит внутри [base] (не равна ей). */
+    fun isInside(base: String, dir: String): Boolean {
+        val b = base.trimEnd('/'); val d = dir.trimEnd('/')
+        return d != b && d.startsWith("$b/")
+    }
+
+    /**
+     * Ключ даты для сравнения: «гггг-ММ-дд ЧЧ:мм[:сс]» и «дд.ММ.гггг ЧЧ:мм» (оба вида встречаются в источниках) приводятся к цифрам ггггММддЧЧммсс.
+     * Пустая или непонятная дата: null (такие элементы идут в конец списка в любом направлении).
+     */
+    fun dateKey(s: String): String? {
+        val t = s.trim()
+        if (t.isEmpty()) return null
+        val iso = if (t.length >= 10 && t[4] == '-' && t[7] == '-') t
+            else ruDate.find(t)?.let { m -> m.groupValues[3] + "-" + m.groupValues[2].padStart(2, '0') + "-" + m.groupValues[1].padStart(2, '0') + m.groupValues[4] } ?: return null
+        if (!(0..3).all { iso[it] in '0'..'9' }) return null
+        val sb = StringBuilder(14)
+        for (c in iso) { if (c in '0'..'9') { sb.append(c); if (sb.length == 14) break } }
+        while (sb.length < 14) sb.append('0')
+        return sb.toString()
+    }
+    private val ruDate = Regex("""^(\d{1,2})\.(\d{1,2})\.(\d{4})(.*)$""")
+
     /** Сравнение имён: «естественное» (file2 перед file10) и/или без учёта регистра. */
     fun nameCmp(a: String, b: String, natural: Boolean, ignoreCase: Boolean): Int {
-        if (!natural) return if (ignoreCase) a.compareTo(b, ignoreCase = true) else a.compareTo(b)
         var i = 0; var j = 0
         while (i < a.length && j < b.length) {
             val ca = a[i]; val cb = b[j]
-            if (ca in '0'..'9' && cb in '0'..'9') {
+            if (natural && ca in '0'..'9' && cb in '0'..'9') {
                 var si = i; while (si < a.length && a[si] == '0') si++
                 var sj = j; while (sj < b.length && b[sj] == '0') sj++
                 var ei = si; while (ei < a.length && a[ei] in '0'..'9') ei++
@@ -144,8 +181,7 @@ object SortEngine {
                 for (k in 0 until la) { val d = a[si + k].compareTo(b[sj + k]); if (d != 0) return d }
                 i = ei; j = ej
             } else {
-                val x = if (ignoreCase) ca.lowercaseChar() else ca
-                val y = if (ignoreCase) cb.lowercaseChar() else cb
+                val x = w(ca, ignoreCase); val y = w(cb, ignoreCase)
                 if (x != y) return x.compareTo(y)
                 i++; j++
             }
@@ -171,7 +207,7 @@ object SortEngine {
             SKey.NAME -> Comparator { a, b -> val c = byName.compare(a, b); if (asc) c else -c }
             SKey.EXT -> str { it.ext }
             SKey.SIZE -> num { it.size }
-            SKey.DATE -> num { it.date.takeIf { d -> d.isNotBlank() } }
+            SKey.DATE -> num { dateKey(it.date) }
             SKey.COLOR -> num { ctx.color(it) }
             SKey.COUNT -> num { ctx.count(it).takeIf { n -> n >= 0 } }
             SKey.TITLE -> str { ctx.meta(it)?.title }

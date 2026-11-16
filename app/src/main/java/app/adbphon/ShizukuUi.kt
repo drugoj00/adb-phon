@@ -12,7 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,9 +49,10 @@ fun ShizukuSection() {
         fontSize = 13.sp, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f),
     )
     if (msg.isNotEmpty()) Text(msg, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton({
-            if (busy) return@OutlinedButton
+    // 10.0 (set): строки-действия вместо овальных кнопок
+    run {
+        SetAction(SetIcons.start, stringResource(R.string.shz_start), enabled = !busy && !on) {
+            if (busy) return@SetAction
             busy = true
             scope.launch {
                 val r = ShizukuHost.start(ctx)
@@ -63,15 +64,15 @@ fun ShizukuSection() {
                 }
                 busy = false
             }
-        }, Modifier.weight(1f), enabled = !busy && !on) { Text(stringResource(R.string.shz_start)) }
-        OutlinedButton({
-            if (busy) return@OutlinedButton
+        }
+        SetAction(SetIcons.stop, stringResource(R.string.shz_stop), enabled = !busy && on) {
+            if (busy) return@SetAction
             busy = true
             scope.launch { ShizukuHost.stop(ctx); msg = ""; busy = false }
-        }, Modifier.weight(1f), enabled = !busy && on) { Text(stringResource(R.string.shz_stop)) }
+        }
     }
     SettingSwitch(auto, { auto = it; ShizukuHost.setAuto(ctx, it) }, stringResource(R.string.shz_auto), stringResource(R.string.shz_auto_hint))
-    OutlinedButton({ appsDlg = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.shz_apps)) }
+    SetAction(SetIcons.apps, stringResource(R.string.shz_apps)) { appsDlg = true }
     if (appsDlg) ShizukuAppsDialog(on) { appsDlg = false }
 }
 

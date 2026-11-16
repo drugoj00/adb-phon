@@ -81,7 +81,14 @@ object SortMeta {
 
     fun get(path: String, it: FmItem): SMeta? = cache[ck(path, it)]
 
-    fun count(p: FmPane, path: String): Int = dirCnt[path] ?: p.kids[path]?.size ?: -1
+    /**
+     * Число элементов папки. 10.0 (chk): ключ = путь + дата папки (раньше только путь: после «Обновить» и изменения папки оставалось старое число,
+     * и сортировка «по количеству» не менялась до перезапуска).
+     */
+    fun count(p: FmPane, path: String, it: FmItem): Int = p.kids[path]?.size ?: dirCnt[ck(path, it)] ?: -1
+
+    /** Сколько папок сети или ADB пересчитывать за раз для «по количеству» (каждая папка = отдельный запрос списка). */
+    private const val NET_COUNT_MAX = 150
 
     private fun read(path: String, g: SGroup, it: FmItem, mmr: MediaMetadataRetriever): SMeta = runCatching {
         when (g) {
@@ -118,23 +125,27 @@ object SortMeta {
      * Выбор и положение списка не трогаются: строки списка имеют постоянные ключи.
      */
     suspend fun ensure(p: FmPane) {
-        if (p.src != "local") { p.tagNote = null; return }
+        // 10.0 (chk): теги читаются только у файлов телефона; число элементов папок считается и в сети, и по ADB (раньше там «по количеству» не работало)
+        val local = p.src == "local"
         class Job(val dir: String, val it: FmItem, val g: SGroup, val path: String)
         val lists = ArrayList<Pair<String, List<FmItem>>>()
         lists += p.path to p.items
         for ((k, v) in p.kids.toMap()) if (k in p.expanded) lists += k to v
         val jobs = ArrayList<Job>()
         for ((dir, list) in lists) {
-            val cfg = Fm.cfgFor(p, dir)
+            val cfg = if (dir == p.path) Fm.cfgFor(p, dir) else Fm.treeCfg(p, dir)   // та же настройка, что у строк дерева
             if (SGroup.values().none { cfg.needsMeta(it) }) continue
             for (it in list) {
                 val g = cfg.groupOf(it.isDir, it.ext)
                 if (!cfg.needsMeta(g)) continue
+                if (!local && g != SGroup.DIR) continue
                 val path = FmIo.join(dir, it.name)
-                val have = if (g == SGroup.DIR) dirCnt.containsKey(path) else cache.containsKey(ck(path, it))
+                // у сетевой папки без даты (источник её не даёт) число перечитывается при каждом обновлении списка: иначе оно не узнало бы об изменениях
+                val have = if (g == SGroup.DIR) (dirCnt.containsKey(ck(path, it)) && (local || it.date.isNotBlank())) || p.kids.containsKey(path) else cache.containsKey(ck(path, it))
                 if (!have) jobs += Job(dir, it, g, path)
             }
         }
+        if (!local && jobs.size > NET_COUNT_MAX) jobs.subList(NET_COUNT_MAX, jobs.size).clear()
         if (jobs.isEmpty()) { p.tagNote = null; return }
         if (cache.size > 60000) cache.clear()
         try {
@@ -144,7 +155,8 @@ object SortMeta {
                 withContext(Dispatchers.IO) {
                     for (j in jobs) {
                         currentCoroutineContext().ensureActive()
-                        if (j.g == SGroup.DIR) dirCnt[j.path] = runCatching { File(j.path).list()?.size }.getOrNull() ?: -1
+                        if (j.g == SGroup.DIR) dirCnt[ck(j.path, j.it)] = if (local) runCatching { File(j.path).list()?.size }.getOrNull() ?: -1
+                            else try { FmIo.list(p, j.path).size } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { -1 }
                         else {
                             val m = read(j.path, j.g, j.it, mmr)
                             cache[ck(j.path, j.it)] = m
@@ -201,7 +213,7 @@ fun FmGroupHeader(g: SGroup, count: Int, closed: Boolean, onClick: () -> Unit) {
     ) {
         Icon(if (closed) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         SortGroupIcon(g, 20.dp)
-        androidx.compose.material3.Text(sgName(g, header = true) + "  ·  " + count, Modifier.padding(start = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        FloorText(sgName(g, header = true) + "  ·  " + count, Modifier.padding(start = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1)
     }
 }
 
@@ -227,48 +239,48 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 // область действия настройки
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(!folderOn, { SortStore.clearFolder(p, p.path) }, { androidx.compose.material3.Text(stringResource(R.string.sort_scope_all), fontSize = 12.sp) })
-                    FilterChip(folderOn, { if (!folderOn) SortStore.setFolder(p, p.path, cfg) }, { androidx.compose.material3.Text(stringResource(R.string.sort_scope_dir), fontSize = 12.sp) })
+                    FilterChip(!folderOn, { SortStore.clearFolder(p, p.path) }, { FloorText(stringResource(R.string.sort_scope_all), fontSize = 12.sp) })
+                    FilterChip(folderOn, { if (!folderOn) SortStore.setFolder(p, p.path, cfg) }, { FloorText(stringResource(R.string.sort_scope_dir), fontSize = 12.sp) })
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 // выбор группы
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     cfg.order.forEach { g ->
-                        FilterChip(tab == g, { tab = g }, { androidx.compose.material3.Text(sgName(g) + (counts[g]?.let { " $it" } ?: ""), fontSize = 12.sp) }, leadingIcon = { SortGroupIcon(g, 18.dp) })
+                        FilterChip(tab == g, { tab = g }, { FloorText(sgName(g) + (counts[g]?.let { " $it" } ?: ""), fontSize = 12.sp) }, leadingIcon = { SortGroupIcon(g, 18.dp) })
                     }
                 }
                 val ks = SortGroups.keys.getValue(tab)
                 ks.forEach { k ->
                     Row(Modifier.fillMaxWidth().clickable { edit { it.withKey(tab, k, it.ascOf(tab)) } }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(cfg.keyOf(tab) == k, { edit { it.withKey(tab, k, it.ascOf(tab)) } }, Modifier.size(40.dp))
-                        androidx.compose.material3.Text(skName(k), fontSize = t)
+                        FloorText(skName(k), fontSize = t)
                     }
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), true) } }, { androidx.compose.material3.Text("↑ " + stringResource(R.string.fm_sort_asc), fontSize = 12.sp) })
-                    FilterChip(!cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), false) } }, { androidx.compose.material3.Text("↓ " + stringResource(R.string.fm_sort_desc), fontSize = 12.sp) })
+                    FilterChip(cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), true) } }, { FloorText("↑ " + stringResource(R.string.fm_sort_asc), fontSize = 12.sp) })
+                    FilterChip(!cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), false) } }, { FloorText("↓ " + stringResource(R.string.fm_sort_desc), fontSize = 12.sp) })
                 }
                 if (tab != SGroup.DIR && tab != SGroup.FILE) {
                     Row(Modifier.fillMaxWidth().clickable(enabled = !cfg.grouped) { edit { it.copy(sep = if (tab in it.sep) it.sep - tab else it.sep + tab) } }, verticalAlignment = Alignment.CenterVertically) {
                         Switch(tab in cfg.sep || cfg.grouped, { v -> edit { it.copy(sep = if (v) it.sep + tab else it.sep - tab) } }, enabled = !cfg.grouped)
-                        androidx.compose.material3.Text(stringResource(R.string.sort_separate), Modifier.padding(start = 8.dp), fontSize = 13.sp)
+                        FloorText(stringResource(R.string.sort_separate), Modifier.padding(start = 8.dp), fontSize = 13.sp)
                     }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 @Composable fun Sw(label: Int, on: Boolean, set: (Boolean) -> Unit) {
                     Row(Modifier.fillMaxWidth().clickable { set(!on) }, verticalAlignment = Alignment.CenterVertically) {
                         Switch(on, set)
-                        androidx.compose.material3.Text(stringResource(label), Modifier.padding(start = 8.dp), fontSize = 13.sp)
+                        FloorText(stringResource(label), Modifier.padding(start = 8.dp), fontSize = 13.sp)
                     }
                 }
                 Sw(R.string.sort_grouped, cfg.grouped) { v -> edit { it.copy(grouped = v) } }
                 Sw(R.string.sort_natural, cfg.natural) { v -> edit { it.copy(natural = v) } }
                 Sw(R.string.sort_nocase, cfg.ignoreCase) { v -> edit { it.copy(ignoreCase = v) } }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                androidx.compose.material3.Text(stringResource(R.string.sort_order), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                FloorText(stringResource(R.string.sort_order), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
                 cfg.order.forEachIndexed { i, g ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.Text("${i + 1}.  " + sgName(g), Modifier.weight(1f), fontSize = t)
+                        FloorText("${i + 1}.  " + sgName(g), Modifier.weight(1f), fontSize = t)
                         IconButton({ if (i > 0) edit { c -> c.copy(order = c.order.toMutableList().also { l -> l[i] = l[i - 1]; l[i - 1] = g }) } }, Modifier.size(36.dp), enabled = i > 0) {
                             Icon(Icons.Filled.ArrowUpward, stringResource(R.string.sort_move_up), Modifier.size(18.dp)) }
                         IconButton({ if (i < cfg.order.lastIndex) edit { c -> c.copy(order = c.order.toMutableList().also { l -> l[i] = l[i + 1]; l[i + 1] = g }) } }, Modifier.size(36.dp), enabled = i < cfg.order.lastIndex) {
@@ -277,7 +289,7 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(close) { androidx.compose.material3.Text(stringResource(R.string.fm_apply)) } },
-        dismissButton = { TextButton({ edit { SortCfg() } }) { androidx.compose.material3.Text(stringResource(R.string.sort_reset)) } },
+        confirmButton = { TextButton(close) { FloorText(stringResource(R.string.fm_apply)) } },
+        dismissButton = { TextButton({ edit { SortCfg() } }) { FloorText(stringResource(R.string.sort_reset)) } },
     )
 }

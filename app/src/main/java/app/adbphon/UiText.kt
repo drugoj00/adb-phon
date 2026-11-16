@@ -120,6 +120,9 @@ fun Text(
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
 ) {
+    // 10.0 (tvfont): в окнах на ТВ мелкий размер поднимается до минимума роли (TvFont.kt); вне окон ТВ размер тот же
+    val fontSize = tvFontSize(fontSize, style)
+    val lineHeight = tvLineHeight(fontSize, lineHeight, style)
     if (maxLines != 1 || Marq.effective == 2) {
         androidx.compose.material3.Text(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, onTextLayout ?: {}, style)
         return
@@ -162,7 +165,7 @@ fun Text(
     minLines: Int = 1,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
-) = androidx.compose.material3.Text(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, emptyMap(), onTextLayout ?: {}, style)
+) = FloorText(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, emptyMap(), onTextLayout, style)
 
 // ------------------------------------------------------------------ сворачиваемые пояснения в настройках
 
@@ -179,23 +182,16 @@ fun Collapsible(title: String, modifier: Modifier = Modifier, bold: Boolean = fa
     var open by remember(key) { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth().clickable { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (titleContent != null) titleContent() else androidx.compose.material3.Text(title, Modifier.weight(1f), fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium)
+            if (titleContent != null) titleContent() else FloorText(title, Modifier.weight(1f), fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium)
             Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         }
         AnimatedVisibility(open, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { body() } }
     }
 }
 
-/** Переключатель с названием; пояснение раскрывается по нажатию на название. */
+/** Переключатель с названием; set2: строка как в «Меню приложений» (название, ⓘ с пояснением, переключатель цветов темы справа), SettingsItems.kt. */
 @Composable
-fun SettingSwitch(checked: Boolean, onChange: (Boolean) -> Unit, title: String, hint: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        androidx.compose.material3.Switch(checked, onChange)
-        Collapsible(title, Modifier.weight(1f)) {
-            androidx.compose.material3.Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-        }
-    }
-}
+fun SettingSwitch(checked: Boolean, onChange: (Boolean) -> Unit, title: String, hint: String) = SetSwitchRow(checked, onChange, title, hint)
 
 /**
  * Название пункта с пояснением внутри него (правило владелицы): виден только заголовок, по нажатию на название под ним раскрывается пояснение,
@@ -208,10 +204,10 @@ fun HintTitle(
     hintColor: Color = Color.Unspecified, hintSize: TextUnit = 12.sp, hintStyle: TextStyle? = null,
 ) {
     Collapsible(title, modifier, titleContent = {
-        androidx.compose.material3.Text(title, color = titleColor, fontSize = titleSize, fontWeight = titleWeight, style = titleStyle ?: LocalTextStyle.current)
+        FloorText(title, color = titleColor, fontSize = titleSize, fontWeight = titleWeight, style = titleStyle ?: LocalTextStyle.current)
     }) {
         val dim = if (hintColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface.copy(alpha = .6f) else hintColor
-        androidx.compose.material3.Text(hint, color = dim, fontSize = if (hintStyle != null) TextUnit.Unspecified else hintSize, style = hintStyle ?: LocalTextStyle.current)
+        FloorText(hint, color = dim, fontSize = if (hintStyle != null) TextUnit.Unspecified else hintSize, style = hintStyle ?: LocalTextStyle.current)
     }
 }
 
@@ -222,13 +218,13 @@ fun ActionWithHint(label: String, hint: String, onClick: () -> Unit) {
     var open by remember(key) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.OutlinedButton(onClick, Modifier.weight(1f)) { androidx.compose.material3.Text(label) }
+            androidx.compose.material3.OutlinedButton(onClick, Modifier.weight(1f)) { FloorText(label) }
             androidx.compose.material3.IconButton({ open = !open }) {
                 Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
         }
         AnimatedVisibility(open, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            androidx.compose.material3.Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+            FloorText(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
         }
     }
 }

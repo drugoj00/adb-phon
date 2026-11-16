@@ -25,13 +25,24 @@ object Term {
     private const val MAX = 30_000
     private val sb = StringBuilder()
     private val ui = Handler(Looper.getMainLooper())
-    private var dirty = false
+    @Volatile private var dirty = false
     private var proc: Process? = null
     private var rootOut: OutputStream? = null
     private var adbSession: Adb.ShellSession? = null
-    private var gen = 0
+    @Volatile private var gen = 0
     private var helperCwd = "/sdcard"
     @Volatile private var helperBusy = false
+
+    // 10.0 (wad72): сеанс больше не кончается молча. Причина конца в журнал, при обрыве самостоятельное переподключение
+    // с возвратом в текущую папку; «[сеанс завершён]» только после exit или Ctrl+D (TermLogic).
+    /** Текущая папка сеанса (по приглашению оболочки, маркеру root или помощнику). */
+    @Volatile private var lastCwd = ""
+    @Volatile private var exitAt = 0L
+    @Volatile private var eofAt = 0L
+    @Volatile private var lastCmd = ""
+    private val attempts = ArrayList<Long>()
+    /** Связь с оболочкой прервалась и сама не вернулась: в окне кнопка «Переподключить». */
+    val lost = mutableStateOf(false)
 
     private val promptMark = Regex("@@TVOPS@@([^\n]*)\n")
     private const val PS_ECHO = "echo \"@@TVOPS@@\$(pwd)\"\n"
@@ -56,11 +67,12 @@ object Term {
     private fun append(s: String) {
         var clean = ansi.replace(s, "").replace("\r\n", "\n").replace("\r", "")
         // 9.0: root-оболочка без терминала приглашения не печатает: после каждой команды она выводит маркер с текущим каталогом, здесь он превращается в строку-приглашение
-        if (mode.value == "root") clean = promptMark.replace(clean) { m -> prompt(m.groupValues[1].trim().ifEmpty { "/" }) }
+        if (mode.value == "root") clean = promptMark.replace(clean) { m -> val d = m.groupValues[1].trim().ifEmpty { "/" }; lastCwd = d; prompt(d) }
         if (clean.isEmpty()) return
         synchronized(sb) {
             sb.append(clean)
             if (sb.length > MAX) { val cut = sb.length - MAX; sb.delete(0, cut); markPos = (markPos - cut).coerceAtLeast(0) }
+            if (mode.value == "adb") TermLogic.cwdFromText(sb.substring((sb.length - 400).coerceAtLeast(0)))?.let { lastCwd = it }
         }
         if (!dirty) { dirty = true; ui.postDelayed(flush, 100) }
     }
@@ -78,42 +90,83 @@ object Term {
     fun ensure(ctx: Context) {
         val w = wanted()
         if (running.value && mode.value == w) return
-        if (running.value) stop(quiet = true)
+        // смена способа (например, помощник -> ADB, когда появилась связь ADB): папка сохраняется, причина в журнал
+        if (running.value) { AppLog.i("Term", "консоль: способ ${mode.value} -> $w, папка $lastCwd"); stop(quiet = true) }
         if (w.isEmpty()) { running.value = false; mode.value = ""; return }
-        start(ctx, w)
+        start(ctx, w, lastCwd.ifEmpty { null })
     }
 
-    private fun start(ctx: Context, w: String) {
+    /** «Перезапустить»: новый сеанс с начала (папка по умолчанию). */
+    fun restart(ctx: Context) { stop(quiet = true); lastCwd = ""; lost.value = false; synchronized(attempts) { attempts.clear() }; ensure(ctx) }
+
+    /** «Переподключить» и самостоятельное переподключение: новый сеанс тем способом, что доступен сейчас, в прежней папке. */
+    fun reconnect(ctx: Context) {
+        lost.value = false
+        val w = wanted()
+        if (w.isEmpty()) { lost.value = true; note(ctx.getString(R.string.tc_no_access)); AppLog.i("Term", "консоль: переподключение невозможно, нет root, ADB и помощника"); return }
+        if (running.value) stop(quiet = true)
+        AppLog.i("Term", "консоль: переподключение способом $w, папка $lastCwd")
+        start(ctx, w, lastCwd.ifEmpty { null }, again = true)
+    }
+
+    /** Сеанс закончился: решение (TermLogic) и запись причины в журнал. [opened]: сеанс успел открыться. */
+    private fun ended(ctx: Context, my: Int, m: String, opened: Boolean, detail: String) {
+        if (gen != my) return
+        running.value = false
+        val now = System.currentTimeMillis()
+        val end = TermLogic.endReason(exitAt, eofAt, now, opened, m, Adb.hasLink)
+        val w = wanted()
+        val n = synchronized(attempts) { attempts.removeAll { now - it > TermLogic.WINDOW_MS }; TermLogic.recent(attempts, now) }
+        val d = TermLogic.decide(end, n, w.isNotEmpty())
+        AppLog.i("Term", "консоль: сеанс $m закончился: $end ($detail); связь ADB=${Adb.hasLink}, root=${Adb.isRoot}, помощник=${AdbServer.up}, доступно=${w.ifEmpty { "нет" }}; папка $lastCwd; последняя команда «${lastCmd.take(60)}»; переподключений за минуту $n; " +
+            if (d.reconnect) "переподключение через ${d.delayMs} мс" else if (d.showEnded) "конец по команде" else "ждём кнопку «Переподключить»")
+        when {
+            d.showEnded -> note(ctx.getString(R.string.tc_ended))
+            d.reconnect -> {
+                note(ctx.getString(R.string.cld_tc_lost_auto))
+                synchronized(attempts) { attempts += now }
+                ui.postDelayed({ if (gen == my && !running.value) reconnect(ctx) }, d.delayMs)
+            }
+            else -> { lost.value = true; note(ctx.getString(R.string.cld_tc_lost)) }
+        }
+    }
+
+    private fun start(ctx: Context, w: String, cwd: String? = null, again: Boolean = false) {
         val my = ++gen
-        running.value = true; mode.value = w
+        running.value = true; mode.value = w; lost.value = false
+        exitAt = 0L; eofAt = 0L
+        if (again) note(ctx.getString(R.string.cld_tc_back) + (if (cwd != null) ": $cwd" else ""))
         when (w) {
             "root" -> {
                 thread(isDaemon = true) {
                     runCatching {
                         val p = Runtime.getRuntime().exec(arrayOf("su"))
+                        if (gen != my) { p.destroy(); return@thread }
                         proc = p; rootOut = p.outputStream
                         fun pump(s: java.io.InputStream) = thread(isDaemon = true) {
                             val r = java.io.InputStreamReader(s, Charsets.UTF_8); val cb = CharArray(2048)
                             while (gen == my) { val n = runCatching { r.read(cb) }.getOrDefault(-1); if (n < 0) break; append(String(cb, 0, n)) }
                         }
                         pump(p.inputStream); pump(p.errorStream)
-                        runCatching { p.outputStream.write(PS_ECHO.toByteArray()); p.outputStream.flush() }   // первое приглашение
+                        // первое приглашение; после переподключения сначала возврат в прежнюю папку (root без терминала: команда не печатается)
+                        runCatching { p.outputStream.write(((if (cwd != null) TermLogic.cdCmd(cwd) + " 2>/dev/null\n" else "") + PS_ECHO).toByteArray()); p.outputStream.flush() }
                         p.waitFor()
-                    }
-                    if (gen == my) { running.value = false; note(ctx.getString(R.string.tc_ended)) }
+                    }.onFailure { e -> AppLog.w("Term", "консоль: su не запустился: ${e.message}") }
+                    ended(ctx, my, "root", proc != null, "su: код " + runCatching { proc?.exitValue() }.getOrNull())
                 }
             }
             "helper" -> {
-                helperCwd = "/sdcard"; helperBusy = false
+                helperCwd = cwd ?: "/sdcard"; helperBusy = false; lastCwd = helperCwd
                 append(prompt(helperCwd))
             }
             else -> {
                 // открытие потока ADB — сетевая операция: только не в главном потоке
                 thread(isDaemon = true) {
-                    val s = Adb.openShell({ if (gen == my) append(it) }, { if (gen == my) { running.value = false; note(ctx.getString(R.string.tc_ended)) } })
+                    val s = Adb.openShell({ if (gen == my) append(it) }, { ended(ctx, my, "adb", true, "поток оболочки ADB закрыт") })
                     if (gen != my) { s?.close(); return@thread }
                     adbSession = s
-                    if (s == null) { running.value = false; note(ctx.getString(R.string.tc_no_access)) }
+                    if (s == null) ended(ctx, my, "adb", false, "поток оболочки ADB не открылся")
+                    else if (cwd != null && cwd != "/") write((TermLogic.cdCmd(cwd) + "\n").toByteArray())
                 }
             }
         }
@@ -153,7 +206,7 @@ object Term {
                 val i = out.lastIndexOf(mark)
                 var shown = out
                 if (i >= 0) {
-                    helperCwd = out.substring(i + mark.length).trim().ifEmpty { cwd }
+                    helperCwd = out.substring(i + mark.length).trim().ifEmpty { cwd }; lastCwd = helperCwd
                     shown = out.substring(0, i).trimEnd('\n', ' ')
                 }
                 append((if (shown.isEmpty()) "" else shown + "\n") + prompt(helperCwd))
@@ -165,6 +218,8 @@ object Term {
     /** Отправить введённую строку. На root и в режиме помощника ввод не печатается оболочкой — показываем его здесь; у ADB-терминала оболочка печатает его сама. */
     fun sendLine(line: String) {
         if (!running.value) return
+        lastCmd = line.trim()
+        if (TermLogic.isExitCmd(line)) exitAt = System.currentTimeMillis()
         // приглашение уже на экране; у root и помощника набранную строку добавляем сами (у adb shell её печатает оболочка)
         if (mode.value == "root" || mode.value == "helper") append(line + "\n")
         synchronized(sb) { markPos = sb.length }          // с этого места начинается вывод последней команды
@@ -191,7 +246,7 @@ object Term {
     }
 
     /** Служебная клавиша: Tab, Esc, Ctrl+D и т. п. (в виде байта). В режиме помощника недоступна. */
-    fun sendKey(code: Int) { if (running.value && mode.value != "helper") write(byteArrayOf(code.toByte())) }
+    fun sendKey(code: Int) { if (running.value && mode.value != "helper") { if (code == 4) eofAt = System.currentTimeMillis(); write(byteArrayOf(code.toByte())) } }
 
     /**
      * Ctrl+C. У ADB-терминала это настоящее прерывание; у root-оболочки терминала нет, поэтому прерывание

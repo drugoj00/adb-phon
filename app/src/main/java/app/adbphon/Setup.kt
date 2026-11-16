@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -55,14 +55,22 @@ object Setup {
     var askKey by mutableStateOf<String?>(null)
     private val lastAsk = HashMap<String, Long>()
     /** 9.3: «Не сейчас» на «Работа в фоне» и уведомления: не переспрашивать при каждой операции копирования, а только раз в 6 часов. */
-    fun snooze(key: String) { if (key == "battery" || key == "notif") lastAsk[key] = System.currentTimeMillis() + 6 * 3600_000L - 15_000L }
+    fun snooze(key: String) {
+        if (key == "battery" || key == "notif") {
+            val t = System.currentTimeMillis() + 6 * 3600_000L - 15_000L
+            lastAsk[key] = t
+            // 10.0: «Не сейчас» помнится и после перезапуска программы
+            runCatching { Fm.sctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putLong("snooze_$key", t).apply() }
+        }
+    }
 
     /** true, если разрешение есть. Иначе (не чаще раза в 15 секунд на разрешение) показывает окно с пояснением и кнопкой «Включить»; вызывающий код продолжает без него или ждёт возврата. */
     fun need(ctx: Context, key: String): Boolean {
         val st = steps.firstOrNull { it.key == key } ?: return true
         if (!st.visible(ctx) || st.ok(ctx)) return true
         val now = System.currentTimeMillis()
-        if (askKey == null && now - (lastAsk[key] ?: 0L) > 15_000L) { lastAsk[key] = now; askKey = key }
+        val last = lastAsk[key] ?: sp(ctx).getLong("snooze_$key", 0L).also { lastAsk[key] = it }
+        if (askKey == null && now - last > 15_000L) { lastAsk[key] = now; askKey = key }
         return false
     }
     /** Параметры разработчика выключены: показываем, как их включить, и после включения продолжаем подключение сами. */
