@@ -106,13 +106,7 @@ object RcloneConf {
     @Synchronized fun put(ctx: Context, name: String, type: String, token: String?, extra: List<Pair<String, String>>) {
         val f = Rclone.conf(ctx)
         val old = if (f.exists()) f.readText() else ""
-        val sec = buildString {
-            append("[$name]").append(NL).append("type = $type").append(NL)
-            if (token != null) append("token = ").append(token.replace(NL, "")).append(NL)
-            extra.forEach { (k, v) -> append("$k = $v").append(NL) }
-            append(NL)
-        }
-        save(ctx, (cut(old, name).trimEnd() + NL + NL + sec).trimStart())
+        save(ctx, CloudAccounts.confReplace(old, name, type, token, extra))     // раздел с этим именем заменяется, а не дублируется
     }
 
     @Synchronized fun remove(ctx: Context, name: String) {
@@ -201,6 +195,7 @@ class CloudFs(private val remote: String, private val display: String) : RemoteF
     override suspend fun list(path: String): List<FsEntry> {
         val type = CloudIcons.typeOfRemote(ctx, remote)
         if (CloudErr.fakeQuota) throw CloudErr.fromText(ctx, CloudErr.FAKE_BODY, type)
+        CloudTestHook.fakeErr?.let { throw CloudErr.fromText(ctx, it, type) }   // 10.0: стенд, подмена текста ошибки движка
         val lock = locks.getOrPut(remote) { kotlinx.coroutines.sync.Mutex() }
         // один запрос к облаку за раз: MEGA при параллельных входах отвечает пустым ответом («unexpected end of JSON input»)
         var r: Rclone.Result = lock.withLock { Rclone.run(ctx, listOf("lsjson", spec(path), "--no-mimetype", "--no-modtime") + Rclone.common, 150_000) }
@@ -296,12 +291,18 @@ object CloudAuth {
     var url by mutableStateOf("")
     var message by mutableStateOf("")
     var added by mutableStateOf<NetConn?>(null)
+    /** Тип облака, вход в которое идёт сейчас (для подсказки в окне ожидания). */
+    var curType by mutableStateOf("")
     /** Облако, для которого после неудачного входа предлагается свой ключ (иначе null). */
     var ownKeyFor by mutableStateOf<String?>(null)
     private var job: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var gen = 0
     private var appCtx: Context? = null
+    private var lastProvider: Provider? = null
+
+    /** 9.4: «Начать заново»: текущий вход отменяется и начинается новый с самого начала (новый адрес и выбор аккаунта), окно не закрывается. */
+    fun restart(ctx: Context) { lastProvider?.let { start(ctx, it) } }
 
     /** Отмена или сброс: процесс входа убивается, служба и блокировка сна снимаются. Страница «Готово» (LoginEcho) живёт сама до своего срока. */
     fun reset() {
@@ -314,7 +315,18 @@ object CloudAuth {
      * Страница входа открывается Chrome явным интентом (минуя системный выбор приложений для ссылок: на A14 он стоит у LinkSheet, а страницы
      * accounts.google.com могли уходить приложениям Google и почте). Chrome нет: браузер по умолчанию через CATEGORY_APP_BROWSER, тоже без выбора приложений.
      */
-    fun openBrowser(ctx: Context) { if (url.isNotBlank()) openUrl(ctx, url) }
+    fun openBrowser(ctx: Context) {
+        if (url.isBlank()) return
+        // 10.0: облака, где вход во встроенное окно проверен (Яндекс): своё окно входа; нет WebView или адрес не https: внешний браузер
+        if (curType in CloudWeb.types && CloudWeb.open(ctx, url, null, null, true)) return
+        openUrl(ctx, url)
+    }
+
+    /** 10.0: открыть вход именно в Chrome (браузер по умолчанию в системе не меняется). */
+    fun openInChrome(ctx: Context) {
+        if (url.isBlank() || !chromeInstalled(ctx)) return
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).setPackage("com.android.chrome").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
 
     /** Любая ссылка: Chrome явным интентом, иначе браузер по умолчанию. */
     fun openUrl(ctx: Context, link: String) {
@@ -322,6 +334,14 @@ object CloudAuth {
         if (chromeInstalled(ctx) && runCatching {
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).setPackage("com.android.chrome").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.isSuccess) return
+        // 9.3: Samsung Internet (X98plus) принимал MAIN-интент с адресом, но адрес не открывал и показывал старую вкладку («Готово» прошлого входа): вход висел.
+        // Поэтому сначала явный ACTION_VIEW в установленный браузер (Samsung Internet, Firefox, Edge, Opera, Brave, Яндекс), и только потом старый путь.
+        val pm = ctx.packageManager
+        val known = listOf("com.sec.android.app.sbrowser", "org.mozilla.firefox", "org.mozilla.firefox_beta", "com.microsoft.emmx", "com.opera.browser", "com.opera.mini.native", "com.brave.browser", "com.yandex.browser", "com.kiwibrowser.browser", "com.vivaldi.browser", "com.duckduckgo.mobile.android")
+        val viaPkg = (known + runCatching { pm.queryIntentActivities(Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE), 0).map { it.activityInfo.packageName }.filter { it.contains("browser", true) } }.getOrDefault(emptyList())).distinct()
+            .firstOrNull { pkg -> runCatching { pm.getPackageInfo(pkg, 0); true }.getOrDefault(false) && runCatching {
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false) }
+        if (viaPkg != null) return
         val ok = runCatching {
             ctx.startActivity(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER).setData(uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }.isSuccess
@@ -347,13 +367,41 @@ object CloudAuth {
         android.widget.Toast.makeText(ctx, ctx.getString(R.string.cl_link_copied), android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * 9.3: второй аккаунт того же облака. Адрес входа движка (127.0.0.1:порт/auth) перенаправляет на страницу провайдера; сами берём этот переход и добавляем параметр «выбрать аккаунт»,
+     * иначе браузер с уже выполненным входом молча подставляет прежний аккаунт и второе облако не добавляется. Не вышло, остаётся исходный адрес.
+     */
+    /** Тест 14.11.2026: что подставлять в prompt для Google Диска (null: параметр убрать совсем). */
+    private const val GOOGLE_PROMPT = "select_account"
+    private fun withAccountChoice(local: String, type: String): String = runCatching {
+        val c = (java.net.URL(local).openConnection() as java.net.HttpURLConnection).apply { instanceFollowRedirects = false; connectTimeout = 4000; readTimeout = 4000 }
+        val code = c.responseCode; val loc = c.getHeaderField("Location"); c.disconnect()
+        if (code !in 300..399 || loc.isNullOrBlank()) return@runCatching local
+        AppLog.i("ADBphon", "вход в облако ($type): переход на " + loc.substringBefore('?'))
+        val u = Uri.parse(loc); val host = u.host.orEmpty()
+        AppLog.i("ADBphon", "вход в облако ($type): исходный адрес движка: " + u.queryParameterNames.sorted().joinToString(",") { n -> if (n in setOf("prompt", "access_type", "response_type", "scope", "include_granted_scopes")) n + "=" + u.getQueryParameter(n) else n })
+        val kv: Pair<String, String?> = when {
+            type == "drive" && host.endsWith("google.com") -> "prompt" to GOOGLE_PROMPT.takeIf { it != "NONE" }
+            type == "onedrive" && (host.contains("microsoftonline") || host.endsWith("live.com")) -> "prompt" to "select_account"
+            type == "dropbox" && host.endsWith("dropbox.com") -> "force_reauthentication" to "true"
+            type == "yandex" && host.contains("yandex") -> "force_confirm" to "yes"
+            else -> return@runCatching local
+        }
+        val b = u.buildUpon().clearQuery()
+        u.queryParameterNames.filter { it != kv.first }.forEach { n -> u.getQueryParameters(n).forEach { v -> b.appendQueryParameter(n, v) } }
+        kv.second?.let { b.appendQueryParameter(kv.first, it) }
+        val fin = b.build().toString()
+        AppLog.i("ADBphon", "вход в облако ($type): итоговый адрес: " + Uri.parse(fin).queryParameterNames.sorted().joinToString(",") { n -> if (n in setOf("prompt", "access_type", "response_type", "scope", "include_granted_scopes")) n + "=" + Uri.parse(fin).getQueryParameter(n) else n })
+        fin
+    }.getOrDefault(local)
+
     fun start(ctx0: Context, pr: Provider) {
         val ctx = ctx0.applicationContext
-        appCtx = ctx
+        appCtx = ctx; lastProvider = pr
         job?.cancel()
         val my = ++gen
-        phase = WAIT; url = ""; message = ""; added = null; ownKeyFor = null
-        LoginEcho.stop()
+        phase = WAIT; url = ""; message = ""; added = null; ownKeyFor = null; curType = pr.type
+        LoginEcho.stop(); CloudOverlay.reset(); HintRules.refreshAsync(ctx)
         // служба переднего плана и блокировка сна: вход идёт минуты (пароль, 2FA), пока приложение свёрнуто и браузер на экране
         CloudLoginService.start(ctx)
         job = scope.launch {
@@ -362,7 +410,11 @@ object CloudAuth {
                 var token: String? = null
                 val r = Rclone.run(ctx, listOf("authorize", pr.type) + (CloudClients.of(pr.type)?.let { listOf(it.first, it.second) } ?: emptyList()) + "--auth-no-open-browser", 20 * 60_000L) { l ->
                     val m = Regex("https?://127\\.0\\.0\\.1:\\d+/auth\\?state=\\S+").find(l)
-                    if (m != null && url.isEmpty()) { url = m.value; scope.launch { openBrowser(ctx) } }
+                    if (m != null && url.isEmpty()) {
+                        val local = m.value
+                        url = local     // сразу занято, повторные строки движка не запускают второй раз
+                        scope.launch { val u = withContext(Dispatchers.IO) { withAccountChoice(local, pr.type) }; if (gen == my) { url = u; openBrowser(ctx) } }
+                    }
                 }
                 val all = r.out + "\n" + r.err
                 val m = Regex("--->\\s*(\\{.*?\\})\\s*<---End paste", RegexOption.DOT_MATCHES_ALL).find(all)
@@ -387,7 +439,7 @@ object CloudAuth {
                     // Яндекс, Dropbox, Box: если движок не отдал логин, берём его прямо по токену (иначе подключение называется просто «Аккаунт»)
                     if (email == null && pr.type in setOf("yandex", "dropbox", "box")) email = providerLogin(pr.type, token)
                 }
-                val name = "acc_" + sha1(pr.type + ":" + (email ?: token.take(80))).take(10)
+                val name = CloudAccounts.name(pr.type, email, token)
                 RcloneConf.put(ctx, name, pr.type, token, cfg)
                 // вход прошёл, а логина нет и ключ общий: проверяем, открывается ли облако; не открывается из-за ключа, предлагаем свой ключ
                 if (email == null && pr.type != "drive" && pr.type != "onedrive" && pr.type in OwnKeys.types && OwnKeys.get(ctx, pr.type) == null) {
@@ -403,9 +455,20 @@ object CloudAuth {
                         }
                     }
                 }
+                // логин обязателен у облаков со входом через браузер: без него не создаём безымянное подключение «Аккаунт»
+                if (CloudAccounts.needLogin(pr.type, email)) {
+                    RcloneConf.remove(ctx, name)
+                    message = ctx.getString(R.string.cl_no_login); phase = FAIL
+                    return@launch
+                }
                 val title = (email ?: ctx.getString(R.string.cl_account)) + " (" + (pr.title ?: ctx.getString(pr.titleRes)) + ")"
                 val conn = NetConn("cloud", name, 0, title, "")
+                // тот же аккаунт (та же почта) второй раз: запись заменяется, а не добавляется; говорим об этом
+                val had = CloudAccounts.exists(NetStore.list(ctx), conn)
                 NetStore.save(ctx, conn)
+                // токен обновлён: открытые узлы этого аккаунта перечитываются с новым доступом
+                if (had) FmRootCfg.kids.keys.filter { it.contains("|$name|") || it.contains(name) }.forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }
+                if (had) android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(ctx, ctx.getString(R.string.cl_already, email ?: ""), android.widget.Toast.LENGTH_LONG).show() }
                 added = conn; phase = DONE
                 // автоматический возврат в приложение (если система позволяет); иначе уведомление и ссылка на странице «Готово»
                 CloudReturn.toFront(ctx)
