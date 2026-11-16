@@ -31,7 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -375,7 +375,7 @@ fun ScreenPcLive(c: ScreenPcClient) {
     val clip = c.clipFromPc
     if (clip != null) {
         val ctx = LocalContext.current
-        AlertDialog({ c.clipFromPc = null }, confirmButton = {
+        LAlertDialog({ c.clipFromPc = null }, confirmButton = {
             TextButton({
                 (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("PC", clip)); c.clipFromPc = null
             }) { Text(stringResource(R.string.spc_copy)) }

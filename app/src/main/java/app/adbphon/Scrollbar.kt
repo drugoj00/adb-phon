@@ -46,6 +46,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -132,6 +133,8 @@ private fun Modifier.sbar(state: ScrollableState, leftIgnored: Boolean, metrics:
     val widthDp by animateFloatAsState(if (barFocus) 16f else if (active) 8f else 6f, label = "sbW")
     val alpha by animateFloatAsState(if (active || barFocus) 1f else 0.7f, label = "sbA")
     val step = with(density) { 220.dp.toPx() }
+    val pageFn: (Int) -> Unit = remember(state, step) { { d: Int -> scope.launch { runCatching { state.animateScrollBy(step * 3 * d) } }; Unit } }
+    androidx.compose.runtime.DisposableEffect(state) { onDispose { SbHover.leave(state) } }
     this
         // пульт: стрелка в сторону полосы, когда дальше двигать фокус некуда, «берёт» полосу; дальше стрелки вверх/вниз прокручивают, влево/вправо/ОК/Назад отпускают
         .onPreviewKeyEvent { e ->
@@ -165,6 +168,11 @@ private fun Modifier.sbar(state: ScrollableState, leftIgnored: Boolean, metrics:
                     val ev = awaitPointerEvent(PointerEventPass.Initial)
                     val ch = ev.changes.firstOrNull() ?: continue
                     val vp = size.height.toFloat()
+                    // 10.0 (mouse): список под курсором для PAGE_UP / PAGE_DOWN аэромыши (SbHover)
+                    if (ch.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
+                        if (ev.type == PointerEventType.Exit) SbHover.leave(state)
+                        else if (ev.type == PointerEventType.Enter || ev.type == PointerEventType.Move) SbHover.enter(state, pageFn)
+                    }
                     val th = metrics(vp)?.let { SbMath.thumb(it.first, it.second, it.third, minThumb) }
                     val inZone = th != null && (if (left) ch.position.x <= zone else ch.position.x >= size.width - zone)
                     if (ev.type == PointerEventType.Move || ev.type == PointerEventType.Enter) active = inZone
@@ -275,8 +283,10 @@ fun Modifier.upToTop(scrolled: () -> Boolean, toTop: suspend () -> Unit): Modifi
 /**
  * 9.2: прокрутка перетаскиванием МЫШЬЮ (как пальцем): зажатая левая кнопка и движение вверх или вниз листают содержимое. Compose мышь для
  * перетаскивания не берёт (только колесо и полосу), поэтому на приставках с мышью страницу нельзя было «схватить». Клик по строке и кнопке
- * не страдает: листание начинается, только когда указатель ушёл дальше порога и ушёл в основном по вертикали; если кнопку держат неподвижно
- * дольше 0,5 с (долгое нажатие, перетаскивание файлов), прокрутка не включается. Отпустили с движением: инерция, как у касания.
+ * не страдает: листание начинается, только когда указатель ушёл дальше порога и ушёл в основном по вертикали. Отпустили с движением: инерция.
+ * 10.0 (mouse): без ограничения по времени (раньше после 0,5 с неподвижного удержания прокрутка не включалась, а аэромышью почти всегда
+ * сначала нажимают ОК и только потом ведут); жест не берётся, если его уже взял вложенный элемент (долгое нажатие открыло меню, ползунок).
+ * Нажатие без сведений о кнопке (аэромыши, виртуальные мыши) считается левой кнопкой. Скорость броска считается и при медленной отрисовке.
  * Ставится вместе с полосой прокрутки, то есть на каждый прокручиваемый контейнер.
  */
 fun Modifier.mouseDragScroll(state: androidx.compose.foundation.gestures.ScrollableState): Modifier = composed {
@@ -287,29 +297,39 @@ fun Modifier.mouseDragScroll(state: androidx.compose.foundation.gestures.Scrolla
         val slop = viewConfiguration.touchSlop
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
-            if (down.type != androidx.compose.ui.input.pointer.PointerType.Mouse || !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
+            if (!MouseBtn.isLeft(down.type, currentEvent.buttons)) return@awaitEachGesture
             val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
-            tracker.addPosition(down.uptimeMillis, down.position)
+            tracker.addPointerInputChange(down)
+            val ts = ArrayList<Long>(); val ys = ArrayList<Float>()
+            ts.add(down.uptimeMillis); ys.add(down.position.y)
             var last = down.position.y
             var dragging = false
+            var upAt = -1L
             while (true) {
                 val ev = awaitPointerEvent(PointerEventPass.Initial)
                 val c = ev.changes.firstOrNull { it.id == down.id } ?: break
-                if (!c.pressed) break
+                if (!c.pressed) { upAt = c.uptimeMillis; break }
+                if (c.isConsumed) break          // жест взял внешний обработчик (ползунок полосы)
                 if (!dragging) {
                     val dx = c.position.x - down.position.x; val dy = c.position.y - down.position.y
-                    if (c.uptimeMillis - down.uptimeMillis > 500) break
-                    if (kotlin.math.abs(dy) > slop && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) { dragging = true; last = c.position.y } else continue
+                    if (kotlin.math.abs(dy) > slop && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) { dragging = true; last = c.position.y }
+                    else {
+                        // вложенный элемент взял жест (долгое нажатие, ползунок, поле ввода): не листать
+                        val fin = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == down.id }
+                        if (fin == null || !fin.pressed || fin.isConsumed) break
+                        continue
+                    }
                 }
-                if (c.isConsumed) break
                 c.consume()
                 val dy = c.position.y - last
                 last = c.position.y
-                tracker.addPosition(c.uptimeMillis, c.position)
+                tracker.addPointerInputChange(c)
+                ts.add(c.uptimeMillis); ys.add(c.position.y)
                 state.dispatchRawDelta(-dy)
             }
-            if (dragging) {
-                val v = runCatching { tracker.calculateVelocity().y }.getOrDefault(0f)
+            if (dragging && upAt >= 0) {
+                var v = runCatching { tracker.calculateVelocity().y }.getOrDefault(0f)
+                if (kotlin.math.abs(v) < 200f) v = MouseFling.velocity(ts, ys, upAt)
                 if (kotlin.math.abs(v) > 200f) scope.launch { runCatching { state.scroll { with(flingNow) { performFling(-v) } } } }
             }
         }
