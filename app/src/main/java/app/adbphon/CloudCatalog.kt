@@ -168,7 +168,9 @@ object CloudCatalog {
         "acc_" + MessageDigest.getInstance("SHA-1").digest((type + ":" + ident.trim().lowercase()).toByteArray()).joinToString("") { "%02x".format(it) }.take(10)
 
     /** Короткая человекочитаемая причина по ответу движка. */
-    fun explain(ctx: Context, text: String): String {
+    fun explain(ctx: Context, text: String, full: String = text): String {
+        // 10.0: 402 (WebDAV Яндекса на бесплатном тарифе), место, TLS, 404, 5xx, тайм-аут: понятный текст; неверный логин (401/403) по-прежнему «Неверный логин…»
+        NetErrMap.classify(full)?.let { k -> if (k != NetErrMap.Kind.AUTH && k != NetErrMap.Kind.FORBIDDEN) { AppLog.i("ADBphon", "облако: проверка входа, ошибка $k"); return NetErrText.say(ctx, k) } }
         val t = text.lowercase()
         return when {
             "2fa" in t || "two-factor" in t || "multi-factor" in t || "otp" in t || "totp" in t || "mfa" in t -> ctx.getString(R.string.cl_err_2fa)
@@ -176,7 +178,7 @@ object CloudCatalog {
                 "login" in t || "password" in t || "authenticat" in t || "signature" in t || "not found" in t && "user" in t || "bad auth" in t -> ctx.getString(R.string.cl_err_bad)
             "429" in t || "rate" in t || "limit" in t || "quota" in t || "too many" in t || "try again" in t || "blocked" in t -> ctx.getString(R.string.cl_err_limit)
             "lookup" in t || "dial" in t || "timeout" in t || "timed out" in t || "no such host" in t || "connection" in t || "network" in t -> ctx.getString(R.string.cl_err_net)
-            else -> ctx.getString(R.string.cl_err_other, text.lines().lastOrNull { it.isNotBlank() }?.take(160).orEmpty())
+            else -> ctx.getString(R.string.cl_err_other, NetErrMap.cleanRaw(text).ifBlank { text.lines().lastOrNull { it.isNotBlank() }?.take(160).orEmpty() })
         }
     }
 }
@@ -210,9 +212,10 @@ object CloudSetup {
             val ident = listOf("user", "username", "email", "account", "access_key_id", "url", "host", "endpoint", "bucket", "vault").firstNotNullOfOrNull { values[it]?.takeIf { s -> s.isNotBlank() } } ?: ""
             val name = CloudCatalog.nameFor(entry.type + entry.preset.values.joinToString(""), ident)
             val tmp = "tmp_" + System.nanoTime().toString(36)
+            CloudTestHook.fakeErr?.let { fe -> error = CloudCatalog.explain(ctx, fe); return null }   // 10.0: стенд, подмена текста ошибки движка
             RcloneConf.put(ctx, tmp, entry.type, null, pairs)
             val r = try { Rclone.run(ctx, listOf("lsd", "$tmp:") + Rclone.common, 90_000) } finally { RcloneConf.remove(ctx, tmp) }
-            if (!r.ok) { error = CloudCatalog.explain(ctx, Rclone.reason(r)); return null }
+            if (!r.ok) { error = CloudCatalog.explain(ctx, Rclone.reason(r), r.err + "\n" + r.out); return null }
             RcloneConf.put(ctx, name, entry.type, null, pairs)
             val conn = NetConn("cloud", name, 0, (if (ident.isNotBlank()) "$ident (" else "(") + entry.title + ")", "")
             NetStore.save(ctx, conn)

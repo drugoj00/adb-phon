@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -134,7 +134,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null, prefill: NetHost? = null
     @Composable fun bottom() {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (edit == null) Row(Modifier.clickable { saveFav = !saveFav }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(saveFav, { saveFav = it }, Modifier.size(32.dp)); Text(stringResource(R.string.fm_net_save), fontSize = 12.sp, maxLines = 1)
+                BigCheckbox(saveFav, { saveFav = it }); Text(stringResource(R.string.fm_net_save), fontSize = 12.sp, maxLines = 1)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -228,7 +228,7 @@ fun SourceDlg(close: () -> Unit, edit: NetConn? = null, prefill: NetHost? = null
                             if (edit == null) TextButton({ netForm = false }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)) { Text("‹ " + stringResource(R.string.fm_src_back), fontSize = 13.sp, maxLines = 1) }
                             else Text(stringResource(titleRes), fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                             if (edit == null) Row(Modifier.clickable { saveFav = !saveFav }, verticalAlignment = Alignment.CenterVertically) {
-                                androidx.compose.material3.Checkbox(saveFav, { saveFav = it }, Modifier.size(32.dp)); Text(stringResource(R.string.fm_net_save_short), fontSize = 12.sp, maxLines = 1)
+                                BigCheckbox(saveFav, { saveFav = it }); Text(stringResource(R.string.fm_net_save_short), fontSize = 12.sp, maxLines = 1)
                             }
                             CheckBtn(land, testing, { host.isBlank() }, hostEmpty, { err = it }, { testing = it; testMsg = null }, { build() }, okTxt, { testMsg = it }, scope)
                             if (edit == null) ScanBtn(land, scanning, { close(); fmShowRoot(p); if ("lan" !in p.rootOpen) p.rootOpen.add("lan"); FmRootCfg.lanScan(ctx, kind) })
