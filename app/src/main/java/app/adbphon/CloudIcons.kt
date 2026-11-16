@@ -12,7 +12,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment

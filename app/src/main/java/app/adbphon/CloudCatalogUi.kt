@@ -157,7 +157,7 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
                             val hint = o.help.lineSequence().firstOrNull().orEmpty().take(150)
                             if (o.type == "bool") {
                                 Row(Modifier.fillMaxWidth().clickable { values[o.name] = if (values[o.name] == "true") "false" else "true" }, verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox((values[o.name] ?: o.def) == "true", { values[o.name] = if (it) "true" else "false" }, Modifier.size(32.dp))
+                                    BigCheckbox((values[o.name] ?: o.def) == "true", { values[o.name] = if (it) "true" else "false" })
                                     Text(label, fontSize = 13.sp)
                                 }
                             } else if (o.examples.isNotEmpty() && o.exclusive) {
@@ -183,6 +183,8 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
                             Text(stringResource(R.string.cl_mega_checking), fontSize = 14.sp)
                         }
                         if (CloudSetup.error.isNotEmpty()) Text(CloudSetup.error, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        // 10.0: WebDAV Яндекса закрыт на бесплатном тарифе: кнопка ведёт в мастер своего ключа Яндекса (вход в браузере)
+                        if (NetErrText.isYandexFree(ctx, CloudSetup.error)) OutlinedButton({ values.clear(); CloudSetup.reset(); close(); Fm.dlg = FmDlg.OwnKey("yandex") }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.ok_connect_own)) }
                         // где взять пароль приложения (вход прямо в программе, без браузера)
                         val loginHint = when { entry.type == "mailru" -> R.string.cl_mailru_note; entry.preset["url"]?.contains("webdav.yandex") == true -> R.string.cl_yadav_note; else -> null }
                     }

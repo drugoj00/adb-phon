@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,13 +53,16 @@ object CloudErr {
     /** Временные сбои: стоит повторить без участия пользователя. */
     fun retryable(kind: String) = kind == "quota" || kind == "transient" || kind == "net"
 
-    private fun isEn(ctx: Context) = runCatching { ctx.resources.configuration.locales[0].language == "en" }.getOrDefault(false)
+    /** Названия облаков (10.0): из строк ресурсов misc_cloud_* (ru/uk/en; одинаковые на всех языках лежат только в values). */
+    private val nameRes = mapOf(
+        "drive" to R.string.misc_cloud_drive, "google photos" to R.string.misc_cloud_google_photos, "yandex" to R.string.misc_cloud_yandex,
+        "dropbox" to R.string.misc_cloud_dropbox, "box" to R.string.misc_cloud_box, "onedrive" to R.string.misc_cloud_onedrive,
+        "pcloud" to R.string.misc_cloud_pcloud, "zoho" to R.string.misc_cloud_zoho, "mega" to R.string.misc_cloud_mega,
+        "hidrive" to R.string.misc_cloud_hidrive, "putio" to R.string.misc_cloud_putio,
+    )
 
-    fun providerName(ctx: Context, type: String?): String = when (type) {
-        "drive" -> if (isEn(ctx)) "Google Drive" else "Google Диск"; "dropbox" -> "Dropbox"; "yandex" -> if (isEn(ctx)) "Yandex Disk" else "Яндекс Диск"; "box" -> "Box"; "onedrive" -> "OneDrive"; "pcloud" -> "pCloud"
-        "google photos" -> if (isEn(ctx)) "Google Photos" else "Google Фото"; "zoho" -> "Zoho"; "mega" -> "MEGA"
-        else -> type?.replaceFirstChar { it.uppercase() } ?: ctx.getString(R.string.cl_account)
-    }
+    fun providerName(ctx: Context, type: String?): String =
+        nameRes[type]?.let { ctx.getString(it) } ?: type?.replaceFirstChar { it.uppercase() } ?: ctx.getString(R.string.cl_account)
 
     /** Из результата движка: понятная причина вместо куска JSON-ответа. Токены и адреса в текст не попадают. */
     fun fromText(ctx: Context, raw: String, type: String?): CloudApiError {
@@ -68,7 +71,18 @@ object CloudErr {
         // «key» (отказ общего ключа) осмыслен только для облаков со своим ключом, где своего ещё нет; иначе прежние виды ошибок
         if (kind == "key" && (type == null || type == "drive" || type == "google photos" || type !in OwnKeys.types || OwnKeys.get(ctx, type) != null)) kind = if (raw.lowercase().let { "unauthorized_client" in it || "invalid_client" in it }) "auth" else "other"
         if (kind == "auth" && (type == "drive" || type == "google photos") && OwnKeys.get(ctx, type) != null) kind = "expired"
-        val cause = when (kind) {
+        // 10.0: 402 (WebDAV Яндекса на бесплатном тарифе), место, TLS, 404, 5xx и прочее, что раньше показывалось сырым английским текстом
+        val nk = NetErrMap.classify(raw)
+        var shownType = type
+        var nkCause: String? = null
+        if (nk == NetErrMap.Kind.YANDEX_WEBDAV_FREE) { kind = "yfree"; shownType = "yandex"; nkCause = NetErrText.say(ctx, nk) }
+        else if (nk == NetErrMap.Kind.PAYMENT || nk == NetErrMap.Kind.SPACE) { kind = if (nk == NetErrMap.Kind.PAYMENT) "pay" else "space"; nkCause = NetErrText.say(ctx, nk) }
+        else if (kind == "other" && nk != null) {
+            kind = when (nk) { NetErrMap.Kind.AUTH -> "auth"; NetErrMap.Kind.NO_NET, NetErrMap.Kind.TIMEOUT -> "net"; NetErrMap.Kind.RATE -> "transient"; else -> nk.name.lowercase() }
+            nkCause = NetErrText.say(ctx, nk)
+        }
+        if (nk != null) AppLog.i("ADBphon", "облако: ошибка $kind ($nk), тип $type: ${raw.replace('\n', ' ').replace(Regex("(?i)(token|bearer)[^ ]*\\s*[^ ]+"), "$1 ***").take(240)}")
+        val cause = if (nkCause != null) nkCause else when (kind) {
             "expired" -> ctx.getString(R.string.cl_e_g_expired)
             "quota" -> ctx.getString(R.string.cl_e_quota)
             "disabled" -> ctx.getString(R.string.cl_e_disabled)
@@ -79,12 +93,12 @@ object CloudErr {
             "transient" -> ctx.getString(R.string.cl_e_transient)
             else -> {
                 // только осмысленная строка: «message»/«Error N», не служебные поля JSON
-                val line = raw.lines().map { it.trim().trim(',') }.lastOrNull { it.isNotBlank() && !it.startsWith("\"@type") && !it.startsWith("\"domain") && !it.startsWith("\"reason") && !it.startsWith("{") && !it.startsWith("}") && !it.startsWith("]") }.orEmpty()
-                line.replace(Regex("(?i)rclone"), "ADB-phon").replace(Regex("^\\d{4}/\\d\\d/\\d\\d \\d\\d:\\d\\d:\\d\\d\\s*"), "").replace(Regex("^(ERROR|NOTICE|CRITICAL)\\s*:\\s*"), "").take(160)
+                // 10.0: без английского заголовка команды («Failed to lsd with 2 errors: last error was:»)
+                NetErrMap.cleanRaw(raw.lines().filter { !it.trim().startsWith("\"reason") }.joinToString("\n"))
             }
         }
         val own = if (kind in setOf("quota", "disabled", "scope")) " " + ctx.getString(R.string.cl_e_own_key_tap) else if (kind == "key") " " + ctx.getString(R.string.cl_e_key_tap) else ""
-        return CloudApiError(kind, ctx.getString(R.string.cl_e_head, providerName(ctx, type)) + ": " + cause + own, type)
+        return CloudApiError(kind, ctx.getString(R.string.cl_e_head, providerName(ctx, shownType)) + ": " + cause + own, shownType)
     }
 
     /** Сообщение про слетевший вход Google у своего ключа (даёт кнопку на шаг «Опубликовать приложение»). */
@@ -94,11 +108,14 @@ object CloudErr {
     fun offersOwnKey(ctx: Context, msg: String) = msg.contains(ctx.getString(R.string.cl_e_own_key_tap)) || msg.contains(ctx.getString(R.string.cl_e_key_tap)) || msg.contains(ctx.getString(R.string.cl_e_key_login))
 
     /** Виды ошибок, при которых программа предлагает подключить свой ключ. */
-    val ownKeyKinds = setOf("quota", "disabled", "scope", "key")
+    val ownKeyKinds = setOf("quota", "disabled", "scope", "key", "yfree")
 }
 
-/** Только для стенда: подменяет результат успешного добавления облака (без создания записи). */
-object CloudTestHook { @Volatile var fakeAdd: NetConn? = null }
+/**
+ * Только для стенда: [fakeAdd] подменяет результат успешного добавления облака (без создания записи);
+ * [fakeErr] (10.0) подменяет ответ движка при проверке входа в форме облака и при открытии облака: сырой текст ошибки, как его пишет движок.
+ */
+object CloudTestHook { @Volatile var fakeAdd: NetConn? = null; @Volatile var fakeErr: String? = null }
 
 /** Свои ключи (client_id и client_secret) пользователя для входа в облака: необязательный расширенный вариант против лимитов общего ключа. */
 object OwnKeys {
