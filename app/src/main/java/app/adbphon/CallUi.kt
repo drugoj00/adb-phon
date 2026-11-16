@@ -22,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
@@ -248,8 +248,9 @@ fun RingtoneDialog(close: () -> Unit) {
                 row("video", stringResource(R.string.ring_video), Ringtones.RING_IDS, true)
                 row("audio", stringResource(R.string.ring_audio), Ringtones.RING_IDS, true)
                 row("wait", stringResource(R.string.ring_wait), Ringtones.WAIT_IDS, false)
-                Text(stringResource(R.string.ring_vol, cfg.vol), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                Slider(cfg.vol.toFloat(), { cfg.vol = it.toInt(); Ringtones.save(ctx, cfg); ver++ }, valueRange = 0f..100f, steps = 19)
+                Text(stringResource(R.string.num_volume), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                // 10.0 (num): число справа от ползунка, нажатие открывает ввод своего значения
+                NumberSlider(cfg.vol.toFloat(), { cfg.vol = kotlin.math.round(it).toInt(); Ringtones.save(ctx, cfg); ver++ }, NumberSliderRules.RING_VOL, stringResource(R.string.num_volume), steps = 19)
                 if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 Collapsible(stringResource(R.string.hint_more)) {
                     Text(stringResource(R.string.ring_wait_note), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))

@@ -137,6 +137,11 @@ object Bundles {
         best.paths
     }.getOrNull()
 
+    /** Часть привязана к процессору, плотности экрана или языку (config-часть). */
+    internal fun isConfigPart(file: String): Boolean = kindOf(file.substringAfterLast('/')).let { it.abi != null || it.dpi != null || it.lang != null }
+
+    internal fun isBasePart(file: String): Boolean = isBaseName(file)
+
     private fun isBaseName(n: String): Boolean {
         val s = norm(n.substringAfterLast('/'))
         return s == "base" || s == "base_master" || s == "universal"
