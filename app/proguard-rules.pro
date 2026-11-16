@@ -46,3 +46,7 @@
 # Видеозвонок (7.0): мост JS ↔ Kotlin в окне звонка вызывается страницей по имени
 -keepclassmembers class app.adbphon.CallActivity$Bridge { @android.webkit.JavascriptInterface <methods>; }
 -keepattributes JavascriptInterface
+
+# 10.0: apksig кодирует подпись через отражение по аннотациям классов (Asn1Class/Asn1Field): имена и поля менять нельзя
+-keep class com.android.apksig.** { *; }
+-dontwarn com.android.apksig.**

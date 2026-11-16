@@ -14,8 +14,8 @@ android {
         applicationId = "app.adbphon"
         minSdk = 26
         targetSdk = 34
-        versionCode = 50
-        versionName = "9.3"
+        versionCode = 51
+        versionName = "10.0"
         // РѕСЃС‚Р°РІР»СЏРµРј С‚РѕР»СЊРєРѕ СЏР·С‹РєРё РїСЂРѕРіСЂР°РјРјС‹ (ru, uk, en): СЃС‚СЂРѕРєРё Р±РёР±Р»РёРѕС‚РµРє РЅР° РґСЂСѓРіРёС… СЏР·С‹РєР°С… РЅРµ РЅСѓР¶РЅС‹
         resourceConfigurations += listOf("ru", "uk", "en")
     }
@@ -69,6 +69,7 @@ dependencies {
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation("com.android.tools.build:apksig:8.7.3")   // 10.0: подпись APK, склеенного из частей
     implementation("com.github.mwiede:jsch:0.2.20")   // SSH: С‚РµСЂРјРёРЅР°Р» Рё С„Р°Р№Р»С‹ РЅР° РєРѕРјРїСЊСЋС‚РµСЂР°С…
     testImplementation("junit:junit:4.13.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")   // WebDAV
