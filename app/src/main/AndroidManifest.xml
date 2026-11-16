@@ -170,6 +170,7 @@
         <service android:name=".InstBgService" android:exported="false" android:foregroundServiceType="dataSync" />
         <activity android:name=".CloudWebActivity" android:exported="false" android:launchMode="singleTask" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
         <service android:name=".CloudLoginService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".StreamService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".PadOverlayTile" android:exported="true" android:label="@string/pad_overlay_label" android:icon="@drawable/ic_pad_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
