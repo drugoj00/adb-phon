@@ -173,7 +173,7 @@ fun ConsolePage() {
     TabColumn("tab.console", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                HintTitle(stringResource(R.string.sub_console), stringResource(when {
+                HintTitle(stringResource(if (!running) R.string.sub_console else when (mode) { "root" -> R.string.sub_console_root; "helper" -> R.string.sub_console_helper; else -> R.string.sub_console_adb }), stringResource(when {
                     !running && Term.wanted().isEmpty() -> R.string.tc_no_access
                     !running -> R.string.tc_stopped
                     mode == "root" -> R.string.tc_via_root

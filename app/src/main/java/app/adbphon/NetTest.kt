@@ -141,6 +141,17 @@ class NetTestActivity : Activity() {
                             val a = NetStore.list(ctx).filter { it.host.startsWith("192.168.1.1") }.joinToString(";") { it.host + "|" + it.name + "|" + it.path }
                             NetStore.update(ctx, nw, old); val b = NetStore.list(ctx).filter { it.host.startsWith("192.168.1.1") }.joinToString(";") { it.host + "|" + it.name + "|" + it.path }
                             "после правки: $a ; после возврата: $b" }
+                        // 10.1 потоковая отдача: sinfo, sidle МС, sstop, sget ИМЯ|Range|МЕТОД|ЛИМИТ|плохое (badtoken/root/deep/post), sopen ИМЯ|ПАКЕТ (путь как у «Открыть с помощью» в панели)
+                        "sinfo" -> StreamServer.status() + " recent=" + StreamServer.recent.takeLast(parts.getOrNull(1)?.toIntOrNull() ?: 0).joinToString(" | ")
+                        "sidle" -> { StreamServer.idleMs = parts[1].toLong(); "idleMs=" + StreamServer.idleMs }
+                        "sstop" -> { StreamServer.stop(); StreamServer.status() }
+                        "sget" -> { val a = parts[1].split('|'); val url0 = StreamServer.register(applicationContext, fs, path.trimEnd('/') + "/" + a[0], -1L, "video/mp4", a[0])
+                            val url = when (a.getOrNull(4)) { "badtoken" -> url0.replace(Regex("/[0-9a-f]{32}/"), "/" + "0".repeat(32) + "/"); "root" -> url0.take(url0.indexOf('/', 8) + 1); "deep" -> url0 + "/x"; else -> url0 }
+                            StreamTest.probe(url, a.getOrNull(2)?.ifEmpty { null } ?: "GET", a.getOrNull(1)?.takeIf { it != "-" && it.isNotEmpty() }, a.getOrNull(3)?.toLongOrNull() ?: Long.MAX_VALUE) }
+                        "sbuiltin" -> { val a = parts[1].split('|'); val pp = Fm.panes[0]; pp.path = path; val e = fs.stat(path.trimEnd('/') + "/" + a[0]) ?: error("нет файла")
+                            withContext(Dispatchers.Main) { openBuiltin(applicationContext, pp, FmItem(a[0], false, e.size, ""), a.getOrNull(1) ?: "video", path.trimEnd('/') + "/" + a[0]) }; "builtin started viaServer=" + MediaSrc.viaServer + " local=" + MediaSrc.local }
+                        "sopen" -> { val a = parts[1].split('|'); val pp = Fm.panes[0]; pp.path = path; val e = fs.stat(path.trimEnd('/') + "/" + a[0]) ?: error("нет файла")
+                            val ok = Fm.openWithPkg(pp, FmItem(a[0], false, e.size, ""), a.getOrNull(1)?.ifEmpty { null }); "opened=$ok size=${e.size} " + StreamServer.status() }
                         "ping" -> { fs.ping(path); "pong" }
                         "sleep" -> { delay((parts.getOrNull(1)?.toLongOrNull() ?: 1L) * 1000); "slept" }
                         // ---- проверка записи на сетевые источники ----

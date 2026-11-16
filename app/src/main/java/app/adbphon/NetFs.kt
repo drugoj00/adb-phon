@@ -73,6 +73,22 @@ interface RemoteFs : Fs {
     suspend fun removeRemote(path: String, isDir: Boolean) { throw UnsupportedOperationException("remove") }
     /** Записать локальный файл ровно по этому пути (поток, без загрузки в память); отмена: [OpProgress.cancelled]. Безопасную замену делает [KeepFs.upload]. */
     suspend fun putFile(src: File, dest: String, j: OpProgress?) { throw UnsupportedOperationException("put") }
+
+    // ---- 10.1: потоковая отдача плееру ([StreamServer]): чтение файла с любого места без копирования ----
+    /** Умеет ли источник отдавать файл с произвольной позиции ([openAt]). По умолчанию нет: файл тогда копируется целиком, как раньше. */
+    val rangeRead: Boolean get() = false
+    /** Поток чтения файла с позиции [offset] до конца. Закрытие потока освобождает соединение. Только при [rangeRead]. */
+    suspend fun openAt(path: String, offset: Long): InputStream = throw UnsupportedOperationException("range")
+}
+
+/** Пропустить ровно [n] байт потока чтения (когда сервер не умеет начинать с середины). */
+internal fun skipFully(i: InputStream, n: Long) {
+    var left = n
+    val b = ByteArray(64 * 1024)
+    while (left > 0) {
+        val k = i.skip(left)
+        if (k > 0) left -= k else { val r = i.read(b, 0, minOf(b.size.toLong(), left).toInt()); if (r < 0) break; left -= r }
+    }
 }
 
 /** Нет права записи в папку: понятное сообщение вместо молчаливой ошибки. */
@@ -153,6 +169,14 @@ class SftpFs(private val host: String, private val port: Int, private val user: 
 
     override suspend fun copyTo(path: String, dest: File) { withContext(Dispatchers.IO) { use { c -> dest.outputStream().use { c.get(path, it) } } } }
     override suspend fun head(path: String, n: Int): ByteArray = withContext(Dispatchers.IO) { use { c -> c.get(path).use { cut(n, it) } } }
+    override val rangeRead get() = true
+    override suspend fun openAt(path: String, offset: Long): InputStream = withContext(Dispatchers.IO) {
+        val c = ch()
+        try {
+            val i = c.get(path, null as com.jcraft.jsch.SftpProgressMonitor?, offset)
+            object : java.io.FilterInputStream(i) { override fun close() { runCatching { super.close() }; runCatching { c.disconnect() } } }
+        } catch (e: Throwable) { runCatching { c.disconnect() }; throw e }
+    }
     override fun parent(path: String): String? { val t = path.trimEnd('/'); return if (t.isEmpty() || t == "/") null else t.substringBeforeLast('/', "").ifEmpty { "/" } }
     override suspend fun roots(): List<Pair<String, String>> = listOf(host to root)
     private fun join(d: String, n: String) = if (d.endsWith("/")) d + n else "$d/$n"
@@ -246,6 +270,19 @@ class DavFs(private val url: String, private val user: String, private val pass:
 
     override suspend fun head(path: String, n: Int): ByteArray = withContext(Dispatchers.IO) {
         client.newCall(req(path).get().build()).execute().use { resp -> if (resp.code !in 200..299) error("HTTP ${resp.code}"); cut(n, resp.body!!.byteStream()) }
+    }
+
+    override val rangeRead get() = true
+    override suspend fun openAt(path: String, offset: Long): InputStream = withContext(Dispatchers.IO) {
+        val b = req(path).get().header("Accept-Encoding", "identity")
+        if (offset > 0) b.header("Range", "bytes=$offset-")
+        val resp = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build().newCall(b.build()).execute()
+        try {
+            if (resp.code !in 200..299) error("HTTP ${resp.code}")
+            val i = resp.body!!.byteStream()
+            if (offset > 0 && resp.code == 200) skipFully(i, offset)   // сервер не понимает Range: отдаёт с начала
+            object : java.io.FilterInputStream(i) { override fun close() { runCatching { super.close() }; runCatching { resp.close() } } }
+        } catch (e: Throwable) { runCatching { resp.close() }; throw e }
     }
 
     override fun parent(path: String): String? {
@@ -416,6 +453,21 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
             val d = secure(c, d0)
             val b = cut(n, d.getInputStream()); runCatching { d.close() }; b
         }
+    }
+
+    override val rangeRead get() = true
+    /** RETR с позиции: команда REST; сервер её не принял: читаем с начала и пропускаем лишнее. */
+    override suspend fun openAt(path: String, offset: Long): InputStream = withContext(Dispatchers.IO) {
+        val c = open()
+        try {
+            val d0 = dataSocket(c)
+            val restOk = offset <= 0 || cmd(c, "REST $offset").first == 350
+            val (code, t) = cmd(c, "RETR $path"); if (code !in 100..199) error("FTP: $t".take(200))
+            val d = secure(c, d0)
+            val i = d.getInputStream()
+            if (!restOk) skipFully(i, offset)
+            object : java.io.FilterInputStream(i) { override fun close() { runCatching { d.close() }; runCatching { c.sock.close() } } }
+        } catch (e: Throwable) { runCatching { c.sock.close() }; throw e }
     }
 
     override fun parent(path: String): String? { val t = path.trimEnd('/'); return if (t.isEmpty()) null else t.substringBeforeLast('/', "").ifEmpty { "/" } }

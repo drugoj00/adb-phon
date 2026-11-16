@@ -77,6 +77,16 @@ object Rclone {
         Result(p.exitValue(), so.toString(), se.toString())
     }
 
+    /** 10.1: запуск движка с выводом в поток (для `cat` потоковой отдачи плееру); stderr отбрасывается. Вызывающий закрывает поток и убивает процесс. */
+    fun spawn(ctx: Context, args: List<String>): Process {
+        val b = bin(ctx) ?: throw CloudModuleMissing(CloudModule.missingText(ctx))
+        val app = ctx.applicationContext
+        val pb = ProcessBuilder(listOf(b.absolutePath, "--config", conf(app).absolutePath) + args)
+        env(app, pb)
+        pb.redirectError(File("/dev/null"))
+        return pb.start()
+    }
+
     /** Короткая человекочитаемая причина из журнала rclone. */
     fun reason(r: Result): String {
         val lines = (r.err + "\n" + r.out).lines().map { it.trim() }.filter { it.isNotEmpty() }
@@ -216,6 +226,13 @@ class CloudFs(private val remote: String, private val display: String) : RemoteF
         dest.parentFile?.mkdirs()
         val r = Rclone.run(ctx, listOf("copyto", spec(path), dest.absolutePath) + Rclone.common, 60 * 60_000L)
         if (!r.ok) throw java.io.IOException(Rclone.reason(r))
+    }
+
+    override val rangeRead get() = true
+    /** 10.1: `cat` с позиции (--offset): облако отдаёт нужный кусок, на диск ничего не пишется. Закрытие потока убивает процесс. */
+    override suspend fun openAt(path: String, offset: Long): java.io.InputStream = withContext(Dispatchers.IO) {
+        val p = Rclone.spawn(ctx, listOf("cat", spec(path)) + (if (offset > 0) listOf("--offset", offset.toString()) else emptyList()) + Rclone.common)
+        object : java.io.FilterInputStream(p.inputStream) { override fun close() { runCatching { super.close() }; runCatching { p.destroyForcibly() } } }
     }
 
     override suspend fun head(path: String, n: Int): ByteArray {

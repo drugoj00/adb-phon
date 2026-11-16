@@ -119,10 +119,19 @@ object MediaSrc {
         }
     }
 
+    /** 10.1: удалённый источник (не WebDAV) читается по запросу плеера через [StreamServer], а не копируется целиком. */
+    val viaServer: Boolean get() = !local && src != "adb" && fs?.raw !is DavFs && fs?.rangeRead == true
+
     /** Адрес для плеера и заголовки запроса (для WebDAV с логином). */
     suspend fun uri(ctx: Context, e: MediaEntry): Pair<Uri, Map<String, String>> {
         val dav = fs?.raw as? DavFs
         if (!local && dav != null) return Uri.parse(dav.urlFor(e.path)) to dav.authHeaders()
+        if (viaServer) {
+            // 10.1: SMB, FTP, SFTP, облака: потоковая отдача через локальный сервер, без копии (размер узнаётся при первом запросе плеера)
+            val ext = e.name.substringAfterLast('.', "").lowercase()
+            val (m, hm) = StreamServer.mimeFor(ext, openCat(ext) ?: "video")
+            return Uri.parse(StreamServer.register(ctx, fs!!, e.path, -1L, m, e.name, hm)) to emptyMap()
+        }
         return Uri.fromFile(file(ctx, e)) to emptyMap()
     }
 }
@@ -250,25 +259,10 @@ class VideoPlayerActivity : ComponentActivity() {
         val e = MediaSrc.entries.getOrNull(MediaSrc.index) ?: run { finish(); return }
         key = "vpos_" + e.path.hashCode()
         val pv = PlayerView(this).apply { setShowNextButton(true); setShowPreviousButton(true); setShowShuffleButton(true); setRepeatToggleModes(3) }
+        val ui = VideoGestureUi(this, pv) { player }
         setContent {
-            Box(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) {
-                // вертикальный жест: слева яркость, справа громкость (кнопки и пульт обрабатывает сам плеер)
-                awaitPointerEventScope {
-                    while (true) {
-                        val down = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                        val start = down.changes.firstOrNull { it.pressed } ?: continue
-                        var last = start.position.y; val left = start.position.x < size.width / 2
-                        while (true) {
-                            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                            val ch = ev.changes.firstOrNull() ?: break
-                            if (!ch.pressed) break
-                            val dy = ch.position.y - last
-                            if (kotlin.math.abs(dy) > 14f && kotlin.math.abs(ch.position.x - start.position.x) < 80f) { adjust(left, -dy / size.height); last = ch.position.y }
-                        }
-                    }
-                }
-            }) {
-                AndroidView({ pv }, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                AndroidView({ ui.root }, Modifier.fillMaxSize())
                 if (info.isNotEmpty()) FloorText(info, Modifier.align(Alignment.TopStart).padding(10.dp).background(Color(0x66000000), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), color = Color.White, fontSize = 13.sp, maxLines = 1)
             }
         }
@@ -294,7 +288,7 @@ class VideoPlayerActivity : ComponentActivity() {
                 override fun onPlayerError(e: androidx.media3.common.PlaybackException) { android.util.Log.e("ADBphonMedia", "video error " + e.errorCodeName + ": " + e.message, e); if (p.hasNextMediaItem()) { p.seekToNextMediaItem(); p.prepare() } }
             })
             p.repeatMode = Player.REPEAT_MODE_OFF
-            if (MediaSrc.local || dav != null) {
+            if (MediaSrc.local || dav != null || MediaSrc.viaServer) {
                 p.setMediaItems(all.map { itemFor(it) }, start, getSharedPreferences("adbphon", MODE_PRIVATE).getLong(key, 0L))
                 p.prepare(); p.play(); show()
             } else {
@@ -319,18 +313,6 @@ class VideoPlayerActivity : ComponentActivity() {
         }
     }
 
-    private fun adjust(brightness: Boolean, frac: Float) {
-        if (brightness) {
-            val lp = window.attributes; val cur = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
-            lp.screenBrightness = (cur + frac).coerceIn(0.02f, 1f); window.attributes = lp
-        } else {
-            val am = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
-            val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
-            volAcc += frac * max * 1.5f
-            if (kotlin.math.abs(volAcc) >= 1f) { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, (am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) + volAcc.toInt()).coerceIn(0, max), 0); volAcc = 0f }
-        }
-    }
-    private var volAcc = 0f
 
     /** Сворачивание: пауза и запомненная позиция первого файла; возврат: продолжает с того же места. Закрытие («Назад») освобождает плеер в onDestroy. */
     override fun onStop() {
@@ -380,7 +362,7 @@ class AudioService : Service() {
         val entries = MediaSrc.entries; val idx = MediaSrc.index
         titles = entries.map { it.name.substringBeforeLast('.') }
         // WebDAV идёт потоком, остальные удалённые источники: копия выбранного файла, плейлист из одного трека
-        val streaming = MediaSrc.local || MediaSrc.fs?.raw is DavFs
+        val streaming = MediaSrc.local || MediaSrc.fs?.raw is DavFs || MediaSrc.viaServer
         val list = if (streaming) entries else listOf(entries[idx]); val start = if (streaming) idx else 0
         val items = list.map { e -> MediaItem.Builder().setUri(MediaSrc.uri(this, e).first).setMediaId(e.name).build() }
         val headers = (MediaSrc.fs?.raw as? DavFs)?.takeIf { !MediaSrc.local }?.authHeaders().orEmpty()

@@ -417,9 +417,11 @@ fun FilesLookSection() {
 // 10.0 (set): пункты блока по отдельности, чтобы экран «Настройки» раскладывал их по группам («Файлы», «Облака»)
 @Composable
 fun FilesBgMusicSetting() {
+    androidx.compose.runtime.key(PlayerPrefs.rev) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var bg by remember { mutableStateOf(ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).getBoolean("bg_music", false)) }
     SettingSwitch(bg, { bg = it; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("bg_music", it).apply() }, androidx.compose.ui.res.stringResource(R.string.set_bg_music), androidx.compose.ui.res.stringResource(R.string.set_bg_music_hint))
+    }
 }
 
 @Composable

@@ -943,7 +943,17 @@ object Fm {
         }
         val sp = FmPane(9, parent)
         if (c == null) sp.src = "local" else { sp.src = "smb"; sp.smb = FmRootCfg.fsFor(c); sp.net = c }
-        openFile(sp, item)
+        if (openCat(item.ext) == null) { openFile(sp, item); return }
+        // 10.1: видео и музыка из дерева открываются со списком своей папки, чтобы в плеере работали «следующий/предыдущий»
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    sp.items = if (c == null) java.io.File(parent).listFiles().orEmpty().map { f -> FmItem(f.name, f.isDirectory, if (f.isDirectory) 0L else f.length(), "") }
+                    else sp.smb!!.list(parent).map { e -> FmItem(e.name, e.isDir, e.size, "") }
+                }
+            }
+            openFile(sp, item)
+        }
     }
 
     /** «Назад» на «домике»: сначала свернуть последнюю раскрытую ветку дерева; false: сворачивать нечего. */
@@ -1337,6 +1347,28 @@ object Fm {
         return ok
     }
 
+    /**
+     * 10.1: открыть видео или музыку из сетевого источника или облака без копирования: файл отдаётся плееру по адресу http://127.0.0.1:порт/токен/имя ([StreamServer]).
+     * null: потоковая отдача невозможна (не видео и не звук, источник не умеет читать с середины, размер неизвестен); тогда файл копируется, как раньше.
+     */
+    private suspend fun viewStream(p: FmPane, it: FmItem, f: String, pkg: String?, mime: String?): Boolean? {
+        val fs = p.smb ?: return null
+        if (!fs.rangeRead) return null
+        val cat = openCat(it.ext)?.takeIf { c -> c == "video" || c == "audio" } ?: return null
+        if (mime != null && mime != "*/*" && !mime.startsWith("video/") && !mime.startsWith("audio/")) return null
+        val (m, httpM) = StreamServer.mimeFor(it.ext, cat)
+        val intentMime = if (mime != null && mime != "*/*") mime else m
+        val size = if (it.size > 0) it.size else withContext(Dispatchers.IO) { runCatching { fs.stat(f)?.size }.getOrNull() } ?: 0L
+        if (size <= 0) return null
+        val url = StreamServer.register(sctx, fs, f, size, m, it.name, httpM)
+        val i = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse(url), intentMime)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("title", it.name)
+        pkg?.let { k -> if (k.contains(Char(47))) i.setClassName(k.substringBefore(Char(47)), k.substringAfter(Char(47))) else i.setPackage(k) }
+        val ok = runCatching { sctx.startActivity(i) }.isSuccess
+        if (!ok && pkg == null) say(str(R.string.fm_no_app))
+        return ok
+    }
+
     private fun tmpCopy(p: FmPane, name: String): java.io.File = java.io.File(java.io.File(sctx.cacheDir, "fmopen").apply { mkdirs() }, name.substringAfterLast('/'))
 
     /** Открыть выбранным приложением (пакет [pkg]); для сетевого источника файл сначала копируется во временную папку. */
@@ -1344,7 +1376,12 @@ object Fm {
         val f = join(p.path, it.name)
         return when (p.src) {
             "local" -> viewLocal(java.io.File(f), it.ext, pkg, mime)
-            "smb" -> { val tmp = tmpCopy(p, it.name); val ok = withContext(Dispatchers.IO) { runCatching { p.smb!!.copyTo(f, tmp) }.isSuccess }; ok && viewLocal(tmp, it.ext, pkg, mime) }
+            "smb" -> {
+                // 10.1: видео и музыка из сети играют сразу (потоковая отдача по Range), без копирования целиком; остальное и источники без Range: копия во временную папку
+                viewStream(p, it, f, pkg, mime)?.let { r -> return r }
+                say(str(R.string.fm_open_copying))
+                val tmp = tmpCopy(p, it.name); val ok = withContext(Dispatchers.IO) { runCatching { p.smb!!.copyTo(f, tmp) }.isSuccess }; ok && viewLocal(tmp, it.ext, pkg, mime)
+            }
             else -> false
         }
     }

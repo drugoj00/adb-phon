@@ -262,6 +262,7 @@ fun setGroupMeta(g: String): SetGroupMeta = when (g) {
     SetGroups.UPD -> SetGroupMeta(R.string.set_grp_upd, R.string.set_grp_upd_sub, Icons.Filled.SystemUpdate)
     SetGroups.UI -> SetGroupMeta(R.string.set_grp_ui, R.string.set_grp_ui_sub, Icons.Filled.Palette)
     SetGroups.FILES -> SetGroupMeta(R.string.set_grp_files, R.string.set_grp_files_sub, Icons.Filled.Folder)
+    SetGroups.PLAYER -> SetGroupMeta(R.string.set_grp_player, R.string.set_grp_player_sub, Icons.Filled.PlayArrow)
     SetGroups.ADB -> SetGroupMeta(R.string.set_grp_adb, R.string.set_grp_adb_sub, Icons.Filled.Usb)
     SetGroups.CLOUD -> SetGroupMeta(R.string.set_grp_cloud, R.string.set_grp_cloud_sub, Icons.Filled.Cloud)
     SetGroups.PANELS -> SetGroupMeta(R.string.set_grp_panels, R.string.set_grp_panels_sub, Icons.Filled.Tune)
@@ -293,7 +294,11 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "delete" to listOf(R.string.ds_confirm, R.string.ft_switch, R.string.ft_keep, R.string.ft_max),
     "open_files" to listOf(R.string.set_open_files),
     "installer" to listOf(R.string.inst_u_default),
-    "bg_music" to listOf(R.string.set_bg_music),
+    "bg_music" to listOf(R.string.set_bg_music, R.string.set_grp_player),
+    "vp_hide" to listOf(R.string.set_vp_hide, R.string.set_grp_player),
+    "vp_keep" to listOf(R.string.set_vp_keep, R.string.set_grp_player),
+    "vp_gest" to listOf(R.string.set_vp_gest_vol, R.string.set_vp_gest_bri, R.string.set_vp_side, R.string.set_vp_gest_seek, R.string.set_vp_gest_fling, R.string.set_vp_sens, R.string.set_grp_player),
+    "vp_reset" to listOf(R.string.set_vp_reset, R.string.set_grp_player),
     "wifi_auto" to listOf(R.string.set_wifi_auto),
     "helper" to listOf(R.string.srv_auto, R.string.srv_off, R.string.srv_stop),
     "shizuku" to listOf(R.string.shz_title, R.string.shz_auto, R.string.shz_apps),
@@ -405,6 +410,10 @@ fun SetItem(key: String, vm: MainViewModel) {
         "open_files" -> FilesOpenAsSetting()
         "installer" -> InstallerDefaultSetting()
         "bg_music" -> FilesBgMusicSetting()
+        "vp_hide" -> PlayerPanelHideSetting()
+        "vp_keep" -> PlayerKeepSizeSetting()
+        "vp_gest" -> PlayerGesturesSetting()
+        "vp_reset" -> PlayerResetSetting()
         "wifi_auto" -> FilesWifiAutoSetting()
 
         // ---- Связь и ADB

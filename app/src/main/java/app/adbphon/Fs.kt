@@ -189,6 +189,13 @@ class SmbFs(private val host: String, private val user: String, private val pass
         } }
     }
 
+    override val rangeRead get() = true
+    /** 10.1: чтение с позиции для потоковой отдачи плееру (skip в jcifs только сдвигает позицию, данные не читает). */
+    override suspend fun openAt(path: String, offset: Long): java.io.InputStream = guard { withContext(Dispatchers.IO) {
+        val i = jcifs.smb.SmbFile(path, ctx).inputStream
+        try { if (offset > 0) skipFully(i, offset); i } catch (e: Throwable) { runCatching { i.close() }; throw e }
+    } }
+
     /** Первые [n] байт файла (для просмотра текста). */
     override suspend fun head(path: String, n: Int): ByteArray = guard { withContext(Dispatchers.IO) {
         jcifs.smb.SmbFile(path, ctx).inputStream.use { i ->

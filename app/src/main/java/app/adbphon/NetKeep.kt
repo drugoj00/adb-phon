@@ -220,6 +220,9 @@ class KeepFs(private val make: () -> RemoteFs) : RemoteFs {
     }
     override suspend fun copyTo(path: String, dest: File) = call(path.substringBeforeLast('/', ""), big = true, what = "копирование") { it.copyTo(path, dest) }
     override suspend fun head(path: String, n: Int): ByteArray = call(path.substringBeforeLast('/', ""), what = "чтение файла") { it.head(path, n) }
+    override val rangeRead get() = inner.rangeRead
+    /** 10.1: поток с позиции для плеера; открытие без общего лимита по времени (у клиентов свои таймауты сокета), повтор на новом соединении при обрыве. */
+    override suspend fun openAt(path: String, offset: Long): java.io.InputStream = call(path.substringBeforeLast('/', ""), big = true, what = "чтение файла") { it.openAt(path, offset) }
     override suspend fun ping(path: String) = call(path, what = "проверка") { it.ping(path) }
 
     /** Подключение при открытии источника (SFTP и FTP проверяют вход сразу). */

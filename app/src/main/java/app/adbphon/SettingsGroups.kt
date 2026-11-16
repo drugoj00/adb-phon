@@ -8,12 +8,13 @@ object SetGroups {
     const val UPD = "upd"       // Обновления и копии (первая и заметная)
     const val UI = "ui"         // Интерфейс
     const val FILES = "files"   // Файлы
+    const val PLAYER = "player" // Плеер (видео и музыка): панель, размер картинки, жесты
     const val ADB = "adb"       // Связь и ADB
     const val CLOUD = "cloud"   // Облака
     const val PANELS = "panels" // Панели и звонки
     const val SYS = "sys"       // Система
 
-    val ORDER = listOf(UPD, UI, FILES, ADB, CLOUD, PANELS, SYS)
+    val ORDER = listOf(UPD, UI, FILES, PLAYER, ADB, CLOUD, PANELS, SYS)
 
     /** set2: первый пункт первой группы: четыре большие кнопки (обновления, копия, восстановление, о программе). */
     const val HERO = "hero"
@@ -23,7 +24,8 @@ object SetGroups {
         HERO to UPD, "upd_auto" to UPD, "versions" to UPD, "ver_clear" to UPD, "backup" to UPD, "copies" to UPD,
         "theme" to UI, "lang" to UI, "font" to UI, "ui_size" to UI, "full" to UI, "colors" to UI, "bars" to UI, "marq" to UI, "tapguard" to UI,
         "dir_tap" to FILES, "folder_color" to FILES, "type_icons" to FILES, "thumbs" to FILES, "delete" to FILES, "open_files" to FILES,
-        "installer" to FILES, "bg_music" to FILES, "wifi_auto" to FILES,
+        "installer" to FILES, "wifi_auto" to FILES,
+        "vp_hide" to PLAYER, "vp_keep" to PLAYER, "bg_music" to PLAYER, "vp_gest" to PLAYER, "vp_reset" to PLAYER,
         "helper" to ADB, "shizuku" to ADB, "perms" to ADB, "term" to ADB,
         "cmod" to CLOUD, "cmod_auto" to CLOUD,
         "hand" to PANELS, "side_btns" to PANELS, "call_pics" to PANELS,
@@ -57,6 +59,8 @@ object SetGroups {
         listOf("корзин", "кошик", "trash", "удален", "видален", "delete"),
         listOf("облак", "хмар", "cloud", "диск", "drive"),
         listOf("экран", "екран", "screen", "полноэкр", "повноекр", "fullscreen"),
+        listOf("плеер", "плеєр", "player", "видео", "відео", "video"),
+        listOf("жест", "gesture", "свайп", "swipe"),
         listOf("about", "github", "лиценз", "ліценз", "licens", "донат", "donat"),
     )
 
