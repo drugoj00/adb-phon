@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_grp_player">Плеер</string>
+    <string name="set_grp_player_sub">Видео и музыка: панель и жесты</string>
+    <string name="set_vp_gest_vol">Жест громкости</string>
+    <string name="set_vp_gest_vol_hint">Проведи пальцем или мышью вверх-вниз у стороны громкости: громкость меняется, значение показывается на экране.</string>
+    <string name="set_vp_gest_bri">Жест яркости</string>
+    <string name="set_vp_gest_bri_hint">Проведи пальцем или мышью вверх-вниз у стороны яркости: яркость меняется, значение показывается на экране.</string>
+    <string name="set_vp_side">Стороны жестов</string>
+    <string name="set_vp_side_hint">Какая половина экрана отвечает за яркость, а какая за громкость.</string>
+    <string name="set_vp_side_a">Слева яркость, справа громкость</string>
+    <string name="set_vp_side_b">Слева громкость, справа яркость</string>
+    <string name="set_vp_gest_seek">Перемотка ведением</string>
+    <string name="set_vp_gest_seek_hint">Веди пальцем или мышью влево-вправо и не отпускай: показывается новое время, перемотка выполняется при отпускании.</string>
+    <string name="set_vp_gest_fling">Следующий и предыдущий файл броском</string>
+    <string name="set_vp_gest_fling_hint">Быстрый бросок влево открывает следующий файл списка, вправо предыдущий.</string>
+    <string name="set_vp_sens">Чувствительность перемотки</string>
+    <string name="set_vp_sens_hint">Сколько секунд видео помещается в ширину экрана, когда ведёшь пальцем.</string>
+    <string name="vp_sens_sec">%1$d с на экран</string>
+    <string name="set_vp_reset">Сброс настроек плеера</string>
+    <string name="set_vp_reset_hint">Вернуть панель, жесты и музыку в фоне к значениям по умолчанию.</string>
+    <string name="set_vp_reset_btn">Сбросить</string>
+    <string name="set_vp_keep">Запоминать размер кадра</string>
+    <string name="set_vp_keep_hint">Включено: режим, выбранный кнопкой «Под экран», запоминается и применяется ко всем следующим видео и запускам. Выключено: каждое видео открывается «по размеру», а кнопка действует только на время этого видео.</string>
+</resources>

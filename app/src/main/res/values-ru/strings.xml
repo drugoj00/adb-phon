@@ -1834,4 +1834,24 @@
     <string name="dw_create">Создать</string>
     <string name="fm_type_dir">Папка (объектов: %1$d)</string>
     <string name="fm_type_file">Файл</string>
+    <string name="stream_channel">Воспроизведение из сети</string>
+    <string name="stream_notif_title">Файл отдаётся плееру</string>
+    <string name="stream_notif_text">Играет видео или музыка из сетевой папки или облака</string>
+    <string name="fm_open_copying">Файл копируется, затем откроется…</string>
+    <string name="sub_console_adb">Консоль · ADB</string>
+    <string name="sub_console_helper">Консоль · помощник</string>
+    <string name="sub_console_root">Консоль · root</string>
+    <string name="vp_fit">Под экран</string>
+    <string name="vp_fit_fit">по размеру</string>
+    <string name="vp_fit_fill">заполнить</string>
+    <string name="vp_fit_stretch">растянуть</string>
+    <string name="vp_fit_hint">Под экран: %1$s</string>
+    <string name="vp_bright">Яркость %1$d %%</string>
+    <string name="vp_volume">Громкость %1$d/%2$d</string>
+    <string name="vp_no_next">Следующего файла нет</string>
+    <string name="vp_no_prev">Предыдущего файла нет</string>
+    <string name="set_vp_hide">Скрывать панель плеера через</string>
+    <string name="set_vp_hide_hint">Панель управления встроенного видеоплеера гаснет сама через выбранное время. «Не скрывать» держит её на экране, пока не нажмёшь на экран ещё раз.</string>
+    <string name="vp_hide_sec">%1$d с</string>
+    <string name="vp_hide_never">Не скрывать</string>
 </resources>
