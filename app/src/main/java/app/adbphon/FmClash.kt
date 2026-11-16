@@ -11,7 +11,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -257,7 +257,7 @@ fun ConflictDialog(d: FmDlg.Conflict, close: () -> Unit) {
             }
         }
         if (all.size > 1) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { forAll = !forAll }, verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(forAll, { forAll = it })
+            BigCheckbox(forAll, { forAll = it })
             T(stringResource(R.string.cf_all), 15f * k)
         }
     }
@@ -364,12 +364,12 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
             val isNet = tconn?.kind != "cloud"
             T(stringResource(when (CloudTrash.mode(ctype)) { CloudTrash.NATIVE -> R.string.tr_del_trash; CloudTrash.OWN -> if (isNet) R.string.nt_del_own else R.string.tr_del_own; else -> if (isNet) R.string.nt_del_none else R.string.tr_del_nonreturn }), 13f * k, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), maxLines = 5)
             if (CloudTrash.supported(ctype) && !d.force) Row(Modifier.fillMaxWidth().clickable { perm = !perm }, verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(perm, { perm = it })
+                BigCheckbox(perm, { perm = it })
                 T(stringResource(R.string.tr_del_perm), 14f * k, color = if (perm) red else MaterialTheme.colorScheme.onSurface, maxLines = 2)
             }
         }
         if (!permanent) Row(Modifier.fillMaxWidth().clickable { never = !never }, verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Checkbox(never, { never = it })
+            BigCheckbox(never, { never = it })
             T(stringResource(R.string.dd_never), 14f * k, maxLines = 2)
         }
     }

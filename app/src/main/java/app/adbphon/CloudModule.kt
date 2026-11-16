@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,7 +37,7 @@ import java.security.MessageDigest
  */
 fun pmInstallCmd(path: String): String {
     val q = "'" + path.replace("'", "'\\''") + "'"
-    return "n=\$(wc -c < $q); cat $q | pm install -r -S \$n 2>&1"
+    return "n=\$(wc -c < $q); cat $q | pm install -r --user \$(am get-current-user) -S \$n 2>&1"
 }
 
 /** Облако без модуля: понятное сообщение вместо падения (движок живёт в отдельном пакете «ADB-phon Облака»). */
@@ -380,7 +380,7 @@ fun ModuleHost() {
     }
     val v = CloudModule.variant()
     if (CloudModule.askUpdate) {
-        androidx.compose.material3.AlertDialog(
+        LAlertDialog(
             onDismissRequest = { CloudModule.askUpdate = false },
             title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
             text = {
@@ -396,7 +396,7 @@ fun ModuleHost() {
     // ход скачивания/проверки, если обновление запущено не из окна «Файлов»
     if (Fm.dlg !is FmDlg.CloudModule && CloudModule.confirm == null && CloudModule.runDlg == null) {
         if (CloudModule.phase in 1..2) {
-            androidx.compose.material3.AlertDialog(
+            LAlertDialog(
                 onDismissRequest = { },
                 title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
                 text = {
@@ -412,7 +412,7 @@ fun ModuleHost() {
                 dismissButton = { TextButton({ CloudModule.cancel(ctx) }) { Text(stringResource(R.string.btn_cancel)) } },
             )
         } else if (CloudModule.phase == 4) {
-            androidx.compose.material3.AlertDialog(
+            LAlertDialog(
                 onDismissRequest = { CloudModule.reset() },
                 title = { Text(stringResource(R.string.cmu_title), maxLines = 2) },
                 text = {
