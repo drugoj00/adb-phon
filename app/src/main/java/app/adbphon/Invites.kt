@@ -27,7 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -569,6 +570,8 @@ fun InvitesSection() {
     var paste by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     var bad by remember { mutableStateOf(false) }
+    var sendInv by remember { mutableStateOf(false) }
+    if (sendInv) TsInviteSendDialog { sendInv = false }
     val sess = VpnSession.current
     var idleMin by remember { mutableStateOf(VpnSession.idleMinutes(ctx)) }
     Card(Modifier.fillMaxWidth()) {
@@ -580,16 +583,24 @@ fun InvitesSection() {
                     (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", Invites.myCode(ctx)))
                 }) { Text(stringResource(R.string.inv_copy)) }
             }
-            OutlinedButton({ paste = true; bad = false; text = "" }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.inv_have)) }
+            // 10.0: рядом с приёмом приглашения отправка своего (Tailscale API, MiscUi.kt)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val bp = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                OutlinedButton({ paste = true; bad = false; text = "" }, Modifier.weight(1f), contentPadding = bp) { Text(stringResource(R.string.inv_have), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                OutlinedButton({ sendInv = true }, Modifier.weight(1f), contentPadding = bp) { Text(stringResource(R.string.misc_inv_send_btn), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            }
             if (sess != null) {
                 Text(stringResource(R.string.inv_sess_text, sess.label), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 OutlinedButton({ scope.launch { VpnSession.end(ctx, "кнопка") } }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.inv_sess_restore_now)) }
             }
             Text(stringResource(R.string.inv_sess_idle), fontSize = 12.sp)   // подпись над кнопками: на узком экране (A7) в одну строку не помещается
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                listOf(5, 10, 30, 60).forEach { m ->
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                NumberSliderRules.VPN_IDLE_PRESETS.forEach { m ->
                     TextButton({ idleMin = m; VpnSession.setIdleMinutes(ctx, m) }) { Text(if (m == idleMin) "[$m]" else "$m", fontSize = 13.sp) }
                 }
+                // 10.0 (num): «Своё значение…» (1..1440 мин); выбранное своё показано в скобках
+                val idleOwn = numCustomChoice(idleMin, NumberSliderRules.VPN_IDLE_PRESETS, NumberSliderRules.VPN_IDLE, stringResource(R.string.inv_sess_idle).trimEnd(':', ' '), { n -> idleMin = n; VpnSession.setIdleMinutes(ctx, n) })
+                TextButton(idleOwn.onClick) { Text(if (idleOwn.selected) "[$idleMin]" else stringResource(R.string.num_custom), fontSize = 13.sp, maxLines = 1) }
             }
         }
     }

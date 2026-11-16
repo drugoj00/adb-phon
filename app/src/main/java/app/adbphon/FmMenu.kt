@@ -64,7 +64,7 @@ fun OpenWithDialog(p: FmPane, f: FmItem, close: () -> Unit) {
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Row(Modifier.fillMaxWidth().clickable { always = !always }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(always, { always = it }, Modifier.size(36.dp)); Text(stringResource(R.string.fm_use_default), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
+                    BigCheckbox(always, { always = it }); Text(stringResource(R.string.fm_use_default), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
                 }
             }
         },

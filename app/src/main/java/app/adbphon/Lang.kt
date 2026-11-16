@@ -49,7 +49,7 @@ private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) 
     val base = androidx.compose.ui.platform.LocalContext.current
     val code = LocalLangCode.current
     val ctx = androidx.compose.runtime.remember(base, code) { Lang.wrap(base, code) }
-    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides ctx) { content() }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides ctx) { TvFontScope(content) }   // 10.0 (tvfont): окна на ТВ: «Размер шрифта» и минимум размеров (TvFont.kt)
 }
 
 /** AlertDialog, который показывает строки на языке, выбранном в настройках. */

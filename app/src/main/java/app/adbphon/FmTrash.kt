@@ -372,6 +372,8 @@ fun FilesDeleteSection() {
             EqChoice(stringResource(R.string.ft_d30), FmDel.keepDays == 30) { if (tOn) FmDel.setKeepDays(ctx, 30) },
             EqChoice(stringResource(R.string.ft_d90), FmDel.keepDays == 90) { if (tOn) FmDel.setKeepDays(ctx, 90) },
             EqChoice(stringResource(R.string.ft_inf), FmDel.keepDays == 0) { if (tOn) FmDel.setKeepDays(ctx, 0) },
+            // 10.0 (num): «Своё значение…» (1..3650 дн.)
+            numCustomChoice(FmDel.keepDays, NumberSliderRules.TRASH_DAYS_PRESETS, NumberSliderRules.TRASH_DAYS, stringResource(R.string.ft_keep), { n -> FmDel.setKeepDays(ctx, n) }, enabled = tOn),
         ), perRow = 2)
     }
     androidx.compose.foundation.layout.Box(Modifier.alpha(tA)) { HintTitle(stringResource(R.string.ft_max), stringResource(R.string.ft_space_hint), titleWeight = fw) }
@@ -380,6 +382,8 @@ fun FilesDeleteSection() {
             EqChoice(stringResource(R.string.ft_inf), FmDel.maxMb == 0) { if (tOn) FmDel.setMaxMb(ctx, 0) },
             EqChoice(stringResource(R.string.ft_m500), FmDel.maxMb == 500) { if (tOn) FmDel.setMaxMb(ctx, 500) },
             EqChoice(stringResource(R.string.ft_m2g), FmDel.maxMb == 2048) { if (tOn) FmDel.setMaxMb(ctx, 2048) },
-        ), perRow = 3)
+            // 10.0 (num): «Своё значение…» (1..102400 МБ)
+            numCustomChoice(FmDel.maxMb, NumberSliderRules.TRASH_MB_PRESETS, NumberSliderRules.TRASH_MB, stringResource(R.string.ft_max), { n -> FmDel.setMaxMb(ctx, n) }, enabled = tOn),
+        ), perRow = 2)
     }
 }

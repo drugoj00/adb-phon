@@ -223,12 +223,57 @@ object FmRootCfg {
             else -> null
         }
     }.getOrNull()
+    /**
+     * 10.0 (fm1, владелица): правило «только явно раскрытая папка» и окно «Сначала выберите место» убраны. Как в опубликованной версии:
+     * приёмник = текущая (последняя раскрытая) папка дерева другой панели, иначе папка строки с фокусом или последней нажатой. null: папки нет,
+     * тогда копирование предлагает окно выбора папки (FmDlg.PickTarget), без тупика.
+     */
     fun destFor(o: FmPane): Dst? {
         o.rootOpen.toList().asReversed().firstNotNullOfOrNull { nodeDst(it) }?.let { return it }
         val ref = lastRow[o.id]
         if (ref?.node != null && ref.key in rowsOf(o.id)) nodeDst(ref.node)?.let { return it }
         return null
     }
+
+    // ---------- 10.0 (fm1): отметка в дереве «Источники»: папка = всё содержимое (логика в SelTree) ----------
+    /** Видимые строки дерева панели с отметкой: ключ → элемент, содержимое раскрытых папок, элементы верхнего уровня (для «Все» и «Инверсии»). */
+    class VisSel(val byKey: Map<String, SelE>, val kids: Map<String, List<String>>, val top: List<String>)
+    private val visSel = java.util.concurrent.ConcurrentHashMap<Int, VisSel>()
+    fun setVisSel(paneId: Int, v: VisSel) { visSel[paneId] = v }
+    /** Файл «F|путь» и «f|…» лежит в папке «L|…» и «N|…»: для вложенности ключи приводятся к одному виду. */
+    val canon: (String) -> String = { k -> if (k.startsWith("F|")) "L|" + k.substring(2) else if (k.startsWith("f|")) "N|" + k.substring(2) else k }
+    private fun isTrash(e: SelE) = e.ti != null || e.fi != null
+    /** Отмечено само или через отмеченную папку выше. */
+    fun covered(key: String): Boolean = sel.containsKey(key) || SelTree.covered(sel.keys.toList(), key, canon)
+    /** Внутри папки отмечена только часть. */
+    fun partial(key: String): Boolean = SelTree.partial(sel.keys.toList(), key, canon)
+    private fun apply(paneId: Int, keys: Set<String>) {
+        val v = visSel[paneId]
+        val m = LinkedHashMap<String, SelE>()
+        for (k in keys) (sel[k] ?: v?.byKey?.get(k))?.let { m[k] = it }
+        val gone = sel.keys.filter { it !in m }
+        gone.forEach { sel.remove(it) }
+        for ((k, e) in m) if (!sel.containsKey(k)) sel[k] = e
+    }
+    /** Нажатие на галочку строки дерева (элементы корзин отмечаются по одному, без вложенности). */
+    fun toggleTree(paneId: Int, e: SelE) {
+        if (isTrash(e)) { toggleSel(e); return }
+        val v = visSel[paneId]
+        if (v == null || !v.byKey.containsKey(e.key)) { val keys = SelTree.toggle(sel.keys.toList(), e.key, { null }, canon); if (keys.contains(e.key)) sel[e.key] = e; apply(paneId, keys); return }
+        apply(paneId, SelTree.toggle(sel.keys.toList(), e.key, { v.kids[it] }, canon))
+    }
+    /** Галочка раскрытого устройства или тома без своей отметки: отметить или снять всё прямо внутри. */
+    fun setAll(paneId: Int, list: List<SelE>, on: Boolean) {
+        var keys: Set<String> = LinkedHashSet(sel.keys)
+        for (e in list.filter { !isTrash(it) }) keys = if (on) SelTree.select(keys, e.key, canon) else keys.filter { it != e.key && !SelTree.under(it, e.key, canon) }.toSet()
+        val tr = list.filter { isTrash(it) }
+        apply(paneId, keys)
+        tr.forEach { if (on) sel[it.key] = it else sel.remove(it.key) }
+    }
+    /** «Все» в дереве: каждый видимый отмечаемый элемент верхнего уровня (вложенное входит в отмеченные папки). */
+    fun selectAllVisible(paneId: Int) { val v = visSel[paneId] ?: return; apply(paneId, SelTree.selectAll(sel.keys.toList(), v.top, canon)) }
+    /** «Инверсия» по видимому (раскрытому) дереву. */
+    fun invertVisible(paneId: Int) { val v = visSel[paneId] ?: return; val tr = sel.values.filter { isTrash(it) }; apply(paneId, SelTree.invert(sel.keys.filter { k -> sel[k]?.let { !isTrash(it) } ?: true }, v.top, { v.kids[it] }, canon)); tr.forEach { sel[it.key] = it } }
     /** Фокус пульта: первый значок нижней панели выбора и ключ последней видимой строки списка (стрелка «вниз» на ней уходит на панель). */
     val barFocus = androidx.compose.ui.focus.FocusRequester()
     @Volatile var lastVisKey: String? = null
@@ -252,7 +297,8 @@ object FmRootCfg {
         for (k in ks) map[FmItem(k.name, k.isDir, k.size, k.date)] = k
         if (map.size != ks.size) return ks
         val needColor = cfg.keyOf(SGroup.DIR) == SKey.COLOR
-        val ctx = SortCtx({ null }, { map[it]?.count ?: -1 }, { if (needColor) map[it]?.let { k -> UiPrefs.folderColors[folderKey(p, k.path)] } ?: UiPrefs.folderDefault else 0 })
+        // 10.0 (chk): цвет сетевой папки хранится с приставкой «smb:» (так его задаёт панель сети)
+        val ctx = SortCtx({ null }, { map[it]?.let { k -> if (k.count >= 0) k.count else appCount[k.id] ?: kids[k.id]?.size } ?: -1 }, { if (needColor) map[it]?.let { k -> UiPrefs.folderColors[if (k.id.startsWith("N|")) "smb:" + k.path else folderKey(p, k.path)] } ?: UiPrefs.folderDefault else 0 })
         return SortEngine.sort(map.keys.toList(), cfg, ctx).mapNotNull { map[it] }
     }
     /** Узлы, содержимое которых нужно перечитать «на месте» (без «Загрузки…» и без схлопывания списка): после удаления и копирования. */
@@ -330,6 +376,8 @@ object FmRootCfg {
     private val autoRetry = HashMap<String, Int>()
     /** Сколько элементов узла показывать сразу (остальное счётчиком): быстрая прокрутка длинных папок. */
     const val LIMIT = 200
+    /** 10.0 (chk): сколько элементов узла хранить до сортировки (показывается LIMIT уже отсортированных). */
+    const val KEEP = 1000
     fun fsFor(c: NetConn): RemoteFs = fsCache.getOrPut(c.kind + "|" + c.host + "|" + c.user) { c.fs() }
     val appCount = mutableStateMapOf<String, Int>()
     private val fsCache = java.util.concurrent.ConcurrentHashMap<String, RemoteFs>()
@@ -375,7 +423,7 @@ object FmRootCfg {
                 // «ADB (оболочка)»: папки по ADB (нужна связь)
                 FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                 val path = id.removePrefix("D|").ifEmpty { "/" }
-                AdbFs.list(path).filter { it.isDir }.take(300).map { TK(it.name, "D|" + it.path, it.path) }
+                AdbFs.list(path).filter { it.isDir }.take(300).map { TK(it.name, "D|" + it.path, it.path, true, 0L, it.date) }
             } else if (id.startsWith("L|")) {
                 val path = id.removePrefix("L|")
                 val plain = withContext(Dispatchers.IO) { File(path).listFiles() }
@@ -384,13 +432,13 @@ object FmRootCfg {
                     FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                     val all = AdbFs.list(path).filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
-                    all.take(LIMIT).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "F|" + it.path, it.path, false, it.size, it.date) }
+                    all.take(KEEP).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "F|" + it.path, it.path, false, it.size, it.date) }
                 } else
                 withContext(Dispatchers.IO) {
                     val all = File(path).listFiles().orEmpty().filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
                     val df = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                    all.take(LIMIT).map { val dt = df.format(java.util.Date(it.lastModified())); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt, it.list()?.size ?: -1) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
+                    all.take(KEEP).map { val dt = df.format(java.util.Date(it.lastModified())); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt, it.list()?.size ?: -1) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
                 }
             } else {
                 val a = id.split('|', limit = 5)
@@ -403,7 +451,7 @@ object FmRootCfg {
                 withContext(Dispatchers.IO) {
                     val all = fs.list(path)
                     appCount[id] = all.size
-                    all.take(LIMIT).map { if (it.isDir) TK(it.name, "N|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path) else TK(it.name, "f|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, false, it.size) }
+                    all.take(KEEP).map { if (it.isDir) TK(it.name, "N|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "f|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, false, it.size, it.date) }
                 }
             }
             kids[id] = list; autoRetry.remove(id)
@@ -531,6 +579,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val prim = MaterialTheme.colorScheme.primary
     val (devTotal, devFree) = remember(p.root) { statOf("/sdcard") }
     val rows = ArrayList<RR>()
+    val visOpen = ArrayList<String>()
     rows += RR("h:mem", stringResource(R.string.rt_group_storage), Icons.Filled.PhoneAndroid, prim, header = 1)
     val treeOn = FmRootCfg.treeOn
     @Suppress("UNUSED_VARIABLE") val sortTickNow = Fm.sortTick   // перерисовка дерева при смене настройки «Сортировка»
@@ -557,8 +606,10 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     }
     fun addKids(id: String, level: Int, c: NetConn?) {
         if (!treeOn || id !in p.rootOpen) return
+        visOpen += id
         val ks0 = FmRootCfg.kids[id]
-        val ks = ks0?.let { FmRootCfg.sortKids(p, id, it) }
+        // 10.0 (chk): сначала сортировка по настройке, потом обрезка до LIMIT строк (раньше обрезалось по имени, и при «по дате»/«по размеру» в больших папках нужное отсекалось)
+        val ks = ks0?.let { FmRootCfg.sortKids(p, id, it) }?.let { if (id.startsWith("L|") || id.startsWith("N|")) it.take(FmRootCfg.LIMIT) else it }
         if (ks == null) {
             val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
             // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
@@ -733,7 +784,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             val callVTxt = stringResource(R.string.dev_call_video); val callATxt = stringResource(R.string.dev_call_audio)
             val onTxt = stringResource(R.string.pc_online); val offTxt = stringResource(R.string.pc_offline); val chkTxt = stringResource(R.string.pc_checking)
             val all = pcs.map { it.name.ifBlank { it.ip } to (it as Any) } + ands.map { it.title to (it as Any) }
-            all.sortedBy { it.first.lowercase() }.forEach { (_, dv) ->
+            all.sortedWith { x, y -> SortEngine.nameCmp(x.first, y.first, true, true) }.forEach { (_, dv) ->
                 if (dv is PcHost) {
                     val h = dv; val up = PcStatus.up[h.ip]; val ek = "dev:pc:" + h.ip
                     rows += RR("pc:" + h.ip, h.name.ifBlank { h.ip }, Icons.Filled.Computer, if (up == true) Color(0xFF26A69A) else Color(0xFF9E9E9E), level = 1, pc = h, expandKey = ek,
@@ -751,8 +802,8 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                     if (ek in p.rootOpen) {
                         rows += RR("andc:" + d.addr, callVTxt, Icons.Filled.Videocam, Color(0xFF26A69A), level = 2, act = { devCall(ctx, d.title, d.callIps(), null, false) })
                         rows += RR("anda:" + d.addr, callATxt, Icons.Filled.Call, Color(0xFF26A69A), level = 2, act = { devCall(ctx, d.title, d.callIps(), null, true) })
-                        rows += RR("andv:" + d.addr, videoTxt, Icons.Filled.DesktopWindows, Color(0xFF9CCC65), level = 2, act = { Fm.dlg = FmDlg.AndroidScreen(d) })
-                        rows += RR("andf:" + d.addr, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { fmLeaveRoot(p); Fm.connectNet(p, d.conn()) })
+                        rows += RR("andf:" + d.addr, filesTxt, Icons.Filled.Folder, Color(0xFFFFB74D), level = 2, act = { DeviceWin.open(ctx, d, DeviceWin.FILES) })
+                        rows += RR("andv:" + d.addr, videoTxt, Icons.Filled.DesktopWindows, Color(0xFF9CCC65), level = 2, act = { DeviceWin.open(ctx, d, DeviceWin.SCREEN) })
                     }
                 }
             }
@@ -841,7 +892,24 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             (8 + TREE_IND * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 10)).toFloat()
         }
     }
-    androidx.compose.runtime.SideEffect { val vis = rows.filter { it.header == 0 }; FmRootCfg.setRows(p.id, vis.map { it.key }, vis.map { it.level }) }
+    // 10.0 (fm1): видимые отмечаемые строки: элемент → его содержимое (строки уровнем ниже под раскрытой папкой) и верхний уровень (родитель без своей отметки)
+    val visSel = run {
+        val byKey = LinkedHashMap<String, FmRootCfg.SelE>(); val kidsOf = HashMap<String, MutableList<String>>(); val top = ArrayList<String>()
+        val stack = ArrayList<RR>()
+        for (r in rows) {
+            if (r.header == 1) { stack.clear(); continue }
+            while (stack.isNotEmpty() && stack.last().level >= r.level) stack.removeAt(stack.lastIndex)
+            val parent = stack.lastOrNull()
+            stack.add(r)
+            val e = r.selE ?: continue
+            byKey[e.key] = e
+            val pe = parent?.selE
+            if (pe != null && pe.ti == null && pe.fi == null) kidsOf.getOrPut(pe.key) { ArrayList() }.add(e.key)
+            else if (e.ti == null && e.fi == null) top.add(e.key)
+        }
+        FmRootCfg.VisSel(byKey, kidsOf, top)
+    }
+    androidx.compose.runtime.SideEffect { val vis = rows.filter { it.header == 0 }; FmRootCfg.setRows(p.id, vis.map { it.key }, vis.map { it.level }); FmRootCfg.setVisSel(p.id, visSel) }
     val rootCtx = LocalContext.current
     Column(modifier.then(Modifier.fillMaxWidth()).onPreviewKeyEvent { e ->
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FocusRestore.isDpad(e.nativeKeyEvent.keyCode)) FocusRestore.markKeys(rootCtx)
@@ -900,10 +968,19 @@ internal object RootSelOps {
         }
     }
     /** После копирования или переноса: дождаться конца заданий и перечитать на месте источники и приёмник. */
-    suspend fun afterJobs(parents: List<String>) {
-        kotlinx.coroutines.delay(700)
-        var n = 0
-        while ((Fm.jobs.isNotEmpty() || Fm.dlg is FmDlg.Conflict) && n < 4000) { kotlinx.coroutines.delay(300); n++ }
+    suspend fun afterJobs(parents: List<String>, seq0: Int = Fm.jobSeq) {
+        kotlinx.coroutines.delay(300)
+        // 10.0: перед копированием в сеть идёт сканирование приёмника (бывает долгим): сначала ждём появления задания (до ~60 с; очень быстрое задание
+        // видно по счётчику jobSeq), потом его конца
+        var n = 0; var started = false
+        while (n < 4000) {
+            kotlinx.coroutines.delay(300); n++
+            if (Fm.jobs.isNotEmpty() || Fm.jobSeq != seq0) started = true
+            if (Fm.jobs.isNotEmpty()) continue
+            if (Fm.dlg is FmDlg.Conflict) continue
+            if (started) break
+            if (n >= 200) break
+        }
         kotlinx.coroutines.delay(500)
         parents.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }
         CloudTrash.ver++
@@ -912,24 +989,31 @@ internal object RootSelOps {
         val o = Fm.panes[1 - p.id]
         val groups = files.groupBy { (it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L") + "#" + it.parentPath }
         val par = files.map { it.parentId }
-        // 9.3: папка-приёмник: последняя раскрытая папка другой панели (дерево) или её текущая папка (список)
-        val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }) else null
+        // 9.3: папка-приёмник: последняя раскрытая папка другой панели (дерево) или её текущая папка (список); 10.0: папки нет, окно выбора папки
+        val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run {
+            Fm.dlg = FmDlg.PickTarget(move, groups.values.map { g -> pseudo(g[0], g[0].parentPath) to g.map { it.name } }) { afterJobs(par) }
+            FmRootCfg.sel.clear(); return
+        }) else null
         dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
+        val seq0 = Fm.jobSeq
         Fm.scope.launch {
             for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
-            afterJobs(par + listOfNotNull(dst?.node))
+            afterJobs(par + listOfNotNull(dst?.node), seq0)
         }
         FmRootCfg.sel.clear()
     }
     /** Копирование и перенос из обычного списка панели [p] (не дерево): в раскрытую папку дерева другой панели или в её текущую папку. */
-    fun fromList(p: FmPane, move: Boolean) {
+    fun fromList(p: FmPane, move: Boolean) = toOther(p, Fm.targets(p), move)
+    /** 10.0 (fm1): копирование и перенос [names] панели [p] в ТЕКУЩУЮ папку другой панели (как в опубликованной версии); другая панель на «Источниках»: её раскрытая папка, иначе окно выбора папки. */
+    fun toOther(p: FmPane, names: List<String>, move: Boolean) {
         val o = Fm.panes[1 - p.id]
-        val names = Fm.targets(p)
+        if (names.isEmpty()) return
         if (!o.root) { Fm.copyMove(move, p, o, names); return }
-        val dst = FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }
+        val dst = FmRootCfg.destFor(o) ?: run { Fm.dlg = FmDlg.PickTarget(move, listOf(p to names)); return }
         Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, dst.label()))
+        val seq0 = Fm.jobSeq
         Fm.copyMove(move, p, dst.pane(), names)
-        Fm.scope.launch { afterJobs(listOf(dst.node)) }
+        Fm.scope.launch { afterJobs(listOf(dst.node), seq0) }
     }
     fun deleteFiles() {
         val srcs = files.map { it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L" }.distinct()
@@ -1112,6 +1196,23 @@ private fun SelIcon(icon: ImageVector, label: Int, tint: Color, focusReq: androi
 
 /** Перетаскивание из дерева корневого экрана: отмеченные локальные строки (или только эта) берутся от общей папки, имена относительно неё. */
 /** Раскрытой остаётся только цепочка к последней открытой папке; открыл другой источник (память, карта, сеть, облако и др.): прежний сворачивается. */
+/** 9.4: свернули устройство, диск или папку: раскрытое внутри (все уровни) тоже сворачивается. */
+private fun collapseInside(p: FmPane, id: String) {
+    val own = listOf("/sdcard") + Fm.vols.filter { it.ok }.map { it.path.trimEnd('/') }
+    val inside = TreeOpen.inside(p.rootOpen.toList(), id, own) { acc ->
+        val a = acc.split('|', limit = 5)
+        NetStore.list(Fm.sctx).firstOrNull { it.kind == a.getOrNull(1) && it.host == a.getOrNull(2) && it.user == a.getOrNull(3) }?.let { NetTrash.rid(it) }
+    }
+    if (inside.isNotEmpty()) { p.rootOpen.removeAll(inside.toSet()); p.rootPending.removeAll(inside.toSet()) }
+}
+
+/** 9.4: верхние группы корня (LAN, Облака, Wi-Fi проводник, Устройства, Приложения): раскрыта только одна, остальные сворачиваются. */
+private val ROOT_GROUPS = setOf("lan", "cloud", "wifi", "pc", "apps")
+private fun openGroup(p: FmPane, key: String) {
+    if (key in ROOT_GROUPS) p.rootOpen.removeAll { it in ROOT_GROUPS && it != key }
+    if (key !in p.rootOpen) p.rootOpen.add(key)
+}
+
 private fun rootAccordion(p: FmPane, id: String) {
     fun kind(o: String) = o.take(2)
     fun src(o: String) = when (kind(o)) { "N|" -> o.split('|').take(4).joinToString("|"); "L|", "D|" -> kind(o); else -> o }
@@ -1164,32 +1265,7 @@ private fun rootAccordion(p: FmPane, id: String) {
 /** Сдвиг одного уровня дерева (dp): вертикальные линии ветвей стоят максимально близко (было 22). Общая для дерева «домика» и дерева папок в панели. */
 const val TREE_IND = 11
 
-private fun sameNet(a: NetConn?, b: NetConn?): Boolean = if (a == null || b == null) a == null && b == null else a.kind == b.kind && a.host == b.host && a.user == b.user
-
-private fun rootDragStart(p: FmPane, e: FmRootCfg.SelE, at: androidx.compose.ui.geometry.Offset, pid: Long) {
-    val chosen = FmRootCfg.sel.values.filter { it.ti == null && it.fi == null && sameNet(it.net, e.net) }
-    val list = if (e.key in FmRootCfg.sel && chosen.isNotEmpty()) chosen else listOf(e)
-    val parents = list.map { it.path.substringBeforeLast('/', "").ifEmpty { "/" } }
-    var base = parents.first().trimEnd('/').split('/')
-    for (pp in parents.drop(1)) { val seg = pp.trimEnd('/').split('/'); base = base.zip(seg).takeWhile { it.first == it.second }.map { it.first } }
-    val baseP = base.joinToString("/").ifEmpty { "/" }
-    val names = list.map { it.path.removePrefix(baseP.trimEnd('/') + "/") }
-    val vp = FmPane(8, baseP).also { if (e.net == null) it.src = "local" else { it.src = "smb"; it.net = e.net; it.smb = e.net.fs() } }
-    FmDnd.beginNames(vp, FmItem(e.name, e.isDir, 0, ""), at, pid, names)
-}
-
-/** Маленькая галочка выбора в строках «домика» (10.11.2026, владелица: «квадратики в два раза меньше и ближе к краю»): квадрат 11 dp вместо 22, область нажатия 26 dp, прижата к правому краю. */
-@Composable
-internal fun SmallCheck(on: Boolean, tv: Boolean, onClick: () -> Unit) {
-    val sz = if (tv) 16.dp else 11.dp
-    val cs = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(2.dp)
-    Box(Modifier.size(if (tv) 34.dp else 26.dp).clickable(remember { MutableInteractionSource() }, null) { onClick() }, contentAlignment = Alignment.CenterEnd) {
-        Box(Modifier.size(sz).clip(shape).background(if (on) cs.primary else Color.Transparent).border(1.5.dp, if (on) cs.primary else cs.onSurface.copy(alpha = .7f), shape), contentAlignment = Alignment.Center) {
-            if (on) Icon(Icons.Filled.Check, null, Modifier.size(sz - 2.dp), tint = cs.onPrimary)
-        }
-    }
-}
+// 10.0 (fm1): перетаскивание строк дерева убрано (владелица: мешало прокрутке); квадратик отметки SmallCheck/SelBox/SelZone в FmSelUi.kt
 
 @Composable
 private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
@@ -1210,15 +1286,18 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if (focused) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
     var menu by remember { mutableStateOf(false) }
     var iconPick by remember { mutableStateOf(false) }
-    // перетаскивание строк дерева корневого экрана (локальные файлы и папки): источник и цель-папка
+    // 10.0 (fm1): отметка строки (папка = всё содержимое, вложенные строки отмечены через неё); галочка с крупной зоной нажатия справа
+    val chkFr = remember { androidx.compose.ui.focus.FocusRequester() }
     val e0 = r.selE
-    val dragSrc = if (e0 != null && e0.ti == null && e0.fi == null && r.fitem == null) e0 else null
-    val treeDropPath = if (dragSrc != null && dragSrc.isDir) dragSrc.path else null
-    // сетевой источник или облако: цель сброса и источник тянутся через панель-«двойник» с файловой системой этого подключения
-    val dropPane = remember(dragSrc?.net) { val nc = dragSrc?.net; if (nc == null) p else FmPane(7, dragSrc.path).also { it.src = "smb"; it.net = nc; it.smb = nc.fs() } }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    var rowCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-    val hot = (r.path != null && r.net == null && dndHot(p, r.path, 3)) || (treeDropPath != null && dndHot(dropPane, treeDropPath, 6))
+    val chkOn: Boolean; val chkPart: Boolean; val chkClick: (() -> Unit)?
+    if (e0 != null) {
+        chkOn = FmRootCfg.covered(e0.key); chkPart = e0.isDir && !chkOn && FmRootCfg.partial(e0.key)
+        chkClick = { Fm.active = p.id; FmRootCfg.toggleTree(p.id, e0) }
+    } else if (r.selAll.isNotEmpty()) {
+        // раскрытое устройство, том или «диск» без своей отметки: галочка отмечает или снимает всё прямо внутри
+        chkOn = r.selAll.all { FmRootCfg.covered(it.key) }; chkPart = !chkOn && r.selAll.any { FmRootCfg.covered(it.key) || FmRootCfg.partial(it.key) }
+        chkClick = { Fm.active = p.id; FmRootCfg.setAll(p.id, r.selAll, !chkOn) }
+    } else { chkOn = false; chkPart = false; chkClick = null }
     val selected = p.rootSel == r.key
     val hoveredRow by src.collectIsHoveredAsState()
     val pressedRow by src.collectIsPressedAsState()
@@ -1227,7 +1306,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val cnt = r.path?.let { FmRootCfg.counts[it] }
     val bigFont = if (tv) 1.15f else 1f
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .22f)
-    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) p.rootOpen.remove(id) else { rootAccordion(p, id); p.rootOpen.add(id); FmRootCfg.refresh(p, id, NetStore.list(ctx)) } }
+    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id) } else { rootAccordion(p, id); p.rootOpen.add(id); FmRootCfg.refresh(p, id, NetStore.list(ctx)) } }
     // устройство LAN (найденное или сохранённое): раскрытие дерева с автоматическим раскрытием общего ресурса из подключения
     val rowToggle = { id: String ->
         val isLan = r.level == 1 && !r.drive && r.net != null && id == r.treeId && (r.key.startsWith("lanf:") || (r.key.startsWith("net:") && r.net.kind != "dav" && r.net.kind != "cloud"))
@@ -1239,17 +1318,19 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             Fm.scope.launch { FmRootCfg.lanAutoOpen(p, id, nc, h) }
         }
     }
+    val rowClickR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (e0 != null && r.titem == null && r.fitem == null && FmRootCfg.sel.values.any { it.ti == null && it.fi == null }) FmRootCfg.toggleTree(p.id, e0) else if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else openGroup(p, r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() }
+    val rowLongR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; menu = true }
     Box2(
         Modifier.fillMaxWidth().onKeyEvent { e ->
             val id = r.treeId
             if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == androidx.compose.ui.input.key.Key.DirectionDown && FmRootCfg.sel.isNotEmpty() && r.key == FmRootCfg.lastVisKey) { runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess }
+            // 10.0 (fm1): пульт: «вправо» на строке с галочкой (файл или уже раскрытая папка) переводит фокус на галочку
+            else if (chkClick != null && e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == androidx.compose.ui.input.key.Key.DirectionRight && (id == null || !FmRootCfg.treeOn || id in p.rootOpen)) runCatching { chkFr.requestFocus() }.isSuccess
             else if (id == null || !FmRootCfg.treeOn || e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) false
             else if (e.key == androidx.compose.ui.input.key.Key.DirectionRight && id !in p.rootOpen) { treeToggle(id); true }
             else if (e.key == androidx.compose.ui.input.key.Key.DirectionLeft && id in p.rootOpen) { treeToggle(id); true }
             else false
-        }.then(if (r.path != null && r.vol?.ok != false) Modifier.dndTarget(p, r.path, 3, r.title, "local") else Modifier)
-            .then(if (treeDropPath != null) Modifier.dndTarget(dropPane, treeDropPath, 6, r.title, if (dragSrc?.net != null) "smb" else "local") else Modifier)
-            .onGloballyPositioned { rowCoords = it }
+        }
             // выбор: плашка цвета интерфейса и полоска слева; фокус пульта или клавиатуры: рамка (выбор и фокус различаются)
             .drawBehind {
                 // линии ветвей дерева: вертикали предков и соединитель к своей строке (тонкие, низкая непрозрачность)
@@ -1270,53 +1351,14 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     }
                 }
             }
-            .background(if (hot) prim.copy(alpha = .2f) else if (selected) prim.copy(alpha = .22f) else Color.Transparent, RoundedCornerShape(8.dp))
+            .background(if (selected) prim.copy(alpha = .22f) else if (chkOn && e0 != null) prim.copy(alpha = .12f) else Color.Transparent, RoundedCornerShape(8.dp))
             .drawBehind { if (selected) drawRect(prim, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height)) }
             .then(if (focused) Modifier.border((if (tv) 3 else 2).dp, prim, RoundedCornerShape(8.dp)) else Modifier)
-            .then(if (dragSrc != null) Modifier.pointerInput(r.key, FmDnd.on) {
-                // перетаскивание: сенсор (долгое касание, затем тянуть; отпустить без движения = меню), мышь (зажать левую и тянуть)
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    val mouse = down.type == androidx.compose.ui.input.pointer.PointerType.Mouse
-                    if (mouse && currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
-                    val slop = viewConfiguration.touchSlop
-                    fun beginDrag(pos: androidx.compose.ui.geometry.Offset) {
-                        Fm.active = p.id; p.rootSel = r.key
-                        rootDragStart(p, dragSrc, rowCoords?.localToRoot(pos) ?: pos, down.id.value)
-                    }
-                    if (!mouse) {
-                        var early = false
-                        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                            while (!early) {
-                                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                                val ch = ev.changes.firstOrNull { it.id == down.id }
-                                if (ch == null || !ch.pressed || (ch.position - down.position).getDistance() > slop * 3f) early = true
-                            }
-                        }
-                        if (early) return@awaitEachGesture
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                        val start = down.position
-                        while (true) {
-                            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                            ch.consume()
-                            if (!ch.pressed) { Fm.active = p.id; p.rootSel = r.key; menu = true; break }
-                            if (FmDnd.on && (ch.position - start).getDistance() > slop) { beginDrag(ch.position); return@awaitEachGesture }
-                        }
-                    } else if (FmDnd.on && currentEvent.buttons.isPrimaryPressed) {
-                        val start = down.position
-                        while (true) {
-                            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!ch.pressed) break
-                            if ((ch.position - start).getDistance() > slop) { ch.consume(); beginDrag(ch.position); return@awaitEachGesture }
-                        }
-                    }
-                }
-            } else Modifier)
+            .mouseSecondary { Fm.active = p.id; p.rootSel = r.key; menu = true }   // 10.0 (mouse): правая кнопка = меню строки, как долгое нажатие
             .focusRequester(rowFr).hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else p.rootOpen.add(r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() },
-                onLongClick = { Fm.active = p.id; p.rootSel = r.key; menu = true })
+                onClick = rowClickR,
+                onLongClick = rowLongR)
+            .mouseLeftClicks(rowClickR, rowLongR)   // 10.0 (mouse): мышь: клик, «подержал и отпустил» = меню, «подержал и повёл» = прокрутка
             .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
@@ -1347,24 +1389,11 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 if (r.total > 0) FmSpaceBar(1f - r.free.toFloat() / r.total, Modifier.fillMaxWidth().padding(top = 1.dp))
             }
             if (r.ro) Icon(Icons.Filled.Lock, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-            r.tog?.let { on -> androidx.compose.material3.Checkbox(on, { r.act() }, Modifier.size(if (tv) 40.dp else 32.dp)) }
+            r.tog?.let { on -> BigCheck(on, tv) { r.act() } }
             if (r.level == 0) r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
-            if (r.selAll.isNotEmpty()) {
-                // раскрытая папка или устройство: галочка отмечает или снимает всё внутри
-                val allOn = r.selAll.all { FmRootCfg.sel.containsKey(it.key) }
-                SmallCheck(allOn, tv) { Fm.active = p.id; if (allOn) r.selAll.forEach { FmRootCfg.sel.remove(it.key) } else r.selAll.forEach { FmRootCfg.sel[it.key] = it } }
-            } else if (r.selReq && (r.treeId != null || r.expandKey != null)) {
-                SmallCheck(false, tv) {
-                    Fm.active = p.id
-                    if (r.expandKey != null) { if (r.expandKey !in p.rootOpen) p.rootOpen.add(r.expandKey); return@SmallCheck }
-                    val tid0 = r.treeId ?: return@SmallCheck
-                    val tgt = r.selTarget ?: tid0
-                    FmRootCfg.selAllPending.add(tgt)
-                    if (tid0 !in p.rootOpen) treeToggle(tid0)
-                    if (tgt != tid0 && tgt !in p.rootOpen) treeToggle(tgt)
-                }
-            } else r.selE?.let { e -> SmallCheck(FmRootCfg.sel.containsKey(e.key), tv) { Fm.active = p.id; FmRootCfg.toggleSel(e) } }
+            if (chkClick != null) Box(Modifier.width(if (tv) 40.dp else 32.dp), contentAlignment = Alignment.CenterEnd) { SelBox(chkOn, chkPart, tv) }
         }
+        if (chkClick != null) SelZone(tv, chkFr, rowFr, stringResource(if (chkOn) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.rootSel = r.key; menu = true }) { chkClick() }
         if (iconPick) CustomIconPicker(r.title, "d:" + r.key) { iconPick = false }
         LDropdownMenu(menu, { menu = false }) {
             @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { menu = false; run() })
@@ -1398,7 +1427,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             else if (r.expandKey == null && r.header == 0 && r.tnet == null && !r.ftrash && r.fitem == null) item(if (r.treeId != null && FmRootCfg.treeOn && r.file == null) R.string.fm_open_panel else R.string.fm_open) { r.act() }
             // полное меню файла и папки на корневом экране (как в списке панели): отметка, копирование, права доступа и так далее
             r.selE?.takeIf { it.net == null && it.ti == null && it.fi == null && r.appName == null }?.let { e ->
-                val multiSel = e.key in FmRootCfg.sel && FmRootCfg.sel.size > 1
+                val inSel = FmRootCfg.covered(e.key)
+                val multiSel = inSel && FmRootCfg.sel.size > 1
                 val tg = if (multiSel) FmRootCfg.sel.values.filter { it.net == null && it.ti == null && it.fi == null } else listOf(e)
                 fun pane(path: String): FmPane = FmPane(9, path).also { it.src = "local" }
                 val rel = tg.map { it.path.trimStart('/') }
@@ -1407,7 +1437,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 fun refresh(focusKey: String? = null) { val before = FmRootCfg.rowsOf(p.id); val ids = tg.map { it.parentId } + (if (e.isDir) listOf(e.key) else emptyList()); Fm.scope.launch { kotlinx.coroutines.delay(600); var wn = 0; while (wn < 400 && (Fm.dlg is FmDlg.Rename || Fm.dlg is FmDlg.NewFolder || Fm.dlg is FmDlg.NewFile)) { kotlinx.coroutines.delay(300); wn++ }; kotlinx.coroutines.delay(if (wn > 0) 700L else 1900L); ids.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }; CloudTrash.ver++; FmRootCfg.focusRowLater(focusKey); FmRootCfg.focusRenamed(p.id, before) } }
                 fun transfer(move: Boolean) {
                     val o = Fm.panes[1 - p.id]
-                    val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.say(Fm.str(R.string.sel_need_target)); return }) else null
+                    val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.dlg = FmDlg.PickTarget(move, tg.groupBy { it.parentPath }.map { (pp, g) -> pane(pp) to g.map { it.name } }) { refresh() }; return }) else null
                     dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
                     Fm.scope.launch {
                         for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(move, pane(pp), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
@@ -1415,7 +1445,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                         refresh()
                     }
                 }
-                item(if (e.key in FmRootCfg.sel) R.string.fm_unselect else R.string.fm_select) { FmRootCfg.toggleSel(e) }
+                item(if (inSel) R.string.fm_unselect else R.string.fm_select) { FmRootCfg.toggleTree(p.id, e) }
                 item(R.string.fm_copy) { transfer(false) }
                 item(R.string.fm_move) { transfer(true) }
                 item(R.string.fm_delete) { val nb = FmRootCfg.neighborOf(tg.map { "t:" + it.key }.toSet()); Fm.askDelete(pane("/"), rel); refresh(nb) }
@@ -1429,6 +1459,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 item(R.string.fm_props) { Fm.props(pane("/"), rel) }
                 item(R.string.perm_title) { Fm.dlg = FmDlg.Perms(pane("/"), rel) }
                 item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(pane(e.parentPath), tg.filter { it.parentPath == e.parentPath }.map { it.name }) }
+                if (!multiSel && !e.isDir && e.name.substringAfterLast('.').lowercase() in setOf("apks", "xapk", "apkm")) item(R.string.rp_menu) { Fm.repackFile(pane(e.parentPath), FmItem(e.name, false, 0, ""), Fm.panes[1 - p.id]) }
                 item(R.string.copy_name) { copyText(ctx, tg.joinToString("\n") { it.name }) }
                 item(R.string.fm_copy_path) { copyText(ctx, tg.joinToString("\n") { it.path }) }
                 item(R.string.fm_new_folder) { Fm.dlg = FmDlg.NewFolder(dir); refresh() }
@@ -1528,7 +1559,7 @@ fun RootShowDialog(close: () -> Unit) {
             Column {
                 FmRootCfg.optional.forEach { k ->
                     Row(Modifier.fillMaxWidth().clickable { FmRootCfg.set(ctx, k, k !in FmRootCfg.shown) }, verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(k in FmRootCfg.shown, { FmRootCfg.set(ctx, k, it) }); Text(names[k] ?: k, fontSize = 15.sp)
+                        BigCheckbox(k in FmRootCfg.shown, { FmRootCfg.set(ctx, k, it) }); Text(names[k] ?: k, fontSize = 15.sp)
                     }
                 }
             }
@@ -1539,7 +1570,7 @@ fun RootShowDialog(close: () -> Unit) {
 
 /** Контейнер без лишних зависимостей: обычный Column с общим модификатором. */
 @Composable
-private fun Box2(modifier: Modifier, content: @Composable () -> Unit) {
+private fun Box2(modifier: Modifier, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
     androidx.compose.foundation.layout.Box(modifier) { content() }
 }
 

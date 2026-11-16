@@ -269,7 +269,7 @@ class VideoPlayerActivity : ComponentActivity() {
                 }
             }) {
                 AndroidView({ pv }, Modifier.fillMaxSize())
-                if (info.isNotEmpty()) androidx.compose.material3.Text(info, Modifier.align(Alignment.TopStart).padding(10.dp).background(Color(0x66000000), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), color = Color.White, fontSize = 13.sp, maxLines = 1)
+                if (info.isNotEmpty()) FloorText(info, Modifier.align(Alignment.TopStart).padding(10.dp).background(Color(0x66000000), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), color = Color.White, fontSize = 13.sp, maxLines = 1)
             }
         }
         mainScope.launch {
@@ -481,8 +481,13 @@ fun MiniPlayer(modifier: Modifier = Modifier) {
                 IconButton({ AudioService.cmd(ctx, "next") }, Modifier.size(36.dp)) { Icon(Icons.Filled.SkipNext, null) }
                 IconButton({ AudioService.cmd(ctx, "stop") }, Modifier.size(32.dp)) { Icon(Icons.Filled.Close, null, Modifier.size(18.dp)) }
             }
-            Slider(seeking ?: (if (AudioState.dur > 0) AudioState.pos.toFloat() / AudioState.dur else 0f), { seeking = it }, Modifier.fillMaxWidth().height(20.dp),
+            // 10.0 (num): справа от перемотки время; нажатие открывает ввод позиции в секундах (от 0 до длины трека)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Slider(seeking ?: (if (AudioState.dur > 0) AudioState.pos.toFloat() / AudioState.dur else 0f), { seeking = it }, Modifier.weight(1f).height(20.dp),
                 onValueChangeFinished = { seeking?.let { AudioService.cmd(ctx, "seek", (it * AudioState.dur).toLong()) }; seeking = null })
+            if (AudioState.dur > 0) NumberValueTap((AudioState.pos / 1000L).toInt(), NumberSliderRules.seek(AudioState.dur), stringResource(R.string.num_position),
+                { s -> AudioService.cmd(ctx, "seek", NumberSliderRules.seekMs(s)) }, shown = fmt(AudioState.pos))
+            }
         }
     }
 }

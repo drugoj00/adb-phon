@@ -155,7 +155,7 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             ApkInfoBlock(f, metas[f.name], full = files.size == 1, modifier = Modifier.weight(1f))
-                            Switch(on, null)
+                            SelBox(on)   // 10.0 (chk): общая крупная галочка (BigCheck.kt) вместо переключателя; нажимается вся строка
                         }
                     }
                 }

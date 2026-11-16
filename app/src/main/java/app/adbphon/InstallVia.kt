@@ -17,7 +17,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,39 +41,36 @@ import kotlin.coroutines.resume
 
 /**
  * 7.6: общий выбор установщика вне «Файлов» (окно «Установить через…»): установка из «Установки APK», из интернета, обновление программы,
- * «Версии / откатить…», восстановление из копии, Меню приложений. Включено «Спрашивать, чем устанавливать» (по умолчанию): окно показывается всегда.
- * Выключено: запомненный способ, иначе способ по умолчанию (ADB-phon при ADB/root, иначе системный) без окна выбора.
+ * «Версии / откатить…», восстановление из копии, Меню приложений, модуль облаков.
+ * 10.0: то же единое окно, что и в «Файлах» ([InstallerDialog]), и тот же запомненный выбор ([InstallerStore], [InstallerChoice]):
+ * запомненный и доступный способ применяется сразу, иначе окно.
  */
 object ViaAsk {
-    class Req(val count: Int, val done: (InstOpt?) -> Unit)
+    class Req(val count: Int, val parts: Boolean, val done: (InstOpt?) -> Unit)
     var req by mutableStateOf<Req?>(null)
 
-    /** Способы для окна выбора; при нескольких файлах за раз ставит только ADB-phon. */
-    fun options(ctx: Context, count: Int): List<InstOpt> = ApkInstall.options(ctx, "apk", Adb.isConnected)
-        .filter { it.id != "archive" && it.id != "market" }
-        .map { o -> if (count > 1 && o.id != "adb") InstOpt(o.id, o.label, ctx.getString(R.string.via_one_by_one), o.pkg, o.icon, o.ai, o.rank, false, o.recommended) else o }
+    /** Способы для окна выбора; [parts]: файлы это части одной программы (копия с частями). */
+    fun options(ctx: Context, count: Int, parts: Boolean = false): List<InstOpt> = Installers.rows(ctx, "apk", Adb.isConnected, count, parts)
 
-    /** Способ без окна выбора (когда «Спрашивать» выключено). */
-    private fun silentChoice(ctx: Context, count: Int): InstOpt? {
-        val opts = options(ctx, count)
-        val sid = ApkInstall.saved(ctx, "apk")
-        return sid?.let { s -> opts.firstOrNull { it.id == s && it.enabled } }
-            ?: opts.firstOrNull { it.id == (if (Adb.isConnected) "adb" else "system") && it.enabled }
-            ?: opts.firstOrNull { it.enabled }
-    }
-
-    /** Спросить, чем устанавливать; null — отмена. */
-    suspend fun ask(ctx: Context, count: Int): InstOpt? {
-        if (!UiPrefs.askInstaller) return silentChoice(ctx, count)
+    /** Спросить, чем устанавливать; null: отмена. */
+    suspend fun ask(ctx: Context, count: Int, parts: Boolean = false): InstOpt? {
+        val opts = options(ctx, count, parts)
+        val d = InstallerChoice.decide(Installers.choiceOpts(opts), InstallerStore.get(ctx))
+        if (d is InstallerChoice.Decision.Auto) return opts.first { it.id == d.id }
         return suspendCancellableCoroutine { cont ->
-            val r = Req(count) { o -> req = null; if (cont.isActive) cont.resume(o) }
+            val r = Req(count, parts) { o -> req = null; if (cont.isActive) cont.resume(o) }
             req = r
             cont.invokeOnCancellation { if (req === r) req = null }
         }
     }
 
-    /** Запуск стороннего или системного установщика на файле. */
-    fun launchExternal(ctx: Context, file: File, o: InstOpt): Boolean = runCatching {
+    /** Запуск стороннего или системного установщика на файле; «ADB-phon с подтверждением»: своя сессия установки. */
+    fun launchExternal(ctx: Context, file: File, o: InstOpt): Boolean = launch(ctx, listOf(file), o)
+
+    /** То же для набора файлов: сессия ставит все части одной программы, сторонний установщик получает первый файл. */
+    fun launch(ctx: Context, files: List<File>, o: InstOpt): Boolean = runCatching {
+        if (o.id == InstallerChoice.SESSION) { Fm.installFilesViaSession(files); return@runCatching true }
+        val file = files.first()
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
         val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -83,12 +80,13 @@ object ViaAsk {
         true
     }.getOrDefault(false)
 
-    /** Спросить и выполнить: ADB-phon, то есть [ours], либо запуск выбранного установщика на первом файле. Возвращает текст итога. */
+    /** Спросить и выполнить: ADB-phon тихо, то есть [ours], либо выбранный способ на файлах. Возвращает текст итога. */
     suspend fun installOrAsk(ctx: Context, files: List<File>, ours: suspend () -> String): String {
-        val o = ask(ctx, files.size) ?: return ctx.getString(R.string.via_cancelled)
-        if (o.id == "adb") return ours()
-        val f = files.firstOrNull() ?: return ctx.getString(R.string.fm_no_app)
-        return ctx.getString(if (launchExternal(ctx, f, o)) R.string.via_started else R.string.fm_no_app)
+        val o = ask(ctx, files.size, parts = true) ?: return ctx.getString(R.string.via_cancelled)
+        if (o.id == InstallerChoice.QUIET) return ours()
+        if (files.isEmpty()) return ctx.getString(R.string.fm_no_app)
+        if (o.id == InstallerChoice.SESSION) { Fm.installFilesViaSession(files); return ctx.getString(R.string.inst_installing) }
+        return ctx.getString(if (launch(ctx, files, o)) R.string.via_started else R.string.fm_no_app)
     }
 }
 
@@ -97,42 +95,6 @@ object ViaAsk {
 fun ViaAskHost() {
     val r = ViaAsk.req ?: return
     val ctx = LocalContext.current
-    val opts = remember(r) { ViaAsk.options(ctx, r.count) }
-    val tv = Marq.tv
-    LAlertDialog(
-        onDismissRequest = { r.done(null) },
-        title = { Text(stringResource(R.string.inst_title), maxLines = 1) },
-        text = {
-            var remember by remember { mutableStateOf(false) }
-            Column(Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                val first = opts.indexOfFirst { it.enabled }
-                val fr = remember { FocusRequester() }
-                LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
-                opts.forEachIndexed { idx, o ->
-                    Row(
-                        (if (idx == first) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }
-                            .then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier)
-                            .clickable(enabled = o.enabled) { if (remember) { ApkInstall.remember(ctx, "apk", o.id); UiPrefs.setAskInstaller(ctx, false) }; r.done(o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        val sz = if (tv) 44.dp else 36.dp
-                        val bmp = remember(o.id) { o.ai?.let { ai -> runCatching { val d = ai.loadIcon(ctx.packageManager); android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888).also { b -> d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(b)) } }.getOrNull() } }
-                        if (bmp != null) Image(bmp.asImageBitmap(), null, Modifier.size(sz)) else if (o.pkg != null && o.id == "system") AppIcon(o.pkg, sz) else if (o.icon != null) Icon(o.icon, null, Modifier.size(sz), tint = MaterialTheme.colorScheme.primary)
-                        Column(Modifier.weight(1f)) {
-                            Text(o.label, fontSize = if (tv) 18.sp else 15.sp, maxLines = 2)
-                            if (o.recommended) Text(stringResource(R.string.inst_recommended), fontSize = if (tv) 13.sp else 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            o.hint?.let { Text(it, fontSize = if (tv) 14.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f), maxLines = 5) }
-                        }
-                    }
-                }
-            }
-                Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(remember, null); Text(stringResource(R.string.inst_remember_ext, "apk"), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
-                }
-                Text(stringResource(R.string.inst_remember_note), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
-            }
-        },
-        confirmButton = { TextButton({ r.done(null) }) { Text(stringResource(R.string.btn_cancel)) } },
-    )
+    val opts = remember(r) { ViaAsk.options(ctx, r.count, r.parts) }
+    InstallerDialog(opts, null, onPick = { o, rem -> InstallerStore.afterPick(ctx, o.id, rem); r.done(o) }, onDismiss = { r.done(null) })
 }

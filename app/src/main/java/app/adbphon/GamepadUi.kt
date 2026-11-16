@@ -939,21 +939,22 @@ private fun PadRadios(labels: List<Int>, selected: Int, pick: (Int) -> Unit) {
 @Composable
 fun PadSettings() {
     val ctx = LocalContext.current
-    @Composable fun slider(label: Int, v: Float, range: ClosedFloatingPointRange<Float>, text: String, set: (Float) -> Unit) {
-        Text(stringResource(label) + ": " + text, fontSize = 13.sp)
-        Slider(v, { set(it); Pad.save(ctx) }, valueRange = range)
+    // 10.0 (num): число справа от ползунка, нажатие открывает ввод своего значения (диапазоны в NumberSliderRules)
+    @Composable fun slider(label: Int, v: Float, spec: NumberSliderRules.Spec, set: (Float) -> Unit) {
+        Text(stringResource(label), fontSize = 13.sp)
+        NumberSlider(v, { set(it); Pad.save(ctx) }, spec, stringResource(label))
     }
     @Composable fun check(label: Int, on: Boolean, set: (Boolean) -> Unit) {
         Row(Modifier.fillMaxWidth().clickable { set(!on); Pad.save(ctx) }, verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(on, { set(it); Pad.save(ctx) }); Text(stringResource(label), fontSize = 13.sp)
+            BigCheckbox(on, { set(it); Pad.save(ctx) }); Text(stringResource(label), fontSize = 13.sp)
         }
     }
     Text(stringResource(R.string.pad_layout), fontWeight = FontWeight.Medium, fontSize = 13.sp)
     PadRadios(listOf(R.string.pad_xbox, R.string.pad_ps), if (Pad.sony) 1 else 0) { Pad.sony = it == 1; Pad.save(ctx) }
-    slider(R.string.pad_dead, Pad.dead, 0f..0.4f, "${(Pad.dead * 100).toInt()}%") { Pad.dead = it }
-    slider(R.string.pad_cspeed, Pad.cspeed, 0.3f..3f, "${(Pad.cspeed * 100).toInt()}%") { Pad.cspeed = it }
-    slider(R.string.pad_size, Pad.scale, 0.7f..1.3f, "${(Pad.scale * 100).toInt()}%") { Pad.scale = it }
-    slider(R.string.pad_alpha, Pad.alpha, 0.3f..1f, "${(Pad.alpha * 100).toInt()}%") { Pad.alpha = it }
+    slider(R.string.pad_dead, Pad.dead, NumberSliderRules.PAD_DEAD) { Pad.dead = it }
+    slider(R.string.pad_cspeed, Pad.cspeed, NumberSliderRules.PAD_CSPEED) { Pad.cspeed = it }
+    slider(R.string.pad_size, Pad.scale, NumberSliderRules.PAD_SIZE) { Pad.scale = it }
+    slider(R.string.pad_alpha, Pad.alpha, NumberSliderRules.PAD_ALPHA) { Pad.alpha = it }
     // отклик нажатий: общий для программы (вибро и звук щелчка), здесь выключатель окна игры и те же переключатели
     check(R.string.pad_haptic, Pad.haptic) { Pad.haptic = it }
     if (Pad.haptic) {
@@ -967,9 +968,9 @@ fun PadSettings() {
         PadRadios(listOf(R.string.pad_t_left, R.string.pad_t_right, R.string.pad_t_dpad, R.string.pad_t_wheel), Pad.tiltTarget) { Pad.tiltTarget = it; Pad.save(ctx) }
         Text(stringResource(R.string.pad_t_axes), fontWeight = FontWeight.Medium, fontSize = 13.sp)
         PadRadios(listOf(R.string.pad_ax_both, R.string.pad_ax_x, R.string.pad_ax_y), Pad.tiltAxes) { Pad.tiltAxes = it; Pad.save(ctx) }
-        slider(R.string.pad_t_angle, Pad.tiltAngle, 10f..60f, "${Pad.tiltAngle.toInt()}°") { Pad.tiltAngle = it }
-        slider(R.string.pad_t_dead, Pad.tiltDead, 0f..0.3f, "${(Pad.tiltDead * 100).toInt()}%") { Pad.tiltDead = it }
-        slider(R.string.pad_t_smooth, Pad.tiltSmooth, 0f..0.9f, "${(Pad.tiltSmooth * 100).toInt()}%") { Pad.tiltSmooth = it }
+        slider(R.string.pad_t_angle, Pad.tiltAngle, NumberSliderRules.TILT_ANGLE) { Pad.tiltAngle = it }
+        slider(R.string.pad_t_dead, Pad.tiltDead, NumberSliderRules.TILT_DEAD) { Pad.tiltDead = it }
+        slider(R.string.pad_t_smooth, Pad.tiltSmooth, NumberSliderRules.TILT_SMOOTH) { Pad.tiltSmooth = it }
         check(R.string.pad_t_invx, Pad.tiltInvX) { Pad.tiltInvX = it }
         check(R.string.pad_t_invy, Pad.tiltInvY) { Pad.tiltInvY = it }
         check(R.string.pad_t_hide, Pad.tiltHide) { Pad.tiltHide = it }
@@ -979,7 +980,7 @@ fun PadSettings() {
     // обратная вибрация
     check(R.string.pad_rumble, Pad.rumble) { Pad.rumble = it; if (!it) PadRumble.stop(ctx) }
     if (Pad.rumble) {
-        slider(R.string.pad_rumble_gain, Pad.rumbleGain, 0f..2f, "${(Pad.rumbleGain * 100).toInt()}%") { Pad.rumbleGain = it }
+        slider(R.string.pad_rumble_gain, Pad.rumbleGain, NumberSliderRules.RUMBLE_GAIN) { Pad.rumbleGain = it }
         HintTitle(stringResource(R.string.pad_rumble_mode), stringResource(R.string.pad_rumble_hint), titleSize = 13.sp)
         PadRadios(listOf(R.string.pad_rm_xbox, R.string.pad_rm_ds, R.string.pad_rm_pid), Pad.rumbleMode) { Pad.rumbleMode = it; Pad.save(ctx) }
         Text(stringResource(if (PadRumble.amplitudeControl(ctx)) R.string.pad_rumble_amp else R.string.pad_rumble_noamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
@@ -1018,6 +1019,7 @@ fun PadConnected(host: String, land: Boolean) {
             PadTrialButton(compact = true)
         }
         PadLocalButton(Modifier.fillMaxWidth())
+        ScreenTouchSwitch()      // 10.0 kbtn: режим «Кнопки на экран»
         OutlinedButton({ runCatching { ctx.startActivity(android.content.Intent(ctx, GamepadTestActivity::class.java)) } }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.gpt_open)) }
         PadSettings()
         PadProfilesAndHost(true)

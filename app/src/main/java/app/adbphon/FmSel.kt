@@ -1,0 +1,99 @@
+package app.adbphon
+
+/**
+ * 10.0 (fm1): общая логика отметки в дереве «Файлов» (панель и корень «Источники»), без Compose и Android: покрыта юнит-тестами.
+ *
+ * Ключ элемента: путь через «/» (в панели: имя относительно текущей папки, «Download/фото.jpg»; в корне: идентификатор узла «L|/sdcard/Download»).
+ * Правило: отмеченная папка = отмечено ВСЁ её содержимое (вложенное тоже). В множестве хранится только сама папка, её содержимое
+ * отдельными ключами не дублируется (нет двойного счёта, операции получают папку целиком).
+ * Снятие отметки с вложенного элемента отмеченной папки: папка снимается, а всё остальное её содержимое остаётся отмеченным
+ * (на каждом уровне от папки до элемента отмечаются соседи). Папка, внутри которой отмечена только часть, показывается «частично отмеченной».
+ * [canon] приводит разные виды ключей одного дерева к общему виду (в корне файлы «F|путь», папки «L|путь»).
+ */
+object SelTree {
+    private val ID: (String) -> String = { it }
+
+    /** [k] лежит внутри папки [a] (на любой глубине). */
+    fun under(k: String, a: String, canon: (String) -> String = ID): Boolean {
+        val ck = canon(k); val ca = canon(a)
+        if (ck == ca || ca.isEmpty()) return false
+        val base = if (ca.endsWith("/")) ca else "$ca/"
+        return ck.startsWith(base)
+    }
+
+    private fun same(a: String, b: String, canon: (String) -> String) = a == b || canon(a) == canon(b)
+
+    /** Элемент отмечен сам или через отмеченную папку выше. */
+    fun covered(sel: Collection<String>, k: String, canon: (String) -> String = ID): Boolean = k in sel || sel.any { same(it, k, canon) || under(k, it, canon) }
+
+    /** Папка не отмечена целиком, но внутри неё что-то отмечено. */
+    fun partial(sel: Collection<String>, k: String, canon: (String) -> String = ID): Boolean = !covered(sel, k, canon) && sel.any { under(it, k, canon) }
+
+    /** Убрать ключи, которые уже входят в отмеченную папку выше (порядок сохраняется). */
+    fun normalize(sel: Collection<String>, canon: (String) -> String = ID): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (k in sel) if (sel.none { a -> under(k, a, canon) } && out.none { same(it, k, canon) }) out.add(k)
+        return out
+    }
+
+    /** Сколько отмечено на самом деле (папка с содержимым считается один раз). */
+    fun count(sel: Collection<String>, canon: (String) -> String = ID): Int = normalize(sel, canon).size
+
+    /** Отметить: вложенные ключи внутри [k] поглощаются им. */
+    fun select(sel: Collection<String>, k: String, canon: (String) -> String = ID): Set<String> {
+        if (covered(sel, k, canon)) return LinkedHashSet(sel)
+        val out = LinkedHashSet<String>()
+        for (x in sel) if (!under(x, k, canon)) out.add(x)
+        out.add(k)
+        return out
+    }
+
+    /**
+     * Снять отметку с [k]. Если [k] входит в отмеченную папку выше, папка снимается, а её остальное содержимое остаётся отмеченным:
+     * [kids] даёт ключи содержимого раскрытой папки (null, если папка не раскрыта и содержимое неизвестно).
+     */
+    fun unselect(sel: Collection<String>, k: String, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (x in sel) if (!same(x, k, canon) && !under(x, k, canon)) out.add(x)
+        val anc = out.firstOrNull { under(k, it, canon) } ?: return out
+        out.remove(anc)
+        var cur = anc
+        var guard = 0
+        while (guard++ < 64) {
+            val ks = kids(cur) ?: return out
+            val next = ks.firstOrNull { same(it, k, canon) || under(k, it, canon) } ?: return out
+            for (s in ks) if (s != next) out.add(s)
+            if (same(next, k, canon)) break
+            cur = next
+        }
+        return out
+    }
+
+    /** Нажатие на галочку: отмеченное (в том числе через папку выше) снимается, неотмеченное и «частичное» отмечается целиком. */
+    fun toggle(sel: Collection<String>, k: String, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> =
+        if (covered(sel, k, canon)) unselect(sel, k, kids, canon) else select(sel, k, canon)
+
+    /** «Все»: отмечается каждый видимый элемент верхнего уровня (вложенное входит в них). Отмеченное вне [top] сохраняется. */
+    fun selectAll(sel: Collection<String>, top: List<String>, canon: (String) -> String = ID): Set<String> = normalize(sel.toList() + top, canon)
+
+    /**
+     * «Инверсия» по видимому дереву: у каждого видимого элемента состояние меняется на обратное; свёрнутая папка меняется целиком,
+     * раскрытая определяется своим содержимым. Если в раскрытой папке после инверсии отмечено всё, отмечается сама папка.
+     */
+    fun invert(sel: Collection<String>, top: List<String>, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> {
+        fun walk(k: String, inherited: Boolean): Pair<Set<String>, Boolean> {
+            val on = inherited || sel.any { same(it, k, canon) }
+            val ks = kids(k)
+            if (ks.isNullOrEmpty()) return if (on) emptySet<String>() to false else setOf(k) to true
+            val acc = LinkedHashSet<String>()
+            var all = true
+            for (c in ks) { val (s, full) = walk(c, on); acc.addAll(s); if (!full) all = false }
+            return if (all) setOf(k) to true else acc to false
+        }
+        val out = LinkedHashSet<String>()
+        // отмеченное вне видимого дерева (другая папка, другая панель) не трогается
+        for (x in sel) if (top.none { t -> same(t, x, canon) || under(x, t, canon) }) out.add(x)
+        for (t in top) out.addAll(walk(t, false).first)
+        return normalize(out, canon)
+    }
+}

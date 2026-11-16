@@ -179,7 +179,7 @@ class SmbFs(private val host: String, private val user: String, private val pass
             val name = f.name.trimEnd('/')
             if (name.endsWith("$") || name.startsWith(".")) return@mapNotNull null
             val isDir = runCatching { f.isDirectory }.getOrDefault(true)
-            FsEntry(name, f.url.toString(), isDir, if (isDir) 0L else runCatching { f.length() }.getOrDefault(0L))
+            FsEntry(name, f.url.toString(), isDir, if (isDir) 0L else runCatching { f.length() }.getOrDefault(0L), FmDates.ofMillis(runCatching { f.lastModified() }.getOrDefault(0L)))   // 10.0 (chk): дата для «по дате»
         }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     } }
 

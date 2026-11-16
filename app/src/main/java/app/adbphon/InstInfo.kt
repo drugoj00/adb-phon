@@ -379,7 +379,8 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                         if (!out.contains("Success", true)) reason = if (out.startsWith("FAIL:")) out.removePrefix("FAIL:") else friendlyReason(ctx, out)
                     }
                 } catch (e: Exception) {
-                    reason = (e.message ?: e.javaClass.simpleName).take(140)
+                    val m = e.message ?: e.javaClass.simpleName
+                    reason = if (m.contains("Not connected", true)) ctx.getString(R.string.shz_err_no_adb) else m.take(140)
                 }
                 Adb.onInstallBytes = null
                 if (reason == null) run.ok++ else { run.bad++; run.fails.add(run.name + ": " + reason) }

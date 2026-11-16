@@ -553,12 +553,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }.sortedBy { it.label.lowercase() }
             }
             AppLog.i("ADBphon", "apps loaded: ${list.size}")
+            InstallSource.reset()   // 10.0: источники установки считаются заново
             apps = list
             selected = selected.filter { id -> list.any { it.pkg == id } }.toSet()
         }
     }
 
-    fun visibleApps(): List<AppEntry> {
+    /** 10.0: с фильтром «Источник» (InstallSource.kt). */
+    fun visibleApps(): List<AppEntry> = visibleNoSrc().filter { InstallSource.matches(ctx, it.pkg, it.system) }
+
+    fun visibleNoSrc(): List<AppEntry> {
         val q = query.trim().lowercase()
         return apps.filter { a ->
             when (filter) {

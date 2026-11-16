@@ -240,7 +240,7 @@ fun FmOpsPanel(modifier: Modifier = Modifier) {
     val jobs = Fm.jobs
     if (jobs.isEmpty()) return
     val tv = Marq.tv
-    val big = if (tv) 1.35f else 1f
+    val big = if (tv) 1.4f else 1f   // 10.0 (tvfont): на ТВ 13 sp -> 18, 12 sp -> 16.8
     val landPanel = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     Surface(modifier.widthIn(max = if (landPanel) 1000.dp else if (tv) 760.dp else 560.dp).fillMaxWidth(), shape = RoundedCornerShape(14.dp), tonalElevation = 6.dp, shadowElevation = 6.dp) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

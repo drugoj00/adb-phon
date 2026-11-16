@@ -14,7 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.adbphon.FloorText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -89,7 +89,7 @@ fun FmPermsDialog(p: FmPane, names: List<String>, close: () -> Unit) {
                                 for (c in 0..2) {
                                     val bit = 1 shl (8 - (r * 3 + c))
                                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                        Checkbox((bits and bit) != 0, { on -> setBits(if (on) bits or bit else bits and bit.inv()) }, Modifier.size(34.dp))
+                                        BigCheckbox((bits and bit) != 0, { on -> setBits(if (on) bits or bit else bits and bit.inv()) })
                                     }
                                 }
                             }
@@ -97,7 +97,7 @@ fun FmPermsDialog(p: FmPane, names: List<String>, close: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             listOf("SUID" to 2048, "SGID" to 1024, "Sticky" to 512).forEach { (n, bit) ->
                                 Row(Modifier.weight(1f).clickable { setBits(bits xor bit) }, verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox((bits and bit) != 0, { on -> setBits(if (on) bits or bit else bits and bit.inv()) }, Modifier.size(34.dp))
+                                    BigCheckbox((bits and bit) != 0, { on -> setBits(if (on) bits or bit else bits and bit.inv()) })
                                     Text(n, fontSize = 11.sp, maxLines = 1)
                                 }
                             }
@@ -113,7 +113,7 @@ fun FmPermsDialog(p: FmPane, names: List<String>, close: () -> Unit) {
                             Column(Modifier.weight(1f)) { Text(stringResource(R.string.perm_group), fontSize = 10.sp, color = prim); PermBox(group, { group = it.take(40); changedOwner = true }, Modifier.fillMaxWidth()) }
                         }
                         if (isDir || multi) Row(Modifier.fillMaxWidth().clickable { recursive = !recursive }, verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(recursive, { recursive = it }, Modifier.size(34.dp))
+                            BigCheckbox(recursive, { recursive = it })
                             Text(stringResource(R.string.perm_recursive), fontSize = 12.sp, maxLines = 2)
                         }
                         if (err.isNotEmpty()) Text(err, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontFamily = FontFamily.Monospace)

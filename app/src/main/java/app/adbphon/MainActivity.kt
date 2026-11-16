@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (TapGuard.key(event)) return true
         if (event.action == android.view.KeyEvent.ACTION_DOWN && FocusRestore.isDpad(event.keyCode)) FocusRestore.markKeys(this)
-        return super.dispatchKeyEvent(event)
+        return super.dispatchKeyEvent(event) || SbHover.key(event)   // 10.0 (mouse): PAGE_UP/PAGE_DOWN аэромыши листают список под курсором
     }
 
     /** 7.5: защита от двойного нажатия (два касания в одну точку подряд от мыши/пульта приставки), см. TapGuard. */
@@ -153,8 +153,8 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
-    override fun onPause() { super.onPause(); Invites.stopUi() }
+    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
+    override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this) }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
     override fun onStop() { super.onStop(); if (!isChangingConfigurations) { Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
@@ -313,6 +313,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             // если процесс был убит посреди игры, а настройки ориентации остались изменёнными: тихо вернуть прежние значения, как только появится подключение
             LaunchedEffect(vm.connected) { if (vm.connected) OrientAssist.restoreIfPending(baseCtx) }
             var showSettings by remember { mutableStateOf(false) }
+            BkNav.goFiles = { showSettings = false; tab = 2 }   // 10.0: «Открыть папку» в итоге резервной копии ведёт во вкладку «Файлы»
             // первый запуск: окна по порядку с включением нужных разрешений и спецвозможностей
             LaunchedEffect(Unit) {
                 val on = Build.VERSION.SDK_INT >= 30 && AutoPairService.isEnabled(baseCtx)
@@ -362,6 +363,8 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 android.util.Log.i("ADBphon", "выход: нажато, окно закрывается")
                 val appCtx = baseCtx.applicationContext
                 val vmRef = vm
+                // 10.0: «Выход» всегда ведёт на рабочий экран, а не в приложение, под которым лежала задача программы (например браузер со страницей «Готово»)
+                runCatching { act?.startActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 runCatching { act?.finishAffinity() }
                 runCatching { act?.finishAndRemoveTask() }
                 @Suppress("OPT_IN_USAGE")
@@ -756,7 +759,8 @@ fun FoundRow(vm: MainViewModel, f: Found, onStar: (Found) -> Unit) {
             .padding(vertical = 3.dp, horizontal = if (cur) 6.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.PhoneAndroid, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
+        val foundSpec = CustomIcons.spec(MiscIconKeys.device(f.host))   // 10.0: свой значок из меню «Изменить значок…» виден и в строке
+        if (foundSpec != null) CustomIconView(foundSpec, 24.dp) else Icon(Icons.Filled.PhoneAndroid, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
         Column(Modifier.padding(start = 8.dp).weight(1f)) {
             val addr = f.host + if (f.kind == "wifi") ":" + f.port else ""
             Text(addr, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, color = fg)
@@ -923,7 +927,8 @@ fun AppsScreen(vm: MainViewModel) {
     val installRow: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             EqTextButton(stringResource(R.string.act_install)) { installHub = true }
-            EqTextButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
+            EqTextButton(stringResource(R.string.bk2_make)) { BkOne.create = vm.selected.filter { s -> vm.apps.any { it.pkg == s && it.installed } }.toSet() }   // 10.0 (bk3): одно окно копий с выбранными приложениями
+            EqTextButton(stringResource(R.string.bk2_restore)) { BkOne.restore = true }
             if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
         }
     }
@@ -957,11 +962,13 @@ fun AppsScreen(vm: MainViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 filters.forEach { (f, s) -> FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) }) }
+                InstallSourceFilterChip(vm.visibleNoSrc())   // 10.0: фильтр по источнику установки
             }
         } else Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             filters.forEach { (f, s) ->
                 FilterChip(vm.filter == f, { vm.filter = f }, { Text(stringResource(s), fontSize = 12.sp, maxLines = 1) })
             }
+            InstallSourceFilterChip(vm.visibleNoSrc())   // 10.0: фильтр по источнику установки
         }
         if (vm.filter == Filter.BLOAT) {
             Text(stringResource(R.string.bloat_hint), fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
@@ -993,7 +1000,8 @@ fun AppsScreen(vm: MainViewModel) {
             }
             if (!compactLand) Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 EqTextButton(stringResource(R.string.act_install)) { installHub = true }
-                EqTextButton(stringResource(R.string.act_fullbackups)) { showBackups = true }
+                EqTextButton(stringResource(R.string.bk2_make)) { BkOne.create = vm.selected.filter { s -> vm.apps.any { it.pkg == s && it.installed } }.toSet() }   // 10.0 (bk3): одно окно копий с выбранными приложениями
+                EqTextButton(stringResource(R.string.bk2_restore)) { BkOne.restore = true }
                 if (vm.remoteHost == null) EqTextButton(stringResource(R.string.act_ram_clean)) { ramScope.launch { vm.message = Ram.clean(ramCtx) } }
             }
         }
@@ -1052,7 +1060,8 @@ fun AppsScreen(vm: MainViewModel) {
                         )
                     }
                     // флажок выбора справа, как в «Файлах»
-                    SmallCheck(a.pkg in vm.selected, false) { vm.toggle(a.pkg); lastTap = a.pkg }   // 10.11.2026: маленькая галочка у края, как в «домике»
+                    InstallSourceBadge(a.pkg, a.system)   // 10.0: откуда установлено (InstallSource.kt)
+                    BigCheck(a.pkg in vm.selected, Marq.tv) { vm.toggle(a.pkg); lastTap = a.pkg }   // 10.0 (chk): общая крупная галочка (BigCheck.kt), на приставке 32 dp
                 }
             }
         }
@@ -1076,13 +1085,7 @@ fun AppsScreen(vm: MainViewModel) {
                 dismissButton = { TextButton({ vm.dismissGuard() }) { Text(stringResource(R.string.btn_cancel)) } },
             )
         }
-        if (showBackups) FullBackupsDialog({ showBackups = false; vm.loadApps() }, { showBackups = false; showSettingsBk = true })
-        if (showSettingsBk) LAlertDialog(
-            onDismissRequest = { showSettingsBk = false },
-            title = { Text(stringResource(R.string.bk2_title)) },
-            text = { Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) { BackupSectionV2(vm) } },
-            confirmButton = { TextButton({ showSettingsBk = false }) { Text(stringResource(R.string.btn_close)) } },
-        )
+        BkOneHost(vm)   // 10.0 (bk3): «Создать копию…» и «Восстановить…» (старые копии-папки открываются из «Восстановить…»)
         infoFor?.let { a -> AppInfoDialog(a) { infoFor = null } }
     val actionsUi: @Composable () -> Unit = {
         // в ландшафте кнопки действий видны всегда, когда что-то выбрано; в портрете их открывает кнопка с галочкой
@@ -1091,7 +1094,6 @@ fun AppsScreen(vm: MainViewModel) {
                 val lPerms = stringResource(R.string.act_perms)
                 val lSpecial = stringResource(R.string.act_special)
                 val lVersions = stringResource(R.string.act_versions)
-                val lFull = stringResource(R.string.act_fullbackup)
                 if (vm.selected.size == 1) {
                     EqChipRow(listOf(
                         lPerms to { vm.apps.firstOrNull { it.pkg in vm.selected }?.let { vm.loadPerms(it) }; Unit },
@@ -1104,7 +1106,6 @@ fun AppsScreen(vm: MainViewModel) {
                 EqChipRow(listOf(act(Act.DISABLE), act(Act.ENABLE), act(Act.UNINSTALL)))
                 EqChipRow(listOf(act(Act.RESTORE), act(Act.STOP)))
                 EqChipRow(listOf(act(Act.CACHE), act(Act.CLEAR), act(Act.SAVE)))
-                EqChipRow(listOf(lFull to { vm.fullBackup() }))
             }
         }
     }
@@ -1166,7 +1167,7 @@ fun rememberAppExtra(a: AppEntry?): AppExtra? {
  * [twoCols]: два блока рядом (ландшафт): слева пакет, версия, состояние, память; справа размеры и пути APK. [big]: крупнее шрифт.
  */
 @Composable
-fun AppInfoBlocks(a: AppEntry, extra: AppExtra?, twoCols: Boolean, big: Boolean, header: Boolean, full: Boolean = false, stack: Boolean = false) {
+fun AppInfoBlocks(a: AppEntry, extra: AppExtra?, twoCols: Boolean, big: Boolean, header: Boolean, full: Boolean = false, stack: Boolean = false, part: Int = 0) {
     val ctx = LocalContext.current
     val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -1212,26 +1213,30 @@ fun AppInfoBlocks(a: AppEntry, extra: AppExtra?, twoCols: Boolean, big: Boolean,
     @Composable fun leftBlock() {
         line(R.string.info_pkg, a.pkg)
         if (a.version.isNotEmpty()) line(R.string.info_ver, a.version)
+        line(R.string.cld_is_title, remember(a.pkg) { InstallSource.describe(ctx, a.pkg, a.system) }, 3)   // 10.0: источник установки
         lineA(R.string.info_state, state, 3)
         if (known != null) line(R.string.info_cat, stringResource(Debloat.catLabel(known.cat)) + ", " + stringResource(Debloat.riskLabel(known.risk)))
         AppExtras.storageRes(a.paths)?.let { line(R.string.info_storage, stringResource(it)) }
     }
-    @Composable fun rightBlock() {
+    @Composable fun sizesBlock() {
         line(R.string.info_size_apk, sz(extra?.apk))
         line(R.string.info_size_data, sz(extra?.data))
         line(R.string.info_size_cache, sz(extra?.cache))
         if ((extra?.obb ?: 0L) > 0) line(R.string.info_size_obb, sz(extra?.obb))
-        if (a.paths.isNotEmpty()) line(R.string.info_paths, a.paths.joinToString("\n"), if (twoCols) 4 else 3)
     }
+    @Composable fun pathsBlock() { if (a.paths.isNotEmpty()) line(R.string.info_paths, a.paths.joinToString("\n"), if (twoCols) 4 else 3) }
+    @Composable fun rightBlock() { sizesBlock(); pathsBlock() }
     Column(verticalArrangement = Arrangement.spacedBy(if (full) 16.dp else if (twoCols) 6.dp else 4.dp)) {   // в окне по долгому нажатию между пунктами зазор, внутри пункта строки вплотную
         if (header) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, if (big) 36.dp else 32.dp) }
             Text(a.label, fontSize = if (big) 17.sp else 15.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
-        if (twoCols) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        // part: 0 всё сразу; 1 основное и размеры; 2 только пути (окно по долгому нажатию делится на две страницы без прокрутки)
+        if (part == 2) pathsBlock()
+        else if (twoCols) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { leftBlock() }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { rightBlock() }
-        } else { leftBlock(); rightBlock() }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { if (part == 1) sizesBlock() else rightBlock() }
+        } else { leftBlock(); if (part == 1) sizesBlock() else rightBlock() }
     }
 }
 
@@ -1287,25 +1292,47 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
     val extra = rememberAppExtra(a)
     var pickIcon by remember { mutableStateOf(false) }
     if (pickIcon) CustomIconPicker(a.label, "a:" + a.pkg) { pickIcon = false }
+    // 10.0: «Извлечь / перепаковать…»: программа с частями (base + config.*) спрашивает формат, один APK копируется как есть
+    var repack by remember { mutableStateOf<RepackSpec?>(null) }
+    repack?.let { sp -> RepackDialog(sp, { f, sg -> Fm.repackRun(sp, f, sg) }) { repack = null } }
+    fun startRepack() {
+        val tmp = java.io.File(ctx.cacheDir, "repack_" + System.nanoTime()).also { it.mkdirs() }
+        val dd = java.io.File("/sdcard/Download")
+        val sp = RepackSpec(a.label.ifBlank { a.pkg }, dd, dd.path, a.paths.size > 1,
+            load = { a.paths.mapIndexed { i, path -> java.io.File(tmp, path.substringAfterLast('/').let { n -> if (a.paths.count { q -> q.substringAfterLast('/') == n } > 1) "p${i}_$n" else n }).also { Adb.pull(path, it) } } },
+            cleanup = { tmp.deleteRecursively() })
+        if (sp.hasSplits) repack = sp else Fm.repackRun(sp, RFormat.AS_IS, RSign.OWN)
+    }
+    var page by remember { mutableStateOf(0) }
+    val btnPad = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     LAlertDialog(
-        onDismissRequest = onClose,
+        onDismissRequest = { if (page > 0) page = 0 else onClose() },
         wide = land,
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, 40.dp) }
-            Text(a.label, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, 36.dp) }
+            Text(a.label, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         } },
-        text = { Column(Modifier.then(Modifier.androidxHeightIn((cfg.screenHeightDp * 0.55f).dp)).barScroll()) { AppInfoBlocks(a, extra, twoCols = false, big = true, header = false, full = true, stack = !land) } },
-        confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
-        dismissButton = {
-            Row {
-                TextButton({ pickIcon = true }) { Text(stringResource(R.string.ic_change)) }
-                TextButton({
-                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("package", a.pkg))
-                    Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show()
-                }) { Text(stringResource(R.string.info_copy)) }
+        // без прокрутки: страница 1 (основное и размеры, в ландшафте в две колонки) и страница 2 (пути к APK); кнопки действий короткие, в одну строку
+        text = { Column(Modifier.tvFit(), verticalArrangement = Arrangement.spacedBy(8.dp)) {   // 10.0 (tvfont): на ТВ крупный текст ужимается, если не помещается
+            AppInfoBlocks(a, extra, twoCols = land && page == 0, big = false, header = false, full = true, stack = true, part = if (page == 0) 1 else 2)
+            if (page == 0) {
+                @Composable fun act(label: Int, mod: Modifier, run: () -> Unit) = androidx.compose.material3.OutlinedButton(run, mod, contentPadding = btnPad) { Text(stringResource(label), fontSize = 13.sp, maxLines = 1, softWrap = false) }
+                val canRepack = a.installed && a.paths.isNotEmpty()
+                if (land) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (canRepack) act(R.string.rp_menu, Modifier.weight(1f)) { startRepack() }
+                    act(R.string.ai_icon, Modifier.weight(1f)) { pickIcon = true }
+                    act(R.string.ai_copy, Modifier.weight(1f)) { (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("package", a.pkg)); Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show() }
+                } else {
+                    if (canRepack) act(R.string.rp_menu, Modifier.fillMaxWidth()) { startRepack() }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        act(R.string.ai_icon, Modifier.weight(1f)) { pickIcon = true }
+                        act(R.string.ai_copy, Modifier.weight(1f)) { (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("package", a.pkg)); Toast.makeText(ctx, copied, Toast.LENGTH_SHORT).show() }
+                    }
+                }
             }
-        },
+        } },
+        confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
+        dismissButton = { TextButton({ page = if (page == 0) 1 else 0 }) { Text(if (page == 0) stringResource(R.string.cl_more) + " \u203a" else "\u2039 " + stringResource(R.string.okw_back), maxLines = 1, softWrap = false) } },
     )
 }
 
