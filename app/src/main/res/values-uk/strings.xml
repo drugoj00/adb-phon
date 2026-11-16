@@ -1834,4 +1834,24 @@
     <string name="dw_create">Створити</string>
     <string name="fm_type_dir">Тека (об’єктів: %1$d)</string>
     <string name="fm_type_file">Файл</string>
+    <string name="stream_channel">Відтворення з мережі</string>
+    <string name="stream_notif_title">Файл віддається плеєру</string>
+    <string name="stream_notif_text">Грає відео або музика з мережевої теки чи хмари</string>
+    <string name="fm_open_copying">Файл копіюється, потім відкриється…</string>
+    <string name="sub_console_adb">Консоль · ADB</string>
+    <string name="sub_console_helper">Консоль · помічник</string>
+    <string name="sub_console_root">Консоль · root</string>
+    <string name="vp_fit">Під екран</string>
+    <string name="vp_fit_fit">за розміром</string>
+    <string name="vp_fit_fill">заповнити</string>
+    <string name="vp_fit_stretch">розтягнути</string>
+    <string name="vp_fit_hint">Під екран: %1$s</string>
+    <string name="vp_bright">Яскравість %1$d %%</string>
+    <string name="vp_volume">Гучність %1$d/%2$d</string>
+    <string name="vp_no_next">Наступного файлу немає</string>
+    <string name="vp_no_prev">Попереднього файлу немає</string>
+    <string name="set_vp_hide">Ховати панель плеєра через</string>
+    <string name="set_vp_hide_hint">Панель керування вбудованого відеоплеєра згасає сама через вибраний час. «Не ховати» тримає її на екрані, доки не натиснеш на екран ще раз.</string>
+    <string name="vp_hide_sec">%1$d с</string>
+    <string name="vp_hide_never">Не ховати</string>
 </resources>

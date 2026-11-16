@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_grp_player">Плеєр</string>
+    <string name="set_grp_player_sub">Відео й музика: панель і жести</string>
+    <string name="set_vp_gest_vol">Жест гучності</string>
+    <string name="set_vp_gest_vol_hint">Проведи пальцем або мишею вгору-вниз біля сторони гучності: гучність змінюється, значення показується на екрані.</string>
+    <string name="set_vp_gest_bri">Жест яскравості</string>
+    <string name="set_vp_gest_bri_hint">Проведи пальцем або мишею вгору-вниз біля сторони яскравості: яскравість змінюється, значення показується на екрані.</string>
+    <string name="set_vp_side">Сторони жестів</string>
+    <string name="set_vp_side_hint">Яка половина екрана відповідає за яскравість, а яка за гучність.</string>
+    <string name="set_vp_side_a">Ліворуч яскравість, праворуч гучність</string>
+    <string name="set_vp_side_b">Ліворуч гучність, праворуч яскравість</string>
+    <string name="set_vp_gest_seek">Перемотування веденням</string>
+    <string name="set_vp_gest_seek_hint">Веди пальцем або мишею вліво-вправо й не відпускай: показується новий час, перемотування виконується при відпусканні.</string>
+    <string name="set_vp_gest_fling">Наступний і попередній файл кидком</string>
+    <string name="set_vp_gest_fling_hint">Швидкий кидок ліворуч відкриває наступний файл списку, праворуч попередній.</string>
+    <string name="set_vp_sens">Чутливість перемотування</string>
+    <string name="set_vp_sens_hint">Скільки секунд відео вміщується в ширину екрана, коли ведеш пальцем.</string>
+    <string name="vp_sens_sec">%1$d с на екран</string>
+    <string name="set_vp_reset">Скидання налаштувань плеєра</string>
+    <string name="set_vp_reset_hint">Повернути панель, жести й музику у фоні до типових значень.</string>
+    <string name="set_vp_reset_btn">Скинути</string>
+    <string name="set_vp_keep">Запам’ятовувати розмір кадру</string>
+    <string name="set_vp_keep_hint">Увімкнено: режим, вибраний кнопкою «Під екран», запам’ятовується й застосовується до наступних відео та запусків. Вимкнено: кожне відео відкривається «за розміром», а кнопка діє лише на час цього відео.</string>
+</resources>
