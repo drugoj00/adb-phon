@@ -682,7 +682,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- обновление самой программы (GitHub, drugoj00/adb-phon)
     var updateRelease by mutableStateOf<Updater.Release?>(null)
     /** Окно закрыто без обновления: эта версия больше не предлагается само (кнопка «Проверить обновления» покажет её снова). */
-    fun dismissUpdate() { updateRelease?.let { prefs.edit().putString("upd_dismissed", it.tag).apply() }; updateRelease = null }
+    fun dismissUpdate() { updateRelease?.let { prefs.edit().putString("upd_dismissed", if (cmpVer(it.tag, appVersion) == 0) it.tag + "#" + it.code else it.tag).apply() }; updateRelease = null }
+    private fun installedCode(): Long = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode }.getOrDefault(0L)
 
     fun changeAutoUpdate(on: Boolean) { autoUpdate = on; prefs.edit().putBoolean("auto_update", on).apply() }
 
@@ -707,7 +708,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
             res.onSuccess { list ->
                 val best = list.maxWithOrNull { a, b -> cmpVer(a.tag, b.tag) }
-                if (best != null && cmpVer(best.tag, appVersion) > 0) { if (manual || prefs.getString("upd_dismissed", "") != best.tag) updateRelease = best }
+                // имя версии новее; либо имя то же, но в описании выпуска указан больший versionCode (заменённая сборка той же версии): тогда тоже предлагаем
+                val sameNameNewer = best != null && cmpVer(best.tag, appVersion) == 0 && best.code > installedCode()
+                val key = if (best == null) "" else if (sameNameNewer) best.tag + "#" + best.code else best.tag
+                if (best != null && (cmpVer(best.tag, appVersion) > 0 || sameNameNewer)) { if (manual || prefs.getString("upd_dismissed", "") != key) updateRelease = best }
                 else if (manual) message = t(R.string.upd_none)
             }.onFailure { AppLog.e("ADBphon", "update check", it); if (manual) message = t(R.string.upd_failed) }
         }

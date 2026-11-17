@@ -10,7 +10,10 @@ import java.net.URL
 object Updater {
     private const val RELEASES = "https://api.github.com/repos/drugoj00/adb-phon/releases?per_page=30"
 
-    data class Release(val tag: String, val title: String, val date: String, val url: String, val size: Long, val body: String = "")
+    data class Release(val tag: String, val title: String, val date: String, val url: String, val size: Long, val body: String = "") {
+        /** versionCode из строки «versionCode: N» в описании выпуска (0: строки нет). Нужен, когда имя версии то же, а сборка новее (замена файла выпуска). */
+        val code: Long get() = Regex("""(?im)^\W*versionCode\s*[:=]\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+    }
 
     /** Список выпусков с APK. Блокирующий вызов — запускать не в главном потоке. */
     fun fetch(): List<Release> {
