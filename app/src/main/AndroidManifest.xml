@@ -199,6 +199,10 @@
             </intent-filter>
         </activity>
         <service android:name=".FmOpService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <!-- 11.0: тихая установка для программ с той же подписью (Меню приложений и др.): только с разрешением уровня signature -->
+        <service android:name=".InstallService" android:exported="true" android:foregroundServiceType="dataSync">
+            <intent-filter><action android:name="app.adbphon.action.INSTALL_SILENT" /></intent-filter>
+        </service>
         <service android:name=".InstBgService" android:exported="false" android:foregroundServiceType="dataSync" />
         <activity android:name=".CloudWebActivity" android:exported="false" android:launchMode="singleTask" android:configChanges="orientation|screenSize|keyboardHidden|uiMode|screenLayout|smallestScreenSize" />
         <service android:name=".CloudLoginService" android:exported="false" android:foregroundServiceType="dataSync" />
