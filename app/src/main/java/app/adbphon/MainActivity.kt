@@ -106,6 +106,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -157,7 +158,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); FolderCounts.active = true; CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
     override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this) }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Marq.stop(); Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -235,6 +236,31 @@ object AppScale {
         font = sp(ctx).getFloat("scale_font", 1.0f)
         ui = sp(ctx).getFloat("scale_ui", 1.0f)
     }
+    /**
+     * 10.5: автоматический множитель для автомагнитол и планшетов с низкой плотностью (крупный экран, а dp физически мелкие). 1: не действует.
+     * Цель: основной текст (14 sp) около 3,4 % короткой стороны экрана, как на телефоне; множитель в пределах 1…2,2. Телевизор не затрагивается.
+     */
+    var autoF by mutableStateOf(1f)
+    /** Системный масштаб шрифта: при действующем автомасштабе не учитывается (иначе размер удвоился бы). */
+    var sysFont by mutableStateOf(1f)
+    fun updateAuto(ctx: Context) {
+        val dm = ctx.resources.displayMetrics
+        val cfg = ctx.resources.configuration
+        // реальный размер экрана (окно программы короче из-за панелей системы)
+        val real = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") runCatching { (ctx.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(real) }
+        val shortPx = if (real.widthPixels > 0) minOf(real.widthPixels, real.heightPixels) else minOf(dm.widthPixels, dm.heightPixels)
+        val type = cfg.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK
+        val car = type == android.content.res.Configuration.UI_MODE_TYPE_CAR || ctx.packageManager.hasSystemFeature("android.hardware.type.automotive")
+        val tvMode = Marq.tv || type == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+        val swDp = shortPx / dm.density
+        val bigLow = (shortPx >= 600 && dm.densityDpi <= 240) || (swDp >= 600f && dm.densityDpi <= 213)
+        autoF = if (tvMode || !(car || bigLow)) 1f else (shortPx / 412f / dm.density).coerceIn(1f, 2.2f)
+        sysFont = cfg.fontScale
+        android.util.Log.i("AutoScale", "short=$shortPx dpi=${dm.densityDpi} d=${dm.density} car=$car tv=$tvMode bigLow=$bigLow -> $autoF")
+    }
+    fun densMul(): Float = ui * autoF
+    fun fontMul(): Float = font * (if (autoF > 1.001f && sysFont > 0f) 1f / sysFont else 1f)
     fun setFont(ctx: Context, v: Float) { font = v; sp(ctx).edit().putFloat("scale_font", v).apply() }
     fun setUi(ctx: Context, v: Float) { ui = v; sp(ctx).edit().putFloat("scale_ui", v).apply() }
 }
@@ -292,6 +318,8 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     val baseCtx = LocalContext.current
     val uiCtx = remember(vm.lang, baseCtx) { Lang.wrap(baseCtx, vm.lang) }
     remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); BarStyle.load(baseCtx); 0 }
+    val scaleCfg = androidx.compose.ui.platform.LocalConfiguration.current
+    remember(scaleCfg.densityDpi, scaleCfg.screenWidthDp, scaleCfg.screenHeightDp, scaleCfg.fontScale, scaleCfg.uiMode) { AppScale.updateAuto(baseCtx); 0 }
     val dark = when (vm.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     val fullNow = AppFull.on
     SideEffect {
@@ -305,12 +333,24 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     }
     Feedback.host = (baseCtx as? ComponentActivity)?.window?.decorView
     val dens0 = androidx.compose.ui.platform.LocalDensity.current
-    CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(dens0.density * AppScale.ui, dens0.fontScale * AppScale.font)) {
+    CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(dens0.density * AppScale.densMul(), dens0.fontScale * AppScale.fontMul())) {
     ImeGateHost {
     MaterialTheme(colorScheme = AppColors.scheme(dark, baseCtx)) {
+    ClickSoundHost {
         Surface(Modifier.fillMaxSize().imeGateKeys().pointerInput(Unit) {
             // пока палец на экране (в том числе прокрутка списков), бегущие строки стоят: нагрузки нет
-            awaitPointerEventScope { while (true) { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial); Marq.touching = e.changes.any { it.pressed } } }
+            awaitPointerEventScope {
+                var start: androidx.compose.ui.geometry.Offset? = null
+                while (true) {
+                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    Marq.touching = e.changes.any { it.pressed }
+                    val c = e.changes.firstOrNull()
+                    if (c != null && c.pressed) {
+                        if (!c.previousPressed) start = c.position
+                        else if (start != null && (c.position - start).getDistance() > 36f) Marq.stop()   // прокрутка: бегущая строка останавливается
+                    }
+                }
+            }
         }, color = MaterialTheme.colorScheme.background) {
             var tab by remember { mutableStateOf(Startup.initialTab(baseCtx)) }
             LaunchedEffect(tab) { Startup.saveLastTab(baseCtx, tab) }
@@ -473,7 +513,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 BarIcon(i, icon, if (i == items.lastIndex) name else null, col, if (i == items.lastIndex) 30.dp else 24.dp)
-                                                if (i != items.lastIndex) Text(name, Modifier.padding(start = 6.dp), fontSize = (13f / (AppScale.font * AppScale.ui)).sp, maxLines = 1, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                                if (i != items.lastIndex) Text(name, Modifier.padding(start = 6.dp), fontSize = (13f / (AppScale.fontMul() * AppScale.densMul())).sp, maxLines = 1, color = col, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                                             }
                                         } else {
                                             // портрет телефона: значок и подпись у всех вкладок (и у «Опций») на одной линии; выбранная вкладка — акцентная таблетка вокруг значка и подписи, без полоски у края панели
@@ -501,7 +541,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                                                 horizontalAlignment = Alignment.CenterHorizontally,
                                             ) {
                                                 BarIcon(i, icon, null, col, 22.dp)
-                                                Text(name, fontSize = (10f / (AppScale.font * AppScale.ui)).sp, lineHeight = (12f / (AppScale.font * AppScale.ui)).sp, maxLines = 1, color = col, fontFamily = CondFont, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                                Text(name, fontSize = (10f / (AppScale.fontMul() * AppScale.densMul())).sp, lineHeight = (12f / (AppScale.fontMul() * AppScale.densMul())).sp, maxLines = 1, color = col, fontFamily = CondFont, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                                             }
                                         }
                                     }
@@ -575,6 +615,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 }
             }
         }
+        }
     }
     }
     }
@@ -642,7 +683,7 @@ fun ConnectScreen(vm: MainViewModel) {
                             val favSpec = CustomIcons.spec("v:" + f.host)
                             if (favSpec != null) CustomIconView(favSpec, 24.dp) else Icon(Icons.Filled.Star, null, tint = if (cur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                Text(f.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified)
+                                MqText(f.name, active = cur, fontWeight = FontWeight.Medium, color = if (cur) MaterialTheme.colorScheme.onPrimary else Color.Unspecified, names = true)
                                 Text(f.host + if (f.kind == "wifi") ":" + f.port else "", fontSize = 12.sp, color = if (cur) MaterialTheme.colorScheme.onPrimary.copy(alpha = .85f) else MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                             }
                             IconButton({ vm.removeFav(f) }) { Icon(Icons.Filled.Delete, stringResource(R.string.fav_remove), tint = if (cur) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current) }
@@ -858,10 +899,23 @@ private fun androidx.compose.foundation.layout.RowScope.EqTextButton(label: Stri
     OutlinedButton(
         onClick, Modifier.weight(1f).fillMaxHeight().defaultMinSize(minHeight = 40.dp),
         shape = androidx.compose.ui.graphics.RectangleShape,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 6.dp),
     ) {
-        Text(label, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        FitButtonText(label)
     }
+}
+
+/** Подпись кнопки: слова целиком (перенос только по пробелам); шрифт уменьшается ровно настолько, чтобы самое длинное слово влезло (не меньше 7,5 sp). */
+@Composable
+private fun FitButtonText(label: String) {
+    // без BoxWithConstraints: ряд кнопок считает собственную высоту (IntrinsicSize), а такие раскладки её не поддерживают
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val base = androidx.compose.material3.LocalTextStyle.current
+    var availPx by remember { mutableStateOf(0) }
+    val words = label.split(' ').filter { it.isNotEmpty() }
+    var fs = 11f
+    if (availPx > 0) while (fs > 7.5f && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), base.copy(fontSize = fs.sp, fontWeight = FontWeight.Medium)).size.width > availPx * 0.97f }) fs -= 0.25f
+    Text(label, Modifier.fillMaxWidth().androidx_onSize { availPx = it }, fontSize = fs.sp, lineHeight = (fs * 1.25f).sp, maxLines = 2, softWrap = true, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
 }
 
 /** Кнопка для рядов с переносом (ландшафт): ширина как у кнопки в портрете (треть ряда), высота та же. */
@@ -870,9 +924,9 @@ private fun EqFlowButton(label: String, onClick: () -> Unit) {
     OutlinedButton(
         onClick, Modifier.width(112.dp).defaultMinSize(minHeight = 40.dp),
         shape = androidx.compose.ui.graphics.RectangleShape,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 6.dp),
     ) {
-        Text(label, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        FitButtonText(label)
     }
 }
 
@@ -999,7 +1053,9 @@ fun AppsScreen(vm: MainViewModel) {
                 )
             }
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 10.5: пока открыта клавиатура (портрет), ряды кнопок сворачиваются: остаются поле поиска, фильтры и счётчик, весь остальной экран отдан списку
+        val imeUp = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+        if (!imeUp || land) Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 EqTextButton(stringResource(R.string.select_all)) { vm.selectAllVisible() }
                 checkBtn()
@@ -1026,10 +1082,17 @@ fun AppsScreen(vm: MainViewModel) {
                 .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial); pane = 0 } }
                 .onFocusChanged { if (it.hasFocus) pane = 0 },
         ) {
+        // ширины колонок: архитектура по самой широкой метке, плашка источника фиксированная
+        val archMeasure = androidx.compose.ui.text.rememberTextMeasurer()
+        val archDens = androidx.compose.ui.platform.LocalDensity.current
+        val archBase = androidx.compose.material3.LocalTextStyle.current
+        val archW = with(archDens) { archMeasure.measure("X86_64", archBase.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold)).size.width.toDp() } + 8.dp
+        val badgeW = if (Marq.tv) 52.dp else 40.dp
+        val colW = maxOf(archW, badgeW)   // общая правая колонка: ширина по самой широкой метке или плашке
         LazyColumn(
             Modifier.fillMaxSize().verticalScrollbar(ls), state = ls,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = if (sbl) SbMath.RESERVE_DP.dp else 0.dp, end = if (sbl) 0.dp else SbMath.RESERVE_DP.dp, top = 6.dp, bottom = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),   // 10.5: между строками «Софта» нет лишнего разрыва (телефон и приставка), высоту задаёт галочка 48 dp
         ) {
             items(visible, key = { it.pkg }) { a ->
                 Row(
@@ -1038,14 +1101,21 @@ fun AppsScreen(vm: MainViewModel) {
                             onClick = { vm.toggle(a.pkg); lastTap = a.pkg },
                             onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); infoFor = a },
                         )
-                        .padding(start = 12.dp, top = 4.dp, end = 3.dp, bottom = 4.dp),   // 10.11.2026: справа 3 dp, галочка у самого края
+                        .padding(start = 12.dp, top = 1.dp, end = 3.dp, bottom = 1.dp),   // 10.11.2026: справа 3 dp, галочка у самого края
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val archTxt = archLabel(rememberArch(a.pkg, a.version, a.paths, a.system))
                     AppIcon(a.pkg, 32.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         // длинное название переносится на несколько строк
-                        Text(a.label, fontFamily = UiPrefs.listFont, fontSize = 15.sp, lineHeight = 17.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        // 10.5: название переносится в оставшейся ширине; архитектура и плашка источника стоят в своих колонках справа
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        MqText(a.label, active = a.pkg == lastTap, modifier = Modifier.weight(1f), fontSize = 15.sp, lineHeight = 17.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, names = true)
+                        Box(Modifier.width(colW), contentAlignment = Alignment.CenterEnd) {
+                            if (archTxt.isNotEmpty()) Text(archTxt, color = archColor(), fontFamily = UiPrefs.listFontBold, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.Bold)
+                        }
+                        }
                         val tags = buildList {
                             if (a.system) add(stringResource(R.string.tag_system))
                             if (!a.enabled) add(stringResource(R.string.tag_disabled))
@@ -1059,16 +1129,22 @@ fun AppsScreen(vm: MainViewModel) {
                         // вторая строка: пакет и версия серым, метки («система», «мусор», «безопасно»…) цветом
                         val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
                         val acc = MaterialTheme.colorScheme.primary
+                        // нижняя строка бежит по настройке «Прокрутка» (названия переносятся)
+                        // 10.5: нижняя строка: колонка архитектуры (ширина по «X86_64»), колонка плашки источника (ширина фиксированная), затем пакет · версия · статус; колонки есть у всех строк, поэтому всё стоит на одной вертикали
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (a.pkg == lastTap), LocalMarqOnlyActive provides true) {
                         Text(
                             androidx.compose.ui.text.buildAnnotatedString {
                                 withStyle(androidx.compose.ui.text.SpanStyle(color = dim)) { append(a.pkg) }
                                 if (tags.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = acc)) { append(" · " + tags.joinToString(" · ")) }
                             },
-                            fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            Modifier.weight(1f).heightIn(min = if (Marq.tv) 0.dp else 28.dp), fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
+                        }
+                        Box(Modifier.width(colW), contentAlignment = Alignment.CenterEnd) { InstallSourceBadge(a.pkg, a.system) }   // 10.0: откуда установлено (InstallSource.kt); текст у правого края
+                        }
                     }
                     // флажок выбора справа, как в «Файлах»
-                    InstallSourceBadge(a.pkg, a.system)   // 10.0: откуда установлено (InstallSource.kt)
                     BigCheck(a.pkg in vm.selected, Marq.tv) { vm.toggle(a.pkg); lastTap = a.pkg }   // 10.0 (chk): общая крупная галочка (BigCheck.kt), на приставке 32 dp
                 }
             }
@@ -1452,3 +1528,6 @@ fun AboutScreen(vm: MainViewModel, embedded: Boolean = false) {
 }
 
 private fun Modifier.androidxHeightIn(max: androidx.compose.ui.unit.Dp): Modifier = this.then(Modifier.heightIn(max = max))
+
+/** Сообщает ширину в пикселях (вспомогательное для подписей кнопок). */
+private fun Modifier.androidx_onSize(f: (Int) -> Unit): Modifier = this.onSizeChanged { f(it.width) }

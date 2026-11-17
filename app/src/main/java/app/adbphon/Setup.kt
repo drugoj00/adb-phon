@@ -134,7 +134,13 @@ object Setup {
         SetupStep("write", R.string.su_write_t, R.string.su_write_w, { true },
             { c -> runCatching { Settings.System.canWrite(c) }.getOrDefault(false) },
             { a -> page(a, Settings.ACTION_MANAGE_WRITE_SETTINGS) }),
+        // 10.5: доступ к съёмным томам (SD, USB) без ADB и root: выдаётся один раз на том, чтобы в «Файлах» не всплывало неожиданное окно
+        SetupStep("saf", R.string.su_saf_t, R.string.su_saf_w, { c -> SafAccess.volumes(c.also { SafAccess.init(it) }).isNotEmpty() },
+            { c -> SafAccess.init(c); SafAccess.volumes(c).all { (u, _) -> SafAccess.tree(u) != null } },
+            { _ -> Setup.safPick?.invoke() }),
     )
+    /** Запуск системного выбора для первого тома без доступа; ставит окно первого запуска ([FirstRunSetup]). */
+    var safPick: (() -> Unit)? = null
 }
 
 @Composable
@@ -143,6 +149,20 @@ fun FirstRunSetup() {
     val act = remember { PermFlow.findActivity(ctx) } ?: run { Setup.open = false; return }
     var tick by remember { mutableIntStateOf(0) }
     val skipped = remember { mutableStateListOf<String>() }
+    // доступ к карте памяти: результат системного выбора папки для тома, который сейчас просим
+    val safTarget = remember { arrayOf("") }
+    val safLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        val u = r.data?.data
+        if (r.resultCode == Activity.RESULT_OK && u != null && safTarget[0].isNotEmpty()) SafAccess.accept(safTarget[0], u)
+        tick++
+    }
+    Setup.safPick = {
+        SafAccess.init(ctx)
+        SafAccess.volumes(ctx).firstOrNull { (u, _) -> SafAccess.tree(u) == null }?.let { (u, _) ->
+            safTarget[0] = u
+            runCatching { safLauncher.launch(SafAccess.pickIntent(u)) }
+        }
+    }
     // шаги, где «Включить» уже нажимали, а разрешения всё ещё нет: показываем подсказку про «ограниченные настройки»
     val tried = remember { mutableStateListOf<String>() }
     val owner = LocalLifecycleOwner.current
@@ -169,7 +189,12 @@ fun FirstRunSetup() {
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(cur.why), fontSize = 14.sp)
-                if (cur.key in tried) {
+                if (cur.key == "saf") {
+                    val names = SafAccess.volumes(act).filter { (u, _) -> SafAccess.tree(u) == null }.joinToString(", ") { it.second }
+                    if (names.isNotEmpty()) Text(names, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Collapsible(stringResource(R.string.saf_how)) { Text(stringResource(R.string.saf_hint), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f)) }
+                }
+                if (cur.key in tried && cur.key != "saf") {
                     Text(stringResource(R.string.su_retry), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     TextButton({ val di = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + act.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); val ri = act.packageManager.resolveActivity(di, 0); if (ri?.activityInfo != null && ri.activityInfo.packageName != "android") runCatching { act.startActivity(di) } else android.widget.Toast.makeText(act, act.getString(R.string.su_no_page), android.widget.Toast.LENGTH_LONG).show() }) { Text(stringResource(R.string.su_open_app)) }
                 }

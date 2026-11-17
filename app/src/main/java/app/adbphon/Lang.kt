@@ -49,7 +49,26 @@ private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) 
     val base = androidx.compose.ui.platform.LocalContext.current
     val code = LocalLangCode.current
     val ctx = androidx.compose.runtime.remember(base, code) { Lang.wrap(base, code) }
-    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides ctx) { TvFontScope(content) }   // 10.0 (tvfont): окна на ТВ: «Размер шрифта» и минимум размеров (TvFont.kt)
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides ctx) {
+        // 10.5: текст всплывающих окон жирнее (значения и основной текст полужирные, кнопки жирные), размер прежний
+        val th = androidx.compose.material3.MaterialTheme.typography
+        val semi = androidx.compose.ui.text.font.FontWeight.SemiBold
+        val bold = androidx.compose.runtime.remember(th) {
+            th.copy(
+                bodyLarge = th.bodyLarge.copy(fontWeight = semi), bodyMedium = th.bodyMedium.copy(fontWeight = semi), bodySmall = th.bodySmall.copy(fontWeight = semi),
+                titleLarge = th.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), titleMedium = th.titleMedium.copy(fontWeight = semi), titleSmall = th.titleSmall.copy(fontWeight = semi),
+                headlineSmall = th.headlineSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                labelLarge = th.labelLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), labelMedium = th.labelMedium.copy(fontWeight = semi),
+            )
+        }
+        androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.MaterialTheme.colorScheme, shapes = androidx.compose.material3.MaterialTheme.shapes, typography = bold) {
+            ClickSoundHost {
+                val st = androidx.compose.material3.LocalTextStyle.current
+                val w = st.fontWeight?.weight ?: 400
+                androidx.compose.material3.ProvideTextStyle(if (w < 600) st.copy(fontWeight = semi) else st) { TvFontScope(true, content) }
+            }
+        }
+    }   // 10.0 (tvfont): окна на ТВ: «Размер шрифта» и минимум размеров (TvFont.kt)
 }
 
 /** AlertDialog, который показывает строки на языке, выбранном в настройках. */

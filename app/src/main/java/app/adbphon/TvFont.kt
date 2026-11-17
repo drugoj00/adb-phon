@@ -43,10 +43,12 @@ object TvFont {
 
 /** Множитель шрифта окна на ТВ; 0: подъём мелкого текста выключен (телефон, основной экран). */
 val LocalTvFont = compositionLocalOf { 0f }
+/** 10.5: область всплывающего окна на ТВ (размеры шрифта крупнее, см. [TvFontRules.sizeSp]). */
+val LocalTvDialog = compositionLocalOf { false }
 
 /** Область окна: на ТВ крупный шрифт и минимум размеров (см. [TvFont]). Повторное вложение ничего не меняет. */
 @Composable
-fun TvFontScope(content: @Composable () -> Unit) {
+fun TvFontScope(dialog: Boolean = false, content: @Composable () -> Unit) {
     val tv = Marq.tv
     if (!tv && !TvFont.PHONES_DIALOG_FONT) { content(); return }
     val d = LocalDensity.current
@@ -56,15 +58,15 @@ fun TvFontScope(content: @Composable () -> Unit) {
     if (!tv) { CompositionLocalProvider(LocalDensity provides dens) { content() }; return }
     val mult = if (sys > 0f) fs / sys else 1f
     val st = LocalTextStyle.current
-    CompositionLocalProvider(LocalDensity provides dens, LocalTvFont provides mult, LocalTextStyle provides tvStyle(st, mult)) { content() }
+    CompositionLocalProvider(LocalDensity provides dens, LocalTvFont provides mult, LocalTvDialog provides dialog, LocalTextStyle provides tvStyle(st, mult, dialog)) { content() }
 }
 
 private fun spOrNaN(u: TextUnit): Float = if (u.isSp) u.value else Float.NaN
 
 /** Стиль с поднятым до минимума размером (для полей ввода и текста без явного размера). */
-internal fun tvStyle(st: TextStyle, mult: Float): TextStyle {
+internal fun tvStyle(st: TextStyle, mult: Float, dialog: Boolean = false): TextStyle {
     val req = spOrNaN(st.fontSize)
-    val size = TvFontRules.sizeSp(req, mult)
+    val size = TvFontRules.sizeSp(req, mult, dialog)
     if (size == req) return st
     val lh = TvFontRules.lineSp(size, spOrNaN(st.lineHeight))
     return st.copy(fontSize = size.sp, lineHeight = if (lh.isNaN()) st.lineHeight else lh.sp)
@@ -77,7 +79,7 @@ internal fun tvFontSize(fontSize: TextUnit, style: TextStyle): TextUnit {
     val mult = LocalTvFont.current
     if (mult <= 0f) return fontSize
     val req = if (fontSize.isSp) fontSize.value else spOrNaN(style.fontSize)
-    val size = TvFontRules.sizeSp(req, mult)
+    val size = TvFontRules.sizeSp(req, mult, LocalTvDialog.current)
     return if (size == req) fontSize else size.sp
 }
 

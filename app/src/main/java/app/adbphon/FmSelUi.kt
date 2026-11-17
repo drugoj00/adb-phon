@@ -88,8 +88,8 @@ fun fmItemsText(n: Int): String {
 @Composable
 internal fun NoAppScale(content: @Composable () -> Unit) {
     val d = androidx.compose.ui.platform.LocalDensity.current
-    val ui = AppScale.ui.takeIf { it > 0f } ?: 1f
-    val fo = AppScale.font.takeIf { it > 0f } ?: 1f
+    val ui = AppScale.densMul().takeIf { it > 0f } ?: 1f
+    val fo = AppScale.fontMul().takeIf { it > 0f } ?: 1f
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density / ui, d.fontScale / fo), content = content)
 }
 

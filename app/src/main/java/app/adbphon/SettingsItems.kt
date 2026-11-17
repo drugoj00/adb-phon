@@ -284,7 +284,6 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "full" to listOf(R.string.fs_title),
     "colors" to listOf(R.string.col_dynamic, R.string.col_accent),
     "bars" to listOf(R.string.bar_contrast, R.string.bar_color),
-    "marq" to listOf(R.string.set_marq),
     "tapguard" to listOf(R.string.tg_title),
     "dir_tap" to listOf(R.string.set_dir_tap),
     "folder_color" to listOf(R.string.set_folder_color),
@@ -376,8 +375,10 @@ fun SetItem(key: String, vm: MainViewModel) {
             val font = key == "font"
             Text(stringResource(if (font) R.string.sc_font else R.string.sc_ui), fontWeight = FontWeight.Medium)
             EqChoices(AppScale.steps.mapIndexed { i, v ->
-                EqChoice(stringResource(scNames[i]), (if (font) AppScale.font else AppScale.ui) == v) { if (font) AppScale.setFont(ctx, v) else AppScale.setUi(ctx, v) }
+                // 10.5: «Размер интерфейса»: средний пункт «Авто (по экрану)»: на автомагнитолах и планшетах с низкой плотностью интерфейс укрупняется сам; остальные пункты работают поверх
+                EqChoice(stringResource(if (!font && i == 1) R.string.sc_auto else scNames[i]), (if (font) AppScale.font else AppScale.ui) == v) { if (font) AppScale.setFont(ctx, v) else AppScale.setUi(ctx, v) }
             }, perRow = 2)
+            if (!font && AppScale.autoF > 1.001f) Text(stringResource(R.string.sc_auto_now, "%.2f".format(AppScale.autoF)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         }
         "full" -> SettingSwitch(AppFull.on, { AppFull.set(ctx, it) }, stringResource(R.string.fs_title), stringResource(R.string.fs_hint))
         "colors" -> {
@@ -393,13 +394,6 @@ fun SetItem(key: String, vm: MainViewModel) {
             }
         }
         "bars" -> BarContrastSetting()
-        "marq" -> {
-            Text(stringResource(R.string.set_marq), fontWeight = FontWeight.Medium)
-            EqChoices(listOf(
-                EqChoice(stringResource(R.string.marq_on), Marq.mode != 2) { Marq.setMode(ctx, 1) },
-                EqChoice(stringResource(R.string.marq_off), Marq.mode == 2) { Marq.setMode(ctx, 2) },
-            ))
-        }
         "tapguard" -> SettingSwitch(TapGuard.on, { TapGuard.set(ctx, it) }, stringResource(R.string.tg_title), stringResource(R.string.tg_hint))
 
         // ---- Файлы

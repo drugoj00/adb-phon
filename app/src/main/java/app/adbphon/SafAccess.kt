@@ -49,6 +49,9 @@ object SafAccess {
     private val cr get() = app.contentResolver
     private fun prefs() = app.getSharedPreferences("fm", Context.MODE_PRIVATE)
 
+    /** Для мест, где [FmIo] ещё не запускался (мастер первого запуска, настройки). */
+    fun init(ctx: Context) { runCatching { FmIo.app }.onFailure { FmIo.app = ctx.applicationContext } }
+
     class Node(val name: String, val dir: Boolean, val size: Long, val mtime: Long)
 
     /** Список съёмного тома просит выдать доступ к нему (окно «Нужен доступ к карте памяти»). */
@@ -88,7 +91,9 @@ object SafAccess {
     fun accept(uuid: String, uri: Uri): Int {
         if (!runCatching { DocumentsContract.isTreeUri(uri) }.getOrDefault(false)) return ERR_NOT_TREE
         val id = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
-        if (!SafPaths.isVolumeRoot(id, uuid)) return ERR_NOT_ROOT
+        // Android 13 и новее не даёт выбрать корень карты («Выберите другую папку»): тогда годится любая папка этого тома, доступ только внутри неё
+        val inVolume = id != null && id.startsWith("$uuid:", ignoreCase = true)
+        if (!SafPaths.isVolumeRoot(id, uuid) && !(android.os.Build.VERSION.SDK_INT >= 33 && inVolume)) return ERR_NOT_ROOT
         return try {
             cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             prefs().edit().putString("saf_$uuid", uri.toString()).apply()
@@ -127,7 +132,7 @@ object SafAccess {
     /** Путь на съёмном томе, куда обычные файловые операции не проходят: работа идёт через выданное дерево. */
     fun needs(path: String): Boolean {
         val loc = SafPaths.parse(path) ?: return false
-        if (isForced()) return true
+        if (isForced()) return covered(path)   // проверочный режим: только внутри выданной папки
         val now = android.os.SystemClock.elapsedRealtime()
         probe[loc.uuid]?.let { if (now - it.first < 30_000L) return it.second }
         val r = !canWriteFile(loc.uuid)
@@ -136,7 +141,12 @@ object SafAccess {
     }
 
     /** Корень SAF-тома можно показать как папку, даже если файловое чтение закрыто. */
-    fun covered(path: String): Boolean = SafPaths.parse(path)?.let { tree(it.uuid) != null } == true
+    fun covered(path: String): Boolean {
+        val loc = SafPaths.parse(path) ?: return false
+        val t = tree(loc.uuid) ?: return false
+        val base = runCatching { DocumentsContract.getTreeDocumentId(t).substringAfter(':') }.getOrDefault("").trim('/')
+        return base.isEmpty() || loc.rel == base || loc.rel.startsWith("$base/")
+    }
 
     /**
      * Убедиться, что доступ к тому пути [path] выдан; если нет, показать окно «Нужен доступ к карте памяти» и дождаться выбора.
@@ -144,14 +154,14 @@ object SafAccess {
      */
     suspend fun ensure(path: String): Boolean {
         val loc = SafPaths.parse(path) ?: return false
-        if (tree(loc.uuid) != null) return true
-        return asker.ask(loc.uuid)
+        if (covered(path)) return true
+        return asker.ask(loc.uuid, path)
     }
 
     private val asker = object {
         private val lock = kotlinx.coroutines.sync.Mutex()
-        suspend fun ask(uuid: String): Boolean = lock.withLock {
-            if (tree(uuid) != null) return@withLock true
+        suspend fun ask(uuid: String, path: String): Boolean = lock.withLock {
+            if (covered(path)) return@withLock true
             val d = kotlinx.coroutines.CompletableDeferred<Boolean>()
             val dlg = FmDlg.SafNeed(uuid, label(uuid)) { ok -> d.complete(ok) }
             Fm.dlg = dlg
@@ -160,7 +170,7 @@ object SafAccess {
                 if (Fm.dlg !== dlg) d.complete(false)   // окно закрыто другим окном
             }
             if (Fm.dlg === dlg) Fm.dlg = null
-            tree(uuid) != null
+            covered(path)
         }
     }
 
