@@ -49,4 +49,8 @@
     <string name="saf_state_off">Доступ не надано</string>
     <string name="saf_forget">Забути доступ</string>
     <string name="saf_grant">Надати доступ</string>
+    <string name="su_saf_t">доступ до карти пам’яті</string>
+    <string name="su_saf_w">Дозволяє змінювати файли на карті пам’яті та USB-накопичувачі без ADB і root. Одне системне вікно на кожну карту.</string>
+    <string name="sc_auto">Авто (за екраном)</string>
+    <string name="sc_auto_now">Екран визначено як великий із низькою щільністю: інтерфейс збільшено в %1$s раза. Системний розмір шрифту зверху не додається, вище є «Розмір шрифту».</string>
 </resources>
