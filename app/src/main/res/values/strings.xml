@@ -783,10 +783,6 @@
     <string name="fm_net_body">Type: %1$s\nAddress: %2$s\nUser: %3$s</string>
     <string name="fm_net_lost">Could not reopen %1$s: showing phone storage.</string>
     <string name="set_collapse_all">Collapse all</string>
-    <string name="set_marq">Scrolling of long names</string>
-    <string name="marq_on">On</string>
-    <string name="marq_focus">Focused only</string>
-    <string name="marq_off">Off</string>
     <string name="bk2_title">Backup</string>
     <string name="bk2_hint">A full backup with one button: settings, device lists, LAN connections, cloud drives with sign-in, passwords and the ADB key. After a restore the drives are in place and open at once. The file holds plain passwords: keep it somewhere safe.</string>
     <string name="bk2_default_folder">Downloads</string>

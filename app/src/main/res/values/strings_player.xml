@@ -49,4 +49,8 @@
     <string name="saf_state_off">Access not granted</string>
     <string name="saf_forget">Forget access</string>
     <string name="saf_grant">Grant access</string>
+    <string name="su_saf_t">memory card access</string>
+    <string name="su_saf_w">Lets files on a memory card or USB drive be changed without ADB or root. One system window per card.</string>
+    <string name="sc_auto">Auto (by screen)</string>
+    <string name="sc_auto_now">Large screen with low density detected: the interface is enlarged %1$s times. The system font size is not added on top; use “Font size” above.</string>
 </resources>
