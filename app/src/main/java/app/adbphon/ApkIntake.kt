@@ -110,24 +110,4 @@ object InstallGate {
 @androidx.compose.runtime.Composable
 fun InstallGateHost() { InstallGate.confirm?.let { d -> InstallConfirmDialog(d) { InstallGate.confirm = null } } }
 
-/** Точка входа для системного выбора «чем открыть/установить APK»; сама ничего не рисует, после подготовки файла передаёт его в [MainActivity]. */
-class ApkIntakeActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        val uri = intent?.data ?: intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-        if (uri == null) { finish(); return }
-        val app = applicationContext
-        val mime = intent?.type
-        Thread {
-            val r = runCatching { ApkIntake.prepare(app, uri, mime) }
-            runOnUiThread {
-                r.onSuccess { p ->
-                    ApkIntake.pending = p
-                    startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-                }.onFailure { Toast.makeText(app, R.string.intake_fail, Toast.LENGTH_LONG).show() }
-                finish()
-            }
-        }.start()
-    }
-}
+// ApkIntakeActivity (11.0, код 60) перенесена в ApkIntakeUi.kt: компактное окно вместо перехода в главный экран.
