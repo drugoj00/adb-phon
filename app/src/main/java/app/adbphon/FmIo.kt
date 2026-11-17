@@ -67,6 +67,19 @@ object FmIo {
     /** ADB смотрит на другое устройство: пути «local» и «adb» тогда относятся к разным устройствам. */
     var remote = false
 
+    /** ADB или root уже работают на этом телефоне: они идут первыми и для съёмных томов (оболочка видит карту памяти). */
+    fun adbActive(): Boolean = !SafAccess.isForced() && !remote && (Adb.isRoot || (Adb.isConnected && Adb.currentHost.isEmpty()))
+    /** Для панели «local» на съёмном томе без файловой записи при работающем ADB/root операция идёт оболочкой. */
+    private fun srcOf(p: FmPane, path: String): String = if (p.src == "local" && adbActive() && SafAccess.needs(path)) "adb" else p.src
+    private val noProgress = object : OpProgress { override val cancelled = false; override fun bytes(n: Long) {}; override fun file(name: String) {}; override fun item() {} }
+    private fun shellReadable(p: String) = p.startsWith("/storage/") || p.startsWith("/sdcard")
+
+    /** Операция на съёмном томе через выданное дерево (SAF); окно доступа открывается при первом обращении. */
+    private suspend fun safOp(path: String, f: () -> Unit): String? {
+        if (!SafAccess.ensure(path)) return s(R.string.saf_not_granted)
+        return try { withContext(Dispatchers.IO) { f() }; null } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: LocalOps.Cancelled) { null } catch (e: Throwable) { nice(e) }
+    }
+
     private fun s(id: Int, vararg a: Any): String = runCatching { (runCatching { Fm.sctx }.getOrNull() ?: app).getString(id, *a) }.getOrDefault("")
     private fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
     /** Имя с адресом источника («smb://хост/папка/файл», так называются отмеченные в дереве сетевые элементы) уже полный путь: к папке не приклеивается. */
@@ -104,8 +117,15 @@ object FmIo {
         else -> withContext(Dispatchers.IO) {
             if (restricted(path)) throw NeedPriv()
             val d = File(path)
+            // съёмный том: ADB/root первыми; без них, если файловое чтение закрыто, список берётся из выданного дерева (или просится доступ)
+            val onVol = SafPaths.parse(path) != null && !adbActive()
+            val first = if (onVol && SafAccess.isForced()) null else if (d.exists()) d.listFiles() else null
+            if (onVol && first == null) {
+                if (!SafAccess.covered(path)) throw SafAccess.NeedGrant()
+                return@withContext SafAccess.list(path)
+            }
             if (!d.exists()) error(s(R.string.fm_err_missing))
-            val arr = d.listFiles() ?: throw NeedPriv()
+            val arr = first ?: throw NeedPriv()
             arr.filter { it.name != FmTrash.DIR }.map { FmItem(it.name, it.isDirectory, if (it.isDirectory) 0L else it.length(), FmSub.stamp(it)) }
         }
     }
@@ -113,7 +133,7 @@ object FmIo {
     suspend fun exists(p: FmPane, path: String): Boolean = when (p.src) {
         "adb" -> sh("[ -e ${q(path)} ] && echo 1").contains("1")
         "smb" -> (p.smb as? ArchiveFs)?.let { a -> withContext(Dispatchers.IO) { a.exists(path) } } ?: (p.smb as? KeepFs)?.let { runCatching { it.stat(path) }.getOrNull() != null } ?: false
-        else -> withContext(Dispatchers.IO) { statLocal(path) != null }
+        else -> { if (SafAccess.needs(path) && !adbActive()) SafAccess.ensure(path); withContext(Dispatchers.IO) { statLocal(path) != null } }
     }
 
     /** Запись на сетевой источник (SFTP, FTP, WebDAV, SMB): текст ошибки или null. */
@@ -121,7 +141,7 @@ object FmIo {
     fun netFs(p: FmPane): KeepFs? = (p.smb as? KeepFs)?.takeIf { p.src == "smb" }
 
     /** Запись на телефоне: null если нет. Битая символическая ссылка тоже считается существующей, регистр имён решает файловая система тома. */
-    fun statLocal(path: String): CNode? = try {
+    fun statLocal(path: String): CNode? = (if (SafAccess.covered(path) && SafAccess.needs(path)) SafAccess.stat(path)?.let { CNode(it.dir, if (it.dir) 0L else it.size, it.mtime) } else null) ?: try {
         if (!java.nio.file.Files.exists(java.nio.file.Paths.get(path), java.nio.file.LinkOption.NOFOLLOW_LINKS)) null
         else { val f = File(path); val d = f.isDirectory; CNode(d, if (d) 0L else f.length(), f.lastModified()) }
     } catch (e: Throwable) {
@@ -146,22 +166,31 @@ object FmIo {
         return try { withContext(Dispatchers.IO) { f(a) }; null } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { nice(e) }
     }
 
-    suspend fun mkdir(p: FmPane, path: String): String? = when (p.src) {
+    suspend fun mkdir(p: FmPane, path: String): String? = when (srcOf(p, path)) {
         "adb" -> failed(sh("mkdir -p ${q(path)} 2>&1"))
         "smb" -> { val n = netFs(p); if (n != null) netOp { n.mkdirRemote(path) } else arcOp(p) { a -> a.mkdir(path) } }
-        else -> withContext(Dispatchers.IO) { if (File(path).mkdirs() || File(path).isDirectory) null else s(R.string.fm_err_denied) }
+        else -> if (SafAccess.needs(path)) safOp(path) { SafAccess.mkdirs(path) } else withContext(Dispatchers.IO) { if (File(path).mkdirs() || File(path).isDirectory) null else s(R.string.fm_err_denied) }
     }
 
-    suspend fun touch(p: FmPane, path: String): String? = when (p.src) {
+    suspend fun touch(p: FmPane, path: String): String? = when (srcOf(p, path)) {
         "adb" -> failed(sh("touch ${q(path)} 2>&1"))
         "smb" -> { val n = netFs(p); if (n != null) netOp { withContext(Dispatchers.IO) { val t = File.createTempFile("touch", ".tmp", app.cacheDir); try { n.upload(t, path, false) } finally { t.delete() } } } else arcOp(p) { a -> a.touch(path) } }
-        else -> withContext(Dispatchers.IO) { runCatching { File(path).createNewFile(); null }.getOrElse { s(R.string.fm_err_denied) } }
+        else -> if (SafAccess.needs(path)) safOp(path) { SafAccess.touch(path) } else withContext(Dispatchers.IO) { runCatching { File(path).createNewFile(); null }.getOrElse { s(R.string.fm_err_denied) } }
     }
 
-    suspend fun rename(p: FmPane, from: String, to: String): String? = when (p.src) {
+    suspend fun rename(p: FmPane, from: String, to: String): String? = when (srcOf(p, from)) {
         "adb" -> failed(sh("mv ${q(from)} ${q(to)} 2>&1"))
         "smb" -> { val n = netFs(p); if (n != null) netOp { n.renameRemote(from, to, false) } else arcOp(p) { a -> a.rename(from, to) } }
-        else -> withContext(Dispatchers.IO) { if (File(to).exists()) s(R.string.fm_err_exists) else if (File(from).renameTo(File(to))) null else s(R.string.fm_err_denied) }
+        else -> if (SafAccess.needs(from)) {
+            if (!SafAccess.ensure(from)) s(R.string.saf_not_granted)
+            else try {
+                withContext(Dispatchers.IO) {
+                    if (SafAccess.stat(to) != null) s(R.string.fm_err_exists)
+                    else if (SafAccess.rename(from, to)) null
+                    else { SafAccess.copyTree(from, to, true, noProgress); null }   // в другую папку: копия и удаление
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { nice(e) }
+        } else withContext(Dispatchers.IO) { if (File(to).exists()) s(R.string.fm_err_exists) else if (File(from).renameTo(File(to))) null else s(R.string.fm_err_denied) }
     }
 
     /** Системные и корневые каталоги, которые нельзя удалять и переносить. */
@@ -173,13 +202,16 @@ object FmIo {
 
     suspend fun delete(p: FmPane, path: String, j: OpProgress? = null): String? {
         if (isProtected(path)) return s(R.string.fm_protected)
-        return when (p.src) {
+        return when (srcOf(p, path)) {
             "adb" -> failed(sh("rm -rf ${q(path)} 2>&1", 10 * 60_000L))
             "smb" -> { val cf = p.smb as? CloudFs; val nc = p.net; val nfs = p.smb
                 if (cf != null) { val fi = p.items.firstOrNull { it.name == path.substringAfterLast('/') }; cf.deletePath(path, fi?.isDir ?: false, Fm.deletePermanent, fi?.size ?: -1L) }
                 else if (nc != null && nfs != null && nfs !is ArchiveFs) { val fi = p.items.firstOrNull { it.name == path.substringAfterLast('/') }; NetTrash.delete(app, nc, nfs, path, fi?.isDir ?: false, Fm.deletePermanent, fi?.size ?: -1L) }
                 else arcOp(p) { it.delete(listOf(path)) } }
-            else -> withContext(Dispatchers.IO) {
+            else -> if (SafAccess.needs(path)) {
+                // съёмный том без файловой записи: удаление навсегда через выданное дерево (корзина на таком томе не работает)
+                safOp(path) { j?.file(path.trimEnd('/').substringAfterLast('/')); if (!SafAccess.delete(path)) throw java.io.IOException(s(R.string.fm_err_denied)); j?.item() }
+            } else withContext(Dispatchers.IO) {
                 val f = File(path)
                 // телефон и карта памяти: сначала корзина (если включена и подходит), иначе удаление навсегда
                 if (!Fm.deletePermanent && FmTrash.why(f) == FmTrash.Why.OK) {
@@ -197,11 +229,30 @@ object FmIo {
         if (move && isProtected(from)) return s(R.string.fm_protected)
         // в облаке файл перезаписывается самим rclone, удалять заранее не нужно (и нельзя: удаление в облаке не поддержано)
         if (deleteFirst && !(dst.src == "smb" && dst.smb is CloudFs)) delete(dst, to)?.let { return it }
+        // источник на съёмном томе под SAF, назначение в сети/облаке/архиве: сначала копия во временную папку, оттуда обычная отправка
+        if (src.src == "local" && dst.src == "smb" && SafAccess.needs(from)) {
+            if (!SafAccess.ensure(from)) return s(R.string.saf_not_granted)
+            val stage = File(File(app.cacheDir, "fmsaf"), System.nanoTime().toString(36)).apply { mkdirs() }
+            return try {
+                withContext(Dispatchers.IO) { SafAccess.copyTree(from, File(stage, name).path, false, noProgress) }
+                val r = copyMove(FmPane(-9, stage.path), dst, name, isDir, false, j, toName, false)
+                if (r == null && move) withContext(Dispatchers.IO) { SafAccess.delete(from) }
+                r
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { nice(e) } finally { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { stage.deleteRecursively() } }
+        }
         return try {
             when {
                 dst.src == "smb" && dst.smb is KeepFs -> if (src.src == "adb") unsupported() else toNet(src, dst, from, to, isDir, move, j)
                 src.src == "smb" -> if (dst.src != "local") unsupported() else withContext(Dispatchers.IO) {
-                    smbToLocal(src.smb!!, from, isDir, File(to), j)
+                    if (SafAccess.needs(to)) {
+                        // назначение на съёмном томе под SAF: скачивание во временную папку и перенос в дерево
+                        if (!SafAccess.ensure(to)) return@withContext s(R.string.saf_not_granted)
+                        val stage = File(File(app.cacheDir, "fmsaf"), System.nanoTime().toString(36)).apply { mkdirs() }
+                        try {
+                            smbToLocal(src.smb!!, from, isDir, File(stage, to.trimEnd('/').substringAfterLast('/')), j)
+                            SafAccess.copyTree(File(stage, to.trimEnd('/').substringAfterLast('/')).path, to, false, noProgress)
+                        } finally { stage.deleteRecursively() }
+                    } else smbToLocal(src.smb!!, from, isDir, File(to), j)
                     if (move) { if (src.smb is ArchiveFs) (src.smb as ArchiveFs).delete(listOf(from)) else delete(src, from)?.let { throw java.io.IOException(it) } }
                     null
                 }
@@ -215,20 +266,27 @@ object FmIo {
                 dst.src == "smb" -> (dst.smb as? ArchiveFs)?.let { a ->
                     if (src.src != "local") unsupported() else withContext(Dispatchers.IO) { a.addFiles(listOf(File(from) to to), j); if (move) File(from).deleteRecursively(); null }
                 } ?: unsupported()
+                src.src == "local" && dst.src == "local" && (SafAccess.needs(from) || SafAccess.needs(to)) -> {
+                    if (adbActive() && shellReadable(from) && shellReadable(to)) adbCopyMove(from, to, isDir, move)
+                    else if ((SafAccess.needs(from) && !SafAccess.ensure(from)) || (SafAccess.needs(to) && !SafAccess.ensure(to))) s(R.string.saf_not_granted)
+                    else withContext(Dispatchers.IO) { SafAccess.copyTree(from, to, move, j ?: noProgress); null }
+                }
                 src.src == "local" && dst.src == "local" -> withContext(Dispatchers.IO) { localCopyMove(File(from), File(to), move, j) }
                 remote && src.src != dst.src -> crossRemote(src, dst, from, to, isDir, move)
-                else -> {
-                    // на ADB: точный путь назначения (в том числе «имя (1)»), файл пишется во временный .fmpart и подменяется, чтобы не остаться с половиной
-                    val parent = to.substringBeforeLast('/', "").ifEmpty { "/" }
-                    val body = when {
-                        move -> "mv -f ${q(from)} ${q(to)}"
-                        isDir -> "cp -r ${q(from)} ${q(to)}"
-                        else -> "cp -f ${q(from)} ${q(to)}.fmpart && mv -f ${q(to)}.fmpart ${q(to)}"
-                    }
-                    failed(sh("mkdir -p ${q(parent)} && $body 2>&1", 20 * 60_000L))
-                }
+                else -> adbCopyMove(from, to, isDir, move)
             }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: LocalOps.Cancelled) { null } catch (e: Throwable) { nice(e) }
+    }
+
+    private suspend fun adbCopyMove(from: String, to: String, isDir: Boolean, move: Boolean): String? {
+        // на ADB: точный путь назначения (в том числе «имя (1)»), файл пишется во временный .fmpart и подменяется, чтобы не остаться с половиной
+        val parent = to.substringBeforeLast('/', "").ifEmpty { "/" }
+        val body = when {
+            move -> "mv -f ${q(from)} ${q(to)}"
+            isDir -> "cp -r ${q(from)} ${q(to)}"
+            else -> "cp -f ${q(from)} ${q(to)}.fmpart && mv -f ${q(to)}.fmpart ${q(to)}"
+        }
+        return failed(sh("mkdir -p ${q(parent)} && $body 2>&1", 20 * 60_000L))
     }
 
     /**

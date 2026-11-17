@@ -239,6 +239,8 @@ sealed class FmDlg {
     class Delete(val pane: FmPane, val names: List<String>, val plan: DelPlan? = null, val note: String? = null, val force: Boolean = false) : FmDlg()
     class FTrash(val confirm: String? = null) : FmDlg()
     class NeedAccess : FmDlg()
+    /** 10.2 (56): «Нужен доступ к карте памяти»: выдача доступа к съёмному тому через системное окно выбора папки. [done] получает итог. */
+    class SafNeed(val uuid: String, val label: String, val done: (Boolean) -> Unit) : FmDlg()
     class Mask : FmDlg()
     class Search : FmDlg()
     class SearchResult(val list: List<String>) : FmDlg()
@@ -412,6 +414,14 @@ object Fm {
             while (true) {
                 try { list = FmIo.list(p, path); break }
                 catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: SafAccess.NeedGrant) {
+                    // съёмный том без доступа: окно «Нужен доступ к карте памяти», после выбора список читается через дерево
+                    p.status = str(R.string.saf_waiting)
+                    val ok = SafAccess.ensure(path)
+                    p.status = null
+                    if (ok) continue
+                    err = str(R.string.saf_not_granted); break
+                }
                 catch (e: FmIo.NeedPriv) {
                     if (!FmIo.privEnabled) { err = str(R.string.fm_err_denied); break }
                     p.status = str(R.string.fm_connecting)
@@ -2899,6 +2909,7 @@ private fun FmDialogs() {
             confirmButton = { TextButton({ close(); Fm.askAccess(dctx) }) { Text(stringResource(R.string.acc_open)) } },
             dismissButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },
         )
+        is FmDlg.SafNeed -> SafNeedDialog(d, close)
         is FmDlg.Conflict -> ConflictDialog(d, close)
         is FmDlg.Sort -> SortDialog(d.pane, close)
         is FmDlg.OpenWith -> OpenWithDialog(d.pane, d.item, close)

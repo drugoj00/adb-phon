@@ -24,7 +24,7 @@ object SetGroups {
         HERO to UPD, "upd_auto" to UPD, "versions" to UPD, "ver_clear" to UPD, "backup" to UPD, "copies" to UPD,
         "theme" to UI, "lang" to UI, "font" to UI, "ui_size" to UI, "full" to UI, "colors" to UI, "bars" to UI, "marq" to UI, "tapguard" to UI,
         "dir_tap" to FILES, "folder_color" to FILES, "type_icons" to FILES, "thumbs" to FILES, "fm_sub" to FILES, "delete" to FILES, "open_files" to FILES,
-        "installer" to FILES, "wifi_auto" to FILES,
+        "installer" to FILES, "wifi_auto" to FILES, "saf" to FILES,
         "vp_hide" to PLAYER, "vp_keep" to PLAYER, "bg_music" to PLAYER, "vp_gest" to PLAYER, "vp_reset" to PLAYER,
         "helper" to ADB, "shizuku" to ADB, "perms" to ADB, "term" to ADB,
         "cmod" to CLOUD, "cmod_auto" to CLOUD,

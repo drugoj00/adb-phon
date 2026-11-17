@@ -136,7 +136,7 @@ class PaneTree(private val p: FmPane) : CTree {
     private val dirs = HashMap<String, Map<String, CNode>>()
 
     override suspend fun stat(path: String): CNode? = when {
-        p.src == "local" -> withContext(Dispatchers.IO) { FmIo.statLocal(path) }
+        p.src == "local" -> { if (SafAccess.needs(path) && !FmIo.adbActive()) SafAccess.ensure(path); withContext(Dispatchers.IO) { FmIo.statLocal(path) } }
         p.src == "smb" && p.smb is ArchiveFs -> (p.smb as ArchiveFs).let { a ->
             withContext(Dispatchers.IO) { a.nodeOf(path)?.let { n -> CNode(n.isDir, if (n.isDir) 0L else maxOf(n.entry?.size ?: 0L, 0L), n.mtime) } }
         }

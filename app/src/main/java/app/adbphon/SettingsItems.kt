@@ -300,6 +300,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "vp_gest" to listOf(R.string.set_vp_gest_vol, R.string.set_vp_gest_bri, R.string.set_vp_side, R.string.set_vp_gest_seek, R.string.set_vp_gest_fling, R.string.set_vp_sens, R.string.set_grp_player),
     "vp_reset" to listOf(R.string.set_vp_reset, R.string.set_grp_player),
     "wifi_auto" to listOf(R.string.set_wifi_auto),
+    "saf" to listOf(R.string.set_saf_title),
     "helper" to listOf(R.string.srv_auto, R.string.srv_off, R.string.srv_stop),
     "shizuku" to listOf(R.string.shz_title, R.string.shz_auto, R.string.shz_apps),
     "perms" to listOf(R.string.su_open),
@@ -416,6 +417,7 @@ fun SetItem(key: String, vm: MainViewModel) {
         "vp_gest" -> PlayerGesturesSetting()
         "vp_reset" -> PlayerResetSetting()
         "wifi_auto" -> FilesWifiAutoSetting()
+        "saf" -> SafAccessSetting()
 
         // ---- Связь и ADB
         "helper" -> {

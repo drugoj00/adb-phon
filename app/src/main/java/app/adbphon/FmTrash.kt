@@ -138,7 +138,7 @@ object FmTrash {
         if (!FmDel.trashOn) return Why.OFF
         val c = canon(f.path).path
         if (c.contains("/$DIR/") || c.endsWith("/$DIR")) return Why.INSIDE
-        if (volumeOf(c) == null) return Why.NOVOL
+        if (volumeOf(c) == null || SafAccess.needs(f.path)) return Why.NOVOL   // том под SAF: корзина не работает, удаление навсегда
         if (FmDel.maxMb > 0 && LocalOps.size(f) > FmDel.maxMb * 1_048_576L) return Why.BIG
         return Why.OK
     }
