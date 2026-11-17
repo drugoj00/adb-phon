@@ -404,6 +404,16 @@
     <string name="ver_file">From an APK file...</string>
     <string name="ver_install">Install</string>
     <string name="ver_installed">Installed: %1$s (%2$d)</string>
+    <string name="ver_nodown">The system will not downgrade without removing the data</string>
+    <string name="ver_nodown_self">The system will not downgrade without removing the data. ADB-phon never removes itself: save the settings with a backup and install the older version by hand</string>
+    <string name="ver_nosign">This version is signed differently from the installed one, nothing was removed</string>
+    <string name="ver_nocopy">Could not save a copy of the current version, nothing was removed</string>
+    <string name="ver_restored">Install failed (%1$s). The previous version was restored from the copy</string>
+    <string name="ver_restorefail">Install failed (%1$s) and the previous version could not be restored: install it from the copies list</string>
+    <string name="ver_wipe_warn">The app can be removed with its data kept, and the chosen version installed. The current version is copied first; if the install fails it is restored from the copy. On some Android versions the data may be lost.</string>
+    <string name="ver_wipe_btn">Remove keeping data and install</string>
+    <string name="ver_wipe_cancel">Cancel</string>
+    <string name="rb_blocked">The system will not downgrade without removing the data. ADB-phon does not remove itself: nothing was changed</string>
     <string name="ver_need_adb">Going to an older version needs ADB: connect it in Settings</string>
     <string name="ver_no_copies">No saved copies of this app yet</string>
     <string name="ver_not_apk">This is not a usable APK file</string>
