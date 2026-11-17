@@ -31,4 +31,22 @@
     <string name="fm_sub_none">Ничего</string>
     <string name="rt_counts_s">%1$d пап., %2$d файл.</string>
     <string name="upd_whatsnew">Что нового</string>
+    <string name="saf_not_granted">Доступ к карте памяти не выдан</string>
+    <string name="saf_waiting">Ждём выдачу доступа к карте памяти…</string>
+    <string name="saf_need_title">Нужен доступ к карте памяти %1$s</string>
+    <string name="saf_need_text">Система разрешает менять файлы на карте памяти только после того, как карта выбрана один раз. Доступ запоминается для этой карты.</string>
+    <string name="saf_how">Как выдать доступ</string>
+    <string name="saf_hint">В следующем окне выберите карту памяти и нажмите «Использовать эту папку»</string>
+    <string name="saf_pick">Выбрать</string>
+    <string name="saf_pick_again">Выбрать снова</string>
+    <string name="saf_err_not_root">Выбрана не вся карта %1$s (папка внутри неё или другой накопитель). Нужно выбрать саму карту: открыть её корень и нажать «Использовать эту папку».</string>
+    <string name="saf_err_fail">Система не сохранила доступ. Выбор можно повторить.</string>
+    <string name="saf_err_nopicker">На этом устройстве нет системного окна выбора папки.</string>
+    <string name="set_saf_title">Доступ к карте памяти</string>
+    <string name="set_saf_hint">Карты и накопители, к которым выдан доступ через систему. Он нужен, чтобы менять файлы на них без ADB и root.</string>
+    <string name="saf_none">Съёмных накопителей нет</string>
+    <string name="saf_state_on">Доступ выдан</string>
+    <string name="saf_state_off">Доступ не выдан</string>
+    <string name="saf_forget">Забыть доступ</string>
+    <string name="saf_grant">Выдать доступ</string>
 </resources>
