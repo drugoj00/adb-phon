@@ -106,8 +106,7 @@ object FmIo {
             val d = File(path)
             if (!d.exists()) error(s(R.string.fm_err_missing))
             val arr = d.listFiles() ?: throw NeedPriv()
-            val df = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-            arr.filter { it.name != FmTrash.DIR }.map { FmItem(it.name, it.isDirectory, if (it.isDirectory) 0L else it.length(), df.format(Date(it.lastModified()))) }
+            arr.filter { it.name != FmTrash.DIR }.map { FmItem(it.name, it.isDirectory, if (it.isDirectory) 0L else it.length(), FmSub.stamp(it)) }
         }
     }
 

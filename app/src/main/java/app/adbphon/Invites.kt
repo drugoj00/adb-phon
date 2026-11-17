@@ -395,6 +395,7 @@ object TsInstall {
                 val uri = androidx.core.content.FileProvider.getUriForFile(c, c.packageName + ".files", f)
                 withContext(Dispatchers.Main) {
                     c.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                        .also { i -> ApkInstall.systemPkg(c)?.let { i.setPackage(it) } }
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 }
                 for (i in 0 until 120) { if (installed(c)) break; delay(1000) }

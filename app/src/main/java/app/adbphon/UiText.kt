@@ -44,6 +44,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -64,7 +66,8 @@ import androidx.compose.ui.unit.sp
  * помещаются, и для лишних (сверх лимита). Сдвиг строки меняется только на этапе размещения (без перекомпозиции), шаг раз в ~66 мс.
  */
 object Marq {
-    const val MAX = 2
+    /** Сколько строк бежит одновременно: на ТВ две, на телефоне (названия бегут сами у видимых строк) четыре. */
+    val MAX: Int get() = if (tv) 2 else 4
     var mode by mutableStateOf(1)
     var tv = false
     var touching by mutableStateOf(false)
@@ -131,13 +134,20 @@ fun Text(
     var over by remember { mutableStateOf(false) }
     val rowActive = LocalRowActive.current
     val onlyActive = LocalMarqOnlyActive.current
-    val want = over && !Marq.touching && (rowActive || (Marq.effective == 0 && !onlyActive))
+    // 10.2: на телефоне (касание) длинные названия строк «Файлов» бегут сами, пока строка видна на экране и список не прокручивается
+    val autoTouch = !Marq.tv && onlyActive
+    var vis by remember { mutableStateOf(!autoTouch) }
+    val want = over && !Marq.touching && (rowActive || (Marq.effective == 0 && !onlyActive) || (autoTouch && vis))
     LaunchedEffect(want, rowActive) { if (want) Marq.request(id, rowActive) else Marq.release(id) }
+    val rootView = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(Unit) { onDispose { Marq.release(id) } }
     val on = want && id in Marq.running
     androidx.compose.material3.Text(
         text,
-        modifier.liteMarquee(on),
+        modifier.then(if (autoTouch && over) Modifier.onGloballyPositioned { c ->
+            val b = c.boundsInWindow(); val v = c.isAttached && b.bottom > 0f && b.top < rootView.rootView.height
+            if (v != vis) vis = v
+        } else Modifier).liteMarquee(on),
         color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight,
         if (on) TextOverflow.Clip else if (overflow == TextOverflow.Clip) TextOverflow.Ellipsis else overflow,
         if (on) false else softWrap, 1, 1,
@@ -178,8 +188,7 @@ object CollapseAll { var key by mutableStateOf(0); fun bump() { key++ } }
 /** Название настройки со стрелкой; по нажатию (или ОК пультом) раскрывается пояснение. Состояние только на время просмотра страницы. */
 @Composable
 fun Collapsible(title: String, modifier: Modifier = Modifier, bold: Boolean = false, titleContent: (@Composable () -> Unit)? = null, body: @Composable () -> Unit) {
-    val key = LocalCollapseKey.current + CollapseAll.key
-    var open by remember(key) { mutableStateOf(false) }
+    var open by rememberCollapseOpen(title)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth().clickable { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (titleContent != null) titleContent() else FloorText(title, Modifier.weight(1f), fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium)
@@ -214,8 +223,7 @@ fun HintTitle(
 /** Кнопка действия, у которой пояснение сворачивается стрелкой справа (правило: пояснение не лежит открытым текстом). */
 @Composable
 fun ActionWithHint(label: String, hint: String, onClick: () -> Unit) {
-    val key = LocalCollapseKey.current + CollapseAll.key
-    var open by remember(key) { mutableStateOf(false) }
+    var open by rememberCollapseOpen(label)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.OutlinedButton(onClick, Modifier.weight(1f)) { FloorText(label) }

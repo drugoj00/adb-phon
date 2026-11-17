@@ -168,8 +168,7 @@ fun setNeutralScheme(cs: androidx.compose.material3.ColorScheme): androidx.compo
 @Composable
 fun SetSwitchRow(checked: Boolean, onChange: (Boolean) -> Unit, title: String, hint: String = "", enabled: Boolean = true) {
     val cs = MaterialTheme.colorScheme
-    val key = LocalCollapseKey.current + CollapseAll.key
-    var open by remember(key) { mutableStateOf(false) }
+    var open by rememberCollapseOpen(title)
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
     val shape = RoundedCornerShape(12.dp)
@@ -291,6 +290,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "folder_color" to listOf(R.string.set_folder_color),
     "type_icons" to listOf(R.string.ic_types),
     "thumbs" to listOf(R.string.set_thumbs),
+    "fm_sub" to listOf(R.string.set_fm_sub),
     "delete" to listOf(R.string.ds_confirm, R.string.ft_switch, R.string.ft_keep, R.string.ft_max),
     "open_files" to listOf(R.string.set_open_files),
     "installer" to listOf(R.string.inst_u_default),
@@ -406,6 +406,7 @@ fun SetItem(key: String, vm: MainViewModel) {
         "folder_color" -> FilesFolderColorSetting()
         "type_icons" -> FilesTypeIconsSetting()
         "thumbs" -> FilesThumbsSetting()
+        "fm_sub" -> FilesSubLineSetting()
         "delete" -> FilesDeleteSection()
         "open_files" -> FilesOpenAsSetting()
         "installer" -> InstallerDefaultSetting()

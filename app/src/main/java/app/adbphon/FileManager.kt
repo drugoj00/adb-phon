@@ -1875,7 +1875,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                 FmTabs()
                 // 10.0 (fm1, владелица): в портрете колонка кнопок у края активной панели: правая панель — справа, левая — слева (на приставке как было, слева);
                 // у края справа отступ от системного жеста «назад»
-                val stripRight = !Marq.tv && Fm.active == 1
+                val stripRight = !Marq.tv && Fm.active == 0   // 10.2 (слово владелицы): зеркально, активно левое окно: колонка справа, активно правое: слева
                 Row(Modifier.weight(1f).fillMaxWidth().padding(end = if (stripRight) FmMetrics.STRIP_END else 0.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!stripRight) FmStrip(actions, Modifier.width(FmMetrics.STRIP_W).fillMaxHeight())
                     FmPaneView(Fm.cur, Modifier.weight(1f).fillMaxHeight(), swipe = true)
@@ -2089,10 +2089,10 @@ private fun FmTabs() {
 @Composable
 fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
            lineHeight: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified, fontWeight: FontWeight? = null,
-           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false) {
+           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false, names: Boolean = false) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (active || LocalRowActive.current), LocalMarqOnlyActive provides true) {
         // wrap: перенос на несколько строк строками списков больше не используется (7.5: при «Вкл» одна строка и бегущая строка, при «Выкл» одна строка с многоточием)
-        Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else 1, overflow = TextOverflow.Ellipsis)
+        Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else if (names && !Marq.tv && Marq.effective == 2) 2 else 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -2743,8 +2743,20 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                     Modifier, customKey = "f:" + key)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
-                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont)
-                val sub = listOfNotNull(if (!f.isDir && Fm.showSize) fmSize(f.size) else null, f.date.takeIf { it.isNotBlank() }?.let { fmDate(it) }).joinToString("  ·  ")
+                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont, names = true)
+                val narrowSub = !tvRow && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420
+                val sctx = androidx.compose.ui.platform.LocalContext.current
+                // 10.2: у папки «N папок, N файлов»: дата сразу, цифры в фоне (FolderCounts), для архивов только дата
+                val cKey = if (f.isDir && FmSub.mode != FmSub.NONE && p.net?.kind != "cloud" && !(p.src == "smb" && p.smb is ArchiveFs)) "P|" + p.src + "|" + (p.net?.let { it.kind + "|" + it.host + "|" + it.user } ?: "") + "|" + full + "|" + f.date else null
+                var cntNow = cKey?.let { FolderCounts.peek(it) }
+                if (cKey != null && cntNow == null) { @Suppress("UNUSED_VARIABLE") val tick = FolderCounts.ver; cntNow = FolderCounts.peek(cKey) }
+                if (cKey != null) LaunchedEffect(cKey, cntNow == null) {
+                    if (!FolderCounts.has(cKey)) FolderCounts.load(sctx, cKey, if (p.src == "local") FolderCounts.LOCAL else FolderCounts.clsOf(p.net ?: NetConn("smb", "", 0, "", "")), false) {
+                        val l = FmIo.list(p, full); l.count { it.isDir && it.name != FmTrash.DIR } to l.count { !it.isDir }
+                    }
+                }
+                val cntTxt = cntNow?.let { stringResource(if (narrowSub) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second) }
+                val sub = (if (f.isDir) FmSub.fileLine(sctx, f.date, cntTxt, narrowSub) else FmSub.fileLine(sctx, f.date, if (Fm.showSize) fmSize(f.size) else null, narrowSub)) ?: ""
                 if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
             // 10.0 (fm1): квадратик крупнее (26 dp, приставка 32), нажимается вся правая часть строки (SelZone)

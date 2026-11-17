@@ -82,9 +82,11 @@ fun SettingsGrouped(vm: MainViewModel) {
 @Composable
 private fun SettingsGroupedBody(vm: MainViewModel) {
     val ctx = LocalContext.current
-    var query by rememberSaveable { mutableStateOf("") }
-    // выбранная группа (две половины) и раскрытая (одна колонка; пусто: все свёрнуты)
-    var group by rememberSaveable { mutableStateOf(SetGroups.UPD) }
+    // 10.2 (правило 25): запрос, выбранная группа (две половины) и раскрытая (одна колонка; пусто: все свёрнуты) живут в SettingsMemory:
+    // они переживают смену нижних вкладок и пересоздание окна; сбрасываются только новым запуском программы
+    var query by SettingsMemory::query
+    var group by SettingsMemory::group
+    val restore = remember { booleanArrayOf(true) }   // при возврате фокус пульта возвращается туда, где он был (один раз)
     var hl by remember { mutableStateOf<String?>(null) }                  // подсвеченный пункт после поиска или большой кнопки
     var hlTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(hl, hlTick) { if (hl != null) { delay(4000); hl = null } }
@@ -95,17 +97,27 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
     val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     CompositionLocalProvider(LocalSetJump provides jump) {
         if (Marq.tv || landscape) {   // слово владелицы 16.11.2026: ландшафт телефона тоже две половины
-            val sel = group.ifEmpty { SetGroups.UPD }
+            val sel = group.ifEmpty { SetGroups.ORDER.first() }
             val frs = remember { SetGroups.ORDER.associateWith { FocusRequester() } }
             var inContent by remember { mutableStateOf(false) }
             BackHandler(enabled = inContent) { runCatching { frs[sel]?.requestFocus() } }
             BackHandler(enabled = !inContent && query.isNotEmpty()) { query = "" }
+            // «Назад» из раскрытого пояснения сначала сворачивает его (а не уходит из настроек)
+            val lastOpen = CollapseMemory.lastOpen("settings.$sel|")
+            BackHandler(enabled = lastOpen != null) { lastOpen?.let { CollapseMemory.put(it, false) } }
+            // возврат на вкладку «Опции»: фокус пульта снова на меню групп или на пункте, где он был
+            if (Marq.tv) LaunchedEffect(Unit) {
+                if (!restore[0]) return@LaunchedEffect
+                restore[0] = false
+                delay(350)
+                if (SettingsMemory.zone == 0) runCatching { frs[sel]?.requestFocus() }
+            }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val cap = maxWidth * 0.45f
                 Row(Modifier.fillMaxSize()) {
                     SetGroupsPane(sel, frs, cap) { group = it }
                     VerticalDivider()
-                    Column(Modifier.weight(1f).fillMaxHeight().onFocusChanged { inContent = it.hasFocus }) {
+                    Column(Modifier.weight(1f).fillMaxHeight().onFocusChanged { inContent = it.hasFocus; if (it.hasFocus) SettingsMemory.zone = 1 }) {
                         SetSearchField(query, Modifier.align(Alignment.CenterHorizontally).widthIn(max = SET_MAX_W + 24.dp).fillMaxWidth()
                             .padding(start = 12.dp, end = 12.dp + 10.dp, top = 8.dp)) { query = it }
                         if (query.isNotBlank()) {
@@ -118,6 +130,8 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
             }
         } else {
             BackHandler(enabled = query.isNotEmpty()) { query = "" }
+            val lastOpenP = CollapseMemory.lastOpen("settings.$group|")
+            BackHandler(enabled = lastOpenP != null && query.isBlank()) { lastOpenP?.let { CollapseMemory.put(it, false) } }
             val bring = remember { SetGroups.ORDER.associateWith { BringIntoViewRequester() } }
             val firstRun = remember { booleanArrayOf(true) }   // при входе не сбивать запомненную прокрутку
             LaunchedEffect(group) {
@@ -151,15 +165,21 @@ private fun ColumnScope.SetCentered(gap: Dp = 12.dp, content: @Composable Column
 /** Пункты группы по порядку; найденный пункт подсвечен рамкой и прокручен в поле зрения (на ТВ и в ландшафте ещё и получает фокус). */
 @Composable
 private fun ColumnScope.SetGroupBody(g: String, vm: MainViewModel, hl: String?, hlTick: Int, focusOnHl: Boolean) {
-    SetGroups.itemsOf(g).forEach { k ->
-        key(k) { SetItemFrame(hl == k, hlTick, focusOnHl) { SetItem(k, vm) } }
+    CompositionLocalProvider(LocalCollapseScope provides "settings.$g") {
+        SetGroups.itemsOf(g).forEach { k ->
+            key(k) { SetItemFrame(hl == k, hlTick, focusOnHl, g, k) { SetItem(k, vm) } }
+        }
     }
 }
 
 @Composable
-private fun SetItemFrame(on: Boolean, tick: Int, focusOnHl: Boolean, content: @Composable ColumnScope.() -> Unit) {
+private fun SetItemFrame(on: Boolean, tick: Int, focusOnHl: Boolean, g: String, k: String, content: @Composable ColumnScope.() -> Unit) {
     val bring = remember { BringIntoViewRequester() }
     val fr = remember { FocusRequester() }
+    // возврат на вкладку: пункт, где был фокус пульта, получает его снова (один раз)
+    LaunchedEffect(Unit) {
+        if (focusOnHl && Marq.tv && SettingsMemory.zone == 1 && SettingsMemory.focusItem[g] == k) { delay(400); runCatching { fr.requestFocus() } }
+    }
     LaunchedEffect(on, tick) {
         if (on) {
             delay(250); runCatching { bring.bringIntoView() }
@@ -170,6 +190,7 @@ private fun SetItemFrame(on: Boolean, tick: Int, focusOnHl: Boolean, content: @C
     val shape = RoundedCornerShape(10.dp)
     Column(
         Modifier.fillMaxWidth().bringIntoViewRequester(bring).focusRequester(fr)
+            .onFocusChanged { if (it.hasFocus) { SettingsMemory.focusItem[g] = k; SettingsMemory.zone = 1 } }
             .then(if (on) Modifier.background(cs.primary.copy(alpha = .08f), shape).border(2.dp, cs.primary, shape) else Modifier),
         verticalArrangement = Arrangement.spacedBy(8.dp), content = content,
     )
@@ -233,7 +254,7 @@ private fun SetMenuRow(g: String, title: String, selected: Boolean, modifier: Mo
     val shape = RoundedCornerShape(10.dp)
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
-    LaunchedEffect(focused) { if (focused) onFocus() }
+    LaunchedEffect(focused) { if (focused) { SettingsMemory.zone = 0; onFocus() } }
     val bg = when {
         selected -> cs.primary.copy(alpha = .22f)
         focused -> cs.primary.copy(alpha = .14f)

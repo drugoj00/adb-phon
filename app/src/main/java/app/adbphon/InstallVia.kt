@@ -75,7 +75,7 @@ object ViaAsk {
         val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         val c = o.component
-        if (c != null) i.setClassName(c.substringBefore('/'), c.substringAfter('/')) else if (o.pkg != null) i.setPackage(o.pkg)
+        if (c != null) i.setClassName(c.substringBefore('/'), c.substringAfter('/')) else if (o.pkg != null) i.setPackage(o.pkg) else ApkInstall.systemPkg(ctx)?.let { i.setPackage(it) }
         ctx.startActivity(i)
         true
     }.getOrDefault(false)

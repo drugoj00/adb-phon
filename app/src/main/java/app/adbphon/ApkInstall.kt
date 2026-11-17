@@ -130,6 +130,7 @@ object ApkInstall {
             val i = Intent(act).setDataAndType(android.net.Uri.parse("content://x/installer.$ext"), m)
             for (r in pm.queryIntentActivities(i, PackageManager.MATCH_ALL)) {
                 val ai = r.activityInfo ?: continue
+                if (ai.packageName == ctx.packageName) continue   // 10.2: ADB-phon как установщик (ApkIntakeActivity) в этом списке не повторяется
                 val k = ai.packageName + "/" + ai.name
                 // «настоящий» обработчик: фильтр называет конкретный тип (image/*, text/plain), а не «любые файлы» (*/*): такие (Кошелёк, Google ViewerLauncher) открывают не этот тип
                 val f = r.filter

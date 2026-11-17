@@ -77,6 +77,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -279,7 +281,7 @@ object FmRootCfg {
     @Volatile var lastVisKey: String? = null
 
     /** Дерево папок на «домике»: дочерние папки узла (по идентификатору узла), ошибки и кэш подключений. Загружаются лениво при раскрытии. */
-    class TK(val name: String, val id: String, val path: String, val isDir: Boolean = true, val size: Long = 0L, val date: String = "", val count: Int = -1)
+    class TK(val name: String, val id: String, val path: String, val isDir: Boolean = true, val size: Long = 0L, val date: String = "", val count: Int = -1, val dirs: Int = -1, val files: Int = -1)
 
     /** Отмеченная строка дерева «домика»: ключ = id узла (путь целиком), источник (net = null: память телефона), папка-родитель, для «Корзины» ещё элемент корзины. */
     class SelE(val key: String, val net: NetConn?, val parentId: String, val parentPath: String, val name: String, val path: String, val isDir: Boolean, val ti: CloudTrash.TItem?, val fi: FmTrash.FItem? = null)
@@ -438,7 +440,7 @@ object FmRootCfg {
                     val all = File(path).listFiles().orEmpty().filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
                     appCount[id] = all.size
                     val df = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                    all.take(KEEP).map { val dt = df.format(java.util.Date(it.lastModified())); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt, it.list()?.size ?: -1) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
+                    all.take(KEEP).map { val dt = FmSub.stamp(it); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
                 }
             } else {
                 val a = id.split('|', limit = 5)
@@ -548,6 +550,7 @@ private class RR(
     val treeId: String? = null, val busy: Boolean = false, val appName: String? = null, val err: Boolean = false, val file: FmItem? = null, val side: String? = null,
     val pc: PcHost? = null, val adev: AdbDev? = null, val tnet: NetConn? = null, val titem: CloudTrash.TItem? = null, val subText: String? = null, val drive: Boolean = false, val selE: FmRootCfg.SelE? = null,
     val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null, val wifi: Boolean = false, val tog: Boolean? = null, val lpath: String? = null, val gname: String? = null,
+    val dateRaw: String? = null, val cntKey: String? = null, val cntCls: FolderCounts.Cls? = null, val cntLoader: (suspend () -> Pair<Int, Int>?)? = null,
 ) {
     /** Ветви дерева: для уровней 1..level true, если ниже есть ещё элемент того же уровня; lx: позиция вертикали уровня (dp). */
     var more: BooleanArray = BooleanArray(0)
@@ -657,7 +660,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             if (k.id.startsWith("Te|")) { rows += RR("t:" + k.id, k.name, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level); return@forEach }
             if (!k.isDir) {
                 val item = FmItem(k.name, false, k.size, "")
-                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null, act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
+                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null, act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
             } else if (k.id.startsWith("Aitem|")) {
                 val key = k.id.split('|')[1]
                 rows += RR("t:" + k.id, k.name, Icons.Filled.Android, Color(0xFF9CCC65), level = level, appName = k.name, act = { Fm.openApps(p, key) })
@@ -668,6 +671,9 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 addKids(k.id, level + 1, c)
             } else {
                 rows += RR("t:" + k.id, k.name, Icons.Filled.Folder, Color(0xFFFFB74D), level = level, treeId = k.id, selE = selOf(k, id, c),
+                    dateRaw = k.date.takeIf { it.isNotBlank() },
+                    cntKey = if (c?.kind == "cloud") null else (if (c == null) "L" else c.kind + "|" + c.host + "|" + c.user) + "|" + k.path + "|" + k.date, cntCls = FolderCounts.clsOf(c),   // облака: у папок только дата, цифры не считаются
+                    cntLoader = if (c == null) ({ FolderCounts.localCount(File(k.path)) }) else ({ FolderCounts.netCount(c, k.path) }),
                     act = { if (c == null) fmOpenLocal(p, k.path) else { fmLeaveRoot(p); Fm.connectNet(p, c, k.path) } })
                 pend(k.id)
                 addKids(k.id, level + 1, c)
@@ -1304,6 +1310,14 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     val rowActive = selected || focused || hoveredRow || pressedRow
     val expanded = r.expandKey != null && r.expandKey in p.rootOpen
     val cnt = r.path?.let { FmRootCfg.counts[it] }
+    // 10.2: «N папок, N файлов» у папки: дата сразу, цифры подгружаются фоном после показа списка (FolderCounts)
+    val cKey = r.cntKey?.takeIf { FmSub.mode != FmSub.NONE }
+    var cntNow = cKey?.let { FolderCounts.peek(it) }
+    if (cKey != null && cntNow == null) { @Suppress("UNUSED_VARIABLE") val tick = FolderCounts.ver; cntNow = FolderCounts.peek(cKey) }
+    var cVis by remember(cKey) { mutableStateOf(false) }
+    val cView = androidx.compose.ui.platform.LocalView.current
+    val cLoader = r.cntLoader
+    if (cKey != null && cLoader != null) LaunchedEffect(cKey, cVis, cntNow == null) { if (!FolderCounts.has(cKey)) FolderCounts.load(ctx, cKey, r.cntCls ?: FolderCounts.NET, cVis, cLoader) }
     val bigFont = if (tv) 1.15f else 1f
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .22f)
     val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id) } else { rootAccordion(p, id); p.rootOpen.add(id); FmRootCfg.refresh(p, id, NetStore.list(ctx)) } }
@@ -1359,6 +1373,10 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 onClick = rowClickR,
                 onLongClick = rowLongR)
             .mouseLeftClicks(rowClickR, rowLongR)   // 10.0 (mouse): мышь: клик, «подержал и отпустил» = меню, «подержал и повёл» = прокрутка
+            .then(if (cKey != null && cntNow == null) Modifier.onGloballyPositioned { c ->
+                val b = c.boundsInWindow(); val v = c.isAttached && b.bottom > 0f && b.top < cView.rootView.height
+                if (v != cVis) cVis = v
+            } else Modifier)
             .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
@@ -1371,21 +1389,26 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
-                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont)
+                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont, names = true)
                     r.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } }?.let { NetDot(it) } }
                 }
                 // у томов первым свободное место (то, что нужно видеть), затем файловая система, счётчики папок и файлов в конце
                 val svc = r.net?.takeIf { !r.drive && r.tnet == null }?.let { CloudIcons.serviceCaption(ctx, it) }
                 val offlinePending = r.treeId != null && (r.net != null || r.tnet != null) && r.treeId in p.rootPending && r.treeId !in p.rootOpen && !remember { FmRootCfg.hasNetwork(ctx) }
+                // 10.2: вторая строка как в X-plore: «дата и время · размер» у файла, «дата и время · N папок, N файлов» у папки
+                val narrowRow = !tv && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420
+                val subDate = r.dateRaw?.takeIf { FmSub.mode != FmSub.NONE }?.let { FmSub.date(ctx, it, narrowRow) }
+                val subCounts = cntNow?.let { stringResource(if (narrowRow) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second) }
                 val sub = listOfNotNull(
                     svc, if (offlinePending) stringResource(R.string.rt_parked) else null,
                     if (r.total > 0) stringResource(R.string.rt_free, fmGb(r.free), fmGb(r.total)) else null,
                     r.fs.takeIf { it.isNotBlank() }, if (r.ro) stringResource(R.string.rt_ro) else null, if (r.warn) stringResource(R.string.fm_vol_unsupported_short) else null,
-                    r.file?.let { fmSize(it.size) }, r.subText?.takeIf { it.isNotEmpty() }, r.path?.takeIf { r.net == null && r.file == null && r.treeId == null },
+                    subDate, subCounts,
+                    r.file?.takeIf { FmSub.mode != FmSub.NONE }?.let { fmSize(it.size) }, r.subText?.takeIf { it.isNotEmpty() }, r.path?.takeIf { r.net == null && r.file == null && r.treeId == null },
                     cnt?.let { stringResource(R.string.rt_counts, it.first, it.second) },
                     if (r.level > 0) r.side?.takeIf { it.isNotBlank() } else null,   // 10.11.2026: число и размер корзины облака во вложенной строке идут второй строкой (справа они выдавливали название в столбик из букв)
-                ).joinToString("  ·  ")
-                if (sub.isNotEmpty()) MqText(sub, active = rowActive, modifier = Modifier.fillMaxWidth(), fontSize = (11 * bigFont).sp, lineHeight = (13 * bigFont).sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                ).joinToString(if (narrowRow) " · " else "  ·  ")
+                if (sub.isNotEmpty()) MqText(sub, active = rowActive, modifier = Modifier.fillMaxWidth(), fontSize = ((if (narrowRow && r.dateRaw != null) 10 else 11) * bigFont).sp, lineHeight = (13 * bigFont).sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
                 if (r.total > 0) FmSpaceBar(1f - r.free.toFloat() / r.total, Modifier.fillMaxWidth().padding(top = 1.dp))
             }
             if (r.ro) Icon(Icons.Filled.Lock, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)

@@ -2,6 +2,7 @@
 
 package app.adbphon
 
+import kotlinx.coroutines.delay
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -153,10 +154,10 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onResume() { super.onResume(); CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
+    override fun onResume() { super.onResume(); FolderCounts.active = true; CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
     override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this) }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -171,6 +172,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SettingsMemory.initOnce(this)
+        FmSub.init(applicationContext)
+        ApkIntake.cleanup(applicationContext, 15 * 60_000L)
         TapGuard.init(applicationContext)
         PadKeeper.start(this)
         AutoPairService.ensureEnabled(this)
@@ -313,7 +317,17 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             // если процесс был убит посреди игры, а настройки ориентации остались изменёнными: тихо вернуть прежние значения, как только появится подключение
             LaunchedEffect(vm.connected) { if (vm.connected) OrientAssist.restoreIfPending(baseCtx) }
             var showSettings by remember { mutableStateOf(false) }
-            BkNav.goFiles = { showSettings = false; tab = 2 }   // 10.0: «Открыть папку» в итоге резервной копии ведёт во вкладку «Файлы»
+            BkNav.goFiles = { showSettings = false; tab = 2 }
+            // 10.2: файл от системного выбора «чем установить APK» (ApkIntakeActivity): вкладка «Файлы» и окно «Установка» с версиями
+            LaunchedEffect(Unit) {
+                androidx.compose.runtime.snapshotFlow { ApkIntake.pending }.collect { p ->
+                    if (p == null) return@collect
+                    ApkIntake.pending = null
+                    showSettings = false; tab = 2
+                    delay(600)
+                    ApkIntake.show(baseCtx, p)
+                }
+            }   // 10.0: «Открыть папку» в итоге резервной копии ведёт во вкладку «Файлы»
             // первый запуск: окна по порядку с включением нужных разрешений и спецвозможностей
             LaunchedEffect(Unit) {
                 val on = Build.VERSION.SDK_INT >= 30 && AutoPairService.isEnabled(baseCtx)

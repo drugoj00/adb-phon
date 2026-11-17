@@ -142,6 +142,8 @@ class NetTestActivity : Activity() {
                             NetStore.update(ctx, nw, old); val b = NetStore.list(ctx).filter { it.host.startsWith("192.168.1.1") }.joinToString(";") { it.host + "|" + it.name + "|" + it.path }
                             "после правки: $a ; после возврата: $b" }
                         // 10.1 потоковая отдача: sinfo, sidle МС, sstop, sget ИМЯ|Range|МЕТОД|ЛИМИТ|плохое (badtoken/root/deep/post), sopen ИМЯ|ПАКЕТ (путь как у «Открыть с помощью» в панели)
+                        // 10.2: установка файла только сессией PackageInstaller (ветка «нет ни ADB, ни root»): sessinst ПУТЬ
+                        "sessinst" -> { val r = SessionInstall.install(applicationContext, listOf(File(parts[1]))); "ok=${r.ok} cancelled=${r.cancelled} code=${r.code} ${r.message}" }
                         "sinfo" -> StreamServer.status() + " recent=" + StreamServer.recent.takeLast(parts.getOrNull(1)?.toIntOrNull() ?: 0).joinToString(" | ")
                         "sidle" -> { StreamServer.idleMs = parts[1].toLong(); "idleMs=" + StreamServer.idleMs }
                         "sstop" -> { StreamServer.stop(); StreamServer.status() }
