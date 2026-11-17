@@ -22,4 +22,12 @@
     <string name="set_vp_reset_btn">Скинути</string>
     <string name="set_vp_keep">Запам’ятовувати розмір кадру</string>
     <string name="set_vp_keep_hint">Увімкнено: режим, вибраний кнопкою «Під екран», запам’ятовується й застосовується до наступних відео та запусків. Вимкнено: кожне відео відкривається «за розміром», а кнопка діє лише на час цього відео.</string>
+    <string name="intake_label">ADB-phon: встановлення</string>
+    <string name="intake_fail">Не вдалося прочитати файл для встановлення</string>
+    <string name="set_fm_sub">Другий рядок у списку</string>
+    <string name="set_fm_sub_hint">Що показує дрібний другий рядок файлу й теки: дату й час (зміни або створення) з розміром або кількістю тек і файлів. «Нічого» ховає другий рядок.</string>
+    <string name="fm_sub_mod">Змінено</string>
+    <string name="fm_sub_cre">Створено</string>
+    <string name="fm_sub_none">Нічого</string>
+    <string name="rt_counts_s">%1$d тек, %2$d файл.</string>
 </resources>
