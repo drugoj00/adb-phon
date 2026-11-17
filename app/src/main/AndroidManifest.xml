@@ -77,6 +77,38 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <!-- 10.0: возврат со страницы «Готово» после входа в облако (intent://open#Intent;scheme=adbphon;package=app.adbphon;end): промежуточное окно без вида поднимает программу в её собственной задаче, а не поверх задачи браузера -->
+        <!-- 10.2: ADB-phon в системном выборе установщика APK (VIEW и INSTALL_PACKAGE, content и file; пакеты из частей по типу и по расширению) -->
+        <activity android:name=".ApkIntakeActivity" android:exported="true" android:label="@string/intake_label" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true">
+            <intent-filter android:label="@string/intake_label">
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.INSTALL_PACKAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.android.package-archive" />
+            </intent-filter>
+            <intent-filter android:label="@string/intake_label">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.apkm" />
+                <data android:mimeType="application/x-apks" />
+                <data android:mimeType="application/xapk-package-archive" />
+            </intent-filter>
+            <intent-filter android:label="@string/intake_label">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.apk" />
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\.apkm" />
+            </intent-filter>
+        </activity>
         <activity android:name=".ReturnActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
