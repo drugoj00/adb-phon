@@ -782,10 +782,6 @@
     <string name="fm_net_body">Тип: %1$s\nАдрес: %2$s\nПользователь: %3$s</string>
     <string name="fm_net_lost">Не удалось снова открыть %1$s: показана память телефона.</string>
     <string name="set_collapse_all">Свернуть все</string>
-    <string name="set_marq">Прокрутка длинных названий</string>
-    <string name="marq_on">Вкл</string>
-    <string name="marq_focus">Только в фокусе</string>
-    <string name="marq_off">Выкл</string>
     <string name="bk2_title">Резервная копия</string>
     <string name="bk2_hint">Полная копия одной кнопкой: настройки, списки устройств, подключения LAN, облачные диски с входом, пароли и ключ ADB. После восстановления диски сразу на месте и открываются. В файле открытые пароли: храни его в надёжном месте.</string>
     <string name="bk2_default_folder">Загрузки</string>
