@@ -69,7 +69,7 @@ object ViaAsk {
 
     /** То же для набора файлов: сессия ставит все части одной программы, сторонний установщик получает первый файл. */
     fun launch(ctx: Context, files: List<File>, o: InstOpt): Boolean = runCatching {
-        if (o.id == InstallerChoice.SESSION) { Fm.installFilesViaSession(files); return@runCatching true }
+        if (o.id == InstallerChoice.SESSION) { InstallGate.sessionWithInfo(ctx, files); return@runCatching true }
         val file = files.first()
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
         val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
@@ -85,7 +85,7 @@ object ViaAsk {
         val o = ask(ctx, files.size, parts = true) ?: return ctx.getString(R.string.via_cancelled)
         if (o.id == InstallerChoice.QUIET) return ours()
         if (files.isEmpty()) return ctx.getString(R.string.fm_no_app)
-        if (o.id == InstallerChoice.SESSION) { Fm.installFilesViaSession(files); return ctx.getString(R.string.inst_installing) }
+        if (o.id == InstallerChoice.SESSION) { InstallGate.sessionWithInfo(ctx, files); return ctx.getString(R.string.inst_installing) }
         return ctx.getString(if (launch(ctx, files, o)) R.string.via_started else R.string.fm_no_app)
     }
 }

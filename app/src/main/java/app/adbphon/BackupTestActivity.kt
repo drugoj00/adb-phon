@@ -82,7 +82,7 @@ class BackupTestActivity : Activity() {
                     }
                     "fakeupd" -> {
                         val v = intent.getStringExtra("v").orEmpty()
-                        getSharedPreferences("adbphon", MODE_PRIVATE).edit().apply { if (v.isEmpty()) remove("test_fake_release") else putString("test_fake_release", v); if (intent.getStringExtra("k") != "1") remove("upd_dismissed"); remove("upd_last") }.commit()
+                        getSharedPreferences("adbphon", MODE_PRIVATE).edit().apply { if (v.isEmpty()) remove("test_fake_release") else putString("test_fake_release", v); putString("test_fake_body", intent.getStringExtra("b").orEmpty().replace("||", "\n")); if (intent.getStringExtra("k") != "1") remove("upd_dismissed"); remove("upd_last") }.commit()
                         log("fakeupd " + v)
                     }
                     "termline" -> {

@@ -1392,9 +1392,18 @@ object Fm {
     fun openArchiveFor(p: FmPane, it: FmItem) { openArchive(p, it.name) }
 
     /** Установка пакета из нескольких частей (APKS, APKM, XAPK, ZIP с APK и OBB) через ADB/root: части и OBB подбираются под устройство. */
-    fun installBundleViaAdb(p: FmPane, it: FmItem, quiet: Boolean = true): kotlinx.coroutines.Job = scope.launch {
+    fun installBundleViaAdb(p: FmPane, it: FmItem, quiet: Boolean = true, confirmed: Boolean = false): kotlinx.coroutines.Job = scope.launch {
         val silent = quiet && Adb.isConnected && !FmIo.remote
-        if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it, quiet) }) return@launch
+        if (!silent && !confirmed) {
+            // 10.2: без ADB и root то же окно «Установка» со сведениями о версиях, затем сессия с подтверждением системы
+            val srcC = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+            val listC = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(srcC)) }.getOrDefault(emptyList()) }
+            if (listC.isEmpty()) { dlg = FmDlg.InstallFail(str(R.string.inst_failed)); return@launch }
+            val metasC = withContext(Dispatchers.IO) { listC.associate { a -> a.name to runCatching { ApkInfo.readFor(sctx, a) }.getOrNull() } }
+            dlg = FmDlg.InstallConfirm(listC, metasC) { _ -> installBundleViaAdb(p, it, quiet, confirmed = true) }
+            return@launch
+        }
+        if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it, quiet, confirmed = true) }) return@launch
         if (silent) {
             // тихая установка по ADB/root: сначала подтверждение с версиями, потом окно с полоской хода (части и OBB, «n из N»), итог внутри окна
             val srcF = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }

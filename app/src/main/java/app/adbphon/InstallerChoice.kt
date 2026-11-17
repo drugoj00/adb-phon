@@ -64,6 +64,8 @@ object InstallerChoice {
         val s = normalize(saved)
         val i = indexOfSaved(opts, s)
         if (!force && s != null && i >= 0 && opts[i].available) return Decision.Auto(opts[i].id)
+        // 10.2: запомнено тихое «ADB-phon», а ADB и root сейчас нет: ставим тем же ADB-phon с подтверждением системы (окно с версиями, затем системный установщик)
+        if (!force && s == QUIET && i >= 0 && !opts[i].available && opts.any { it.id == SESSION && it.available }) return Decision.Auto(SESSION)
         return Decision.Show(focusIndex(opts, s), s != null && (i < 0 || !opts[i].available))
     }
 

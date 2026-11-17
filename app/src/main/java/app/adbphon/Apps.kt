@@ -236,14 +236,14 @@ object AppActions {
         val files = c.files
         if (files.isEmpty()) return Fm.str(R.string.ap_copy_gone)
         val via = ViaAsk.ask(ctx(), files.size, parts = true) ?: return Fm.str(R.string.via_cancelled)
-        if (via.id == "session") { Fm.installFilesViaSession(files); return Fm.str(R.string.inst_installing) }
+        if (via.id == "session") { InstallGate.sessionWithInfo(ctx(), files); return Fm.str(R.string.inst_installing) }
         if (via.id != "adb") return Fm.str(if (ViaAsk.launchExternal(ctx(), files.first(), via)) R.string.via_started else R.string.fm_no_app)
         if (Adb.isConnected) {
             val r = AppBackups.installFiles(ctx(), c.pkg, files, c.code)
             refresh()
             return if (r == "ok" || r == "system") Fm.str(R.string.ap_done) else Fm.str(R.string.ap_install_fail, r.removePrefix("fail:"))
         }
-        Fm.installFilesViaSession(files)
+        InstallGate.sessionWithInfo(ctx(), files)
         return Fm.str(R.string.inst_installing)
     }
 

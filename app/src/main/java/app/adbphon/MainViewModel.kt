@@ -703,7 +703,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (manual) message = t(R.string.upd_checking)
             // тестовый ход (BackupTestActivity cmd fakeupd): подмена найденного выпуска, в обычной работе не используется
             val fake = prefs.getString("test_fake_release", null)?.takeIf { it.isNotBlank() }
-            val res = runCatching { withContext(Dispatchers.IO) { if (fake != null) listOf(Updater.Release(fake, "ADB-phon $fake", "2026-11-10", "http://127.0.0.1:8099/ADB-phon-fake.apk", 1000L)) else Updater.fetch() } }
+            val res = runCatching { withContext(Dispatchers.IO) { if (fake != null) listOf(Updater.Release(fake, "ADB-phon $fake", "2026-11-10", "http://127.0.0.1:8099/ADB-phon-fake.apk", 1000L, prefs.getString("test_fake_body", "").orEmpty())) else Updater.fetch() } }
             prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
             res.onSuccess { list ->
                 val best = list.maxWithOrNull { a, b -> cmpVer(a.tag, b.tag) }

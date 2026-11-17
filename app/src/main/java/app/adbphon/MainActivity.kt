@@ -418,17 +418,11 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             }
             InviteDialogHost()
             ViaAskHost()
+            InstallGateHost()
             InstBgHost()
             ModuleHost()
-            vm.updateRelease?.let { r ->
-                LAlertDialog(
-                    onDismissRequest = { vm.dismissUpdate() },
-                    title = { Text(stringResource(R.string.upd_title)) },
-                    text = { Text(stringResource(R.string.upd_text, r.tag, vm.appVersion)) },
-                    confirmButton = { TextButton({ vm.installUpdate() }) { Text(stringResource(R.string.upd_yes)) } },
-                    dismissButton = { TextButton({ vm.dismissUpdate() }) { Text(stringResource(R.string.upd_later)) } },
-                )
-            }
+            // 10.2 (правило 23): окно обновления показывает «Что нового» из описания выпуска
+            vm.updateRelease?.let { r -> UpdateNotesDialog(r, vm.appVersion, { vm.installUpdate() }, { vm.dismissUpdate() }) }
             // В альбоме при открытой клавиатуре нижняя панель вкладок прячется: иначе поле ввода остаётся без места и не видно
             val imeOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
             val cfg = androidx.compose.ui.platform.LocalConfiguration.current

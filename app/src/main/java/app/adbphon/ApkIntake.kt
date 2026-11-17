@@ -11,6 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 10.2: ADB-phon как установщик APK в системном выборе («Что использовать? Установщик пакетов / Install», «Открыть в системе» в X-plore и т.п.).
@@ -84,6 +87,28 @@ object ApkIntake {
         if (ApkInstall.isBundle(p.ext)) Fm.installBundleViaAdb(pane, item) else Fm.installViaAdb(pane, item)
     }
 }
+
+/**
+ * 10.2: единое поведение «ADB-phon без ADB и root»: сначала окно «Установка» с версиями и сведениями о пакете, затем своя сессия PackageInstaller
+ * (подтверждение даёт системный установщик). Раньше выбор «ADB-phon с подтверждением» из окон «Установить через…» (обновление программы и модуля,
+ * откат версии, «Установка APK», копии, Меню приложений) отдавал файл сессии сразу, без окна. Окно рисуется в корне экрана ([InstallGateHost]).
+ */
+object InstallGate {
+    var confirm by mutableStateOf<FmDlg.InstallConfirm?>(null)
+
+    fun sessionWithInfo(ctx: Context, files: List<File>) {
+        if (files.isEmpty()) return
+        Fm.scope.launch {
+            val app = ctx.applicationContext
+            val afs = files.map { ApkFile(it.name, Uri.fromFile(it), it.length(), it) }
+            val metas = withContext(Dispatchers.IO) { afs.associate { a -> a.name to runCatching { ApkInfo.readFor(app, a) }.getOrNull() } }
+            confirm = FmDlg.InstallConfirm(afs, metas) { _ -> confirm = null; Fm.installFilesViaSession(files) }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+fun InstallGateHost() { InstallGate.confirm?.let { d -> InstallConfirmDialog(d) { InstallGate.confirm = null } } }
 
 /** Точка входа для системного выбора «чем открыть/установить APK»; сама ничего не рисует, после подготовки файла передаёт его в [MainActivity]. */
 class ApkIntakeActivity : Activity() {
