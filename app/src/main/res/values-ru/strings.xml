@@ -403,6 +403,16 @@
     <string name="ver_file">Из файла APK...</string>
     <string name="ver_install">Поставить</string>
     <string name="ver_installed">Установлено: %1$s (%2$d)</string>
+    <string name="ver_nodown">Система не даёт понизить версию без удаления данных</string>
+    <string name="ver_nodown_self">Система не даёт понизить версию без удаления данных. ADB-phon сам себя не удаляет: сначала сохрани настройки резервной копией и поставь старую версию вручную</string>
+    <string name="ver_nosign">Подпись этой версии отличается от установленной, ничего не удалено</string>
+    <string name="ver_nocopy">Не удалось сохранить копию текущей версии, ничего не удалено</string>
+    <string name="ver_restored">Установка не удалась (%1$s). Прежняя версия возвращена из копии</string>
+    <string name="ver_restorefail">Установка не удалась (%1$s), и вернуть прежнюю версию не вышло: поставь её из списка копий</string>
+    <string name="ver_wipe_warn">Можно удалить приложение с сохранением данных и поставить выбранную версию. Перед этим текущая версия копируется; если установка не выйдет, она вернётся из копии. На некоторых версиях Android данные при этом могут пропасть.</string>
+    <string name="ver_wipe_btn">Удалить с сохранением данных и поставить</string>
+    <string name="ver_wipe_cancel">Отмена</string>
+    <string name="rb_blocked">Система не даёт понизить версию без удаления данных. ADB-phon не удаляет себя: ничего не изменено</string>
     <string name="ver_need_adb">Для перехода на старую версию нужен ADB: подключи его в настройках</string>
     <string name="ver_no_copies">Сохранённых копий этого приложения пока нет</string>
     <string name="ver_not_apk">Это не подходящий файл APK</string>
