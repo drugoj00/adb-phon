@@ -16,16 +16,17 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 10.1.** [ADB-phon-10.1.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 10.2.** [ADB-phon-10.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `85543278150c0f76c89162637ba802fea473f916806ff05ccec602453250ddf7`
+SHA-256: `834814b52c575c5665a61efe866b35e356704fa69387768991ee21b08d7af6d1`
 
-## What's new in 10.1
+## What's new in 10.2
 
-- Video and music from network folders and clouds play right away, without copying
-- Built-in player: gestures (volume, brightness, seeking, next/previous), “Fit to screen” button and panel hide time
-- Console: the run mode (ADB / helper / root) is shown in the title
-- Player settings in a separate group
+- ADB-phon in the system APK installer chooser
+- Settings remember the group, expanded items and position
+- Files: second line “date and time · size”, folders show the number of folders and files
+- Long names on a phone are readable: they scroll by themselves or wrap
+- Button column in portrait mirrors the active pane
 
 **Requirements and limits**
 
@@ -93,7 +94,7 @@ SHA-256: `85543278150c0f76c89162637ba802fea473f916806ff05ccec602453250ddf7`
 
 ## Quick start
 
-1. Download ADB-phon-10.1.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-10.2.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
