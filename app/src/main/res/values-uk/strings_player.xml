@@ -31,4 +31,22 @@
     <string name="fm_sub_none">Нічого</string>
     <string name="rt_counts_s">%1$d тек, %2$d файл.</string>
     <string name="upd_whatsnew">Що нового</string>
+    <string name="saf_not_granted">Доступ до карти пам’яті не надано</string>
+    <string name="saf_waiting">Чекаємо на надання доступу до карти пам’яті…</string>
+    <string name="saf_need_title">Потрібен доступ до карти пам’яті %1$s</string>
+    <string name="saf_need_text">Система дозволяє змінювати файли на карті пам’яті лише після того, як карту вибрано один раз. Доступ запам’ятовується для цієї карти.</string>
+    <string name="saf_how">Як надати доступ</string>
+    <string name="saf_hint">У наступному вікні виберіть карту пам’яті та натисніть «Використовувати цю папку»</string>
+    <string name="saf_pick">Вибрати</string>
+    <string name="saf_pick_again">Вибрати знову</string>
+    <string name="saf_err_not_root">Вибрано не всю карту %1$s (папку всередині неї або інший накопичувач). Потрібно вибрати саму карту: відкрити її корінь і натиснути «Використовувати цю папку».</string>
+    <string name="saf_err_fail">Система не зберегла доступ. Вибір можна повторити.</string>
+    <string name="saf_err_nopicker">На цьому пристрої немає системного вікна вибору папки.</string>
+    <string name="set_saf_title">Доступ до карти пам’яті</string>
+    <string name="set_saf_hint">Карти й накопичувачі, до яких надано доступ через систему. Він потрібен, щоб змінювати файли на них без ADB і root.</string>
+    <string name="saf_none">Знімних накопичувачів немає</string>
+    <string name="saf_state_on">Доступ надано</string>
+    <string name="saf_state_off">Доступ не надано</string>
+    <string name="saf_forget">Забути доступ</string>
+    <string name="saf_grant">Надати доступ</string>
 </resources>
