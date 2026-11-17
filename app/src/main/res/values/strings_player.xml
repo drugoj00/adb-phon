@@ -30,4 +30,5 @@
     <string name="fm_sub_cre">Created</string>
     <string name="fm_sub_none">None</string>
     <string name="rt_counts_s">%1$d dirs, %2$d files</string>
+    <string name="upd_whatsnew">What’s new</string>
 </resources>
