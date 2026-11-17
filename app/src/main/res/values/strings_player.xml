@@ -24,6 +24,10 @@
     <string name="set_vp_keep_hint">On: the mode chosen with the “Fit to screen” button is remembered and used for the next videos and launches. Off: every video opens as “fit”, and the button works only while that video plays.</string>
     <string name="intake_label">ADB-phon: install</string>
     <string name="intake_fail">Could not read the file to install</string>
+    <string name="ic_need_title">Access needed</string>
+    <string name="ic_need_perm">Allow ADB-phon to install apps: the system will then confirm the install. Or connect ADB (Wi-Fi debugging) in ADB-phon settings, then the install runs without confirmations.</string>
+    <string name="ic_open_perm">Allow installs</string>
+    <string name="ic_open_app">Open ADB-phon settings</string>
     <string name="set_fm_sub">Second line in the list</string>
     <string name="set_fm_sub_hint">What the small second line of a file or folder shows: date and time (modified or created) with the size, or the number of folders and files. “None” hides the second line.</string>
     <string name="fm_sub_mod">Modified</string>
