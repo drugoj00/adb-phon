@@ -78,7 +78,7 @@
         </activity>
         <!-- 10.0: возврат со страницы «Готово» после входа в облако (intent://open#Intent;scheme=adbphon;package=app.adbphon;end): промежуточное окно без вида поднимает программу в её собственной задаче, а не поверх задачи браузера -->
         <!-- 10.2: ADB-phon в системном выборе установщика APK (VIEW и INSTALL_PACKAGE, content и file; пакеты из частей по типу и по расширению) -->
-        <activity android:name=".ApkIntakeActivity" android:exported="true" android:label="@string/intake_label" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true">
+        <activity android:name=".ApkIntakeActivity" android:exported="true" android:label="@string/intake_label" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="" android:excludeFromRecents="true">
             <intent-filter android:label="@string/intake_label">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.INSTALL_PACKAGE" />
