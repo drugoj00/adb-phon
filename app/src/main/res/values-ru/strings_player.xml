@@ -22,4 +22,12 @@
     <string name="set_vp_reset_btn">Сбросить</string>
     <string name="set_vp_keep">Запоминать размер кадра</string>
     <string name="set_vp_keep_hint">Включено: режим, выбранный кнопкой «Под экран», запоминается и применяется ко всем следующим видео и запускам. Выключено: каждое видео открывается «по размеру», а кнопка действует только на время этого видео.</string>
+    <string name="intake_label">ADB-phon: установка</string>
+    <string name="intake_fail">Не удалось прочитать файл для установки</string>
+    <string name="set_fm_sub">Вторая строка в списке</string>
+    <string name="set_fm_sub_hint">Что показывает мелкая вторая строка файла и папки: дату и время (изменения или создания) с размером или числом папок и файлов. «Ничего» скрывает вторую строку.</string>
+    <string name="fm_sub_mod">Изменено</string>
+    <string name="fm_sub_cre">Создано</string>
+    <string name="fm_sub_none">Ничего</string>
+    <string name="rt_counts_s">%1$d пап., %2$d файл.</string>
 </resources>
