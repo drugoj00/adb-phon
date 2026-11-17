@@ -186,7 +186,13 @@ class FmJob(val title: String, val total: Int, val bytesMode: Boolean = true) : 
     private var lastUnits = 0L
     private var lastName = ""
 
-    val fraction: Float? get() = if (totalUnits > 0) (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f) else null
+    /** 11.0: полоса всегда определённая, если хоть что-то известно: байты, иначе файлы, иначе число элементов списка; бегущая только когда нет ничего. */
+    val fraction: Float? get() = when {
+        totalUnits > 0 -> (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f)
+        filesTotal > 0 -> (filesDone.toFloat() / filesTotal).coerceIn(0f, 1f)
+        total > 1 -> (done.toFloat() / total).coerceIn(0f, 1f)
+        else -> null
+    }
     val etaSec: Int? get() = if (totalUnits > 0 && speed > 1f) ((totalUnits - doneUnits) / speed).toInt().coerceAtLeast(0) else null
 
     private fun nowMs() = System.nanoTime() / 1_000_000

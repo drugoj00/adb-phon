@@ -66,48 +66,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Бегущая строка для длинных названий (вместо многоточия) во всей программе.
- * Режим в «Настройки»: «Вкл» (1) = только в строке в фокусе / под мышью / выбранной, «Выкл» (2) = выключено; прежний режим 0 («для всех переполненных») больше не предлагается и читается как 1 (не больше [MAX] одновременно, 15 кадров в секунду).
- * На ТВ и приставках (экран без касания) режим 0 работает как 1. Анимацию не запускаем: пока палец на экране (прокрутка списков), для строк, которые
- * помещаются, и для лишних (сверх лимита). Сдвиг строки меняется только на этапе размещения (без перекомпозиции), шаг раз в ~66 мс.
+ * 11.0: бегущих строк в программе больше нет (решение владелицы): длинный текст переносится или обрезается многоточием.
+ * Объект остался только ради признака [tv] (ТВ и приставки: UiMode TELEVISION или нет сенсорного экрана), который используют другие файлы.
  */
 object Marq {
-    /** Сколько строк бежит одновременно: на ТВ две, на телефоне (названия бегут сами у видимых строк) четыре. */
-    val MAX: Int get() = 1
-    /** Телефон: код единственной бегущей строки (по ней нажали), -1: ничего не бежит. */
-    var activeId by mutableIntStateOf(-1)
-    fun stop() { activeId = -1 }
-    var mode by mutableStateOf(1)
     var tv = false
-    var touching by mutableStateOf(false)
-    val running = mutableStateListOf<Int>()
-    private var seq = 0
-    fun nextId() = ++seq
-    val effective: Int get() = if (mode == 0 && tv) 1 else mode
 
     fun init(ctx: Context) {
-        // 7.5: два варианта, «Вкл» (бежит строка в фокусе/под мышью/выбранная) и «Выкл»; прежний режим 0 («для всех переполненных») стал «Вкл» (бывший «Только в фокусе»)
-        // 10.5: настройки «Прокрутка» больше нет: названия всегда переносятся, нижняя строка бежит, если не помещается; старое сохранённое значение игнорируется
-        mode = 1
         tv = runCatching { (ctx.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION }.getOrDefault(false) ||
             !ctx.packageManager.hasSystemFeature("android.hardware.touchscreen")
     }
-
-
-    fun request(id: Int, priority: Boolean) {
-        if (id in running) return
-        if (running.size < MAX) running.add(id) else if (priority) { running.removeAt(0); running.add(id) }
-    }
-    fun release(id: Int) { running.remove(id) }
 }
 
-/** Строка (фокус, мышь, выбор) сообщает вложенным текстам, что она «активна» (для режима «только в фокусе»). */
-val LocalRowActive = compositionLocalOf { false }
-/** Внутри строк «Файлов» длинные названия бегут только у активной строки (выбранной, под мышью, в фокусе), у остальных многоточие. */
-val LocalMarqOnlyActive = compositionLocalOf { false }
-
 /**
- * Замена material3.Text для строк в одну линию: переполненный текст бежит (см. [Marq]); остальные случаи без изменений.
+ * Замена material3.Text (подмена по имени, чтобы TvFont поднимал мелкий размер на ТВ); бегущих строк нет.
  * Подмена по имени: файлы пакета не импортируют material3.Text, а берут эту функцию.
  */
 @Composable
@@ -154,40 +126,10 @@ fun Text(
     // 10.0 (tvfont): в окнах на ТВ мелкий размер поднимается до минимума роли (TvFont.kt); вне окон ТВ размер тот же
     val fontSize = tvFontSize(fontSize, style)
     val lineHeight = tvLineHeight(fontSize, lineHeight, style)
-    if (maxLines != 1 || Marq.effective == 2) {
-        androidx.compose.material3.Text(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, emptyMap(), onTextLayout ?: {}, style)
-        return
-    }
-    val id = remember { Marq.nextId() }
-    var over by remember { mutableStateOf(false) }
-    val rowActive = LocalRowActive.current
-    val onlyActive = LocalMarqOnlyActive.current
-    // 10.5: никакого автобега. Телефон: бежит только одна строка, та, по которой нажали (повторное нажатие, нажатие на другую строку, прокрутка и уход из окна останавливают).
-    // ТВ: бежит одна строка под фокусом. Строка, которая помещается, ничего не запускает и нажатие отдаёт строке списка.
-    val want = if (Marq.tv) over && rowActive && !Marq.touching else over && Marq.activeId == id
-    LaunchedEffect(want) { if (Marq.tv) { if (want) Marq.request(id, true) else Marq.release(id) } }
-    DisposableEffect(Unit) { onDispose { Marq.release(id); if (Marq.activeId == id) Marq.activeId = -1 } }
-    val on = want && (!Marq.tv || id in Marq.running)
-    // нажатие по нижней (информационной) строке всегда её, строке списка не передаётся (ничего не раскрывает и не выбирает); бег запускается, если строка не помещается
-    val tapMod = if (!Marq.tv && onlyActive) Modifier.pointerInput(id) {
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            val up = waitForUpOrCancellation()
-            if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
-                up.consume()
-                if (over) Marq.activeId = if (Marq.activeId == id) -1 else id
-            }
-        }
-    } else Modifier
     androidx.compose.material3.Text(
-        text,
-        modifier.then(tapMod).liteMarquee(on),
-        color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight,
-        if (on) TextOverflow.Clip else if (overflow == TextOverflow.Clip) TextOverflow.Ellipsis else overflow,
-        if (on) false else softWrap, 1, 1,
-        emptyMap(),
-        { r -> if (!on && r.hasVisualOverflow != over) over = r.hasVisualOverflow; onTextLayout?.invoke(r) },
-        style,
+        text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight,
+        if (maxLines == 1 && overflow == TextOverflow.Clip) TextOverflow.Ellipsis else overflow, softWrap, maxLines, minLines,
+        emptyMap(), onTextLayout ?: {}, style,
     )
 }
 
@@ -251,37 +193,6 @@ fun ActionWithHint(label: String, hint: String, onClick: () -> Unit) {
         }
     }
 }
-
-private class MarqState { var content = 0; var view = 0 }
-
-/**
- * Лёгкая бегущая строка: после паузы ~1 с строка плавно уходит влево до конца, пауза, возврат в начало. Сдвиг хранится в состоянии, читаемом только
- * при размещении, поэтому перекомпозиции нет; обновление раз в 66 мс (≈15 кадров/с) вместо кадра на каждый vsync.
- */
-@Composable
-fun Modifier.liteMarquee(on: Boolean): Modifier {
-    if (!on) return this
-    val st = remember { MarqState() }
-    val offset = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { 30.dp.toPx() * 0.09f }
-    LaunchedEffect(Unit) {
-        while (true) {
-            offset.floatValue = 0f
-            delay(700)
-            val max = (st.content - st.view).toFloat()
-            if (max <= 0f) { delay(700); continue }
-            while (offset.floatValue < max) { offset.floatValue = minOf(max, offset.floatValue + stepPx); delay(90) }
-            delay(1200)
-        }
-    }
-    return this.clipToBounds().layout { m, c ->
-        val p = m.measure(c.copy(minWidth = 0, maxWidth = Constraints.Infinity))
-        val w = minOf(p.width, c.maxWidth)
-        st.content = p.width; st.view = w
-        layout(w, p.height) { p.placeRelative(-offset.floatValue.toInt(), 0) }
-    }
-}
-
 
 // ------------------------------------------------------------------ глазик в полях паролей (9.0)
 

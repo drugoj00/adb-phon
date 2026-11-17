@@ -61,6 +61,10 @@ private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) 
                 labelLarge = th.labelLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), labelMedium = th.labelMedium.copy(fontWeight = semi),
             )
         }
+        // 11.0: окна считают масштаб от системного размера напрямую (а не от того, что досталось от родителя): так окна всегда того же размера, что и экран
+        val dm = base.resources.displayMetrics
+        val absDensity = androidx.compose.ui.unit.Density(dm.density * AppScale.densMul(), base.resources.configuration.fontScale * AppScale.fontMul())
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides absDensity) {
         androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.MaterialTheme.colorScheme, shapes = androidx.compose.material3.MaterialTheme.shapes, typography = bold) {
             ClickSoundHost {
                 val st = androidx.compose.material3.LocalTextStyle.current
@@ -68,6 +72,7 @@ private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) 
                 androidx.compose.material3.ProvideTextStyle(if (w < 600) st.copy(fontWeight = semi) else st) { TvFontScope(true, content) }
             }
         }
+        }   // absDensity
     }   // 10.0 (tvfont): окна на ТВ: «Размер шрифта» и минимум размеров (TvFont.kt)
 }
 

@@ -1006,14 +1006,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // команда уходит в отдельный процесс, потому что наше приложение будет перезаписано
             val tmp = "/data/local/tmp/adbphon-rb.apk"
             val lg = "/data/local/tmp/adbphon-rollback.log"
-            val script = "cp $f $tmp && { pm install -r -d --user 0 $tmp > $lg 2>&1; grep -q DOWNGRADE $lg && " +
-                "{ pm uninstall -k --user 0 ${ctx.packageName} >> $lg 2>&1; pm install -r --user 0 $tmp >> $lg 2>&1; }; }; rm -f $tmp"
+            // 11.0: приложение само себя больше не удаляет (раньше при отказе «понизить» шло «pm uninstall -k» своего пакета: значок пропадал, установка не выходила).
+            // Только «pm install -r -d»; если система отказала, ничего не изменено, причина читается из журнала ниже.
+            val script = "cp $f $tmp && pm install -r -d --user 0 $tmp > $lg 2>&1; rm -f $tmp"
             // сначала файл-сценарий, потом его запуск: так отдельный процесс надёжно переживает закрытие нашего потока
             val line = "setsid nohup sh -c \"$script\" > /dev/null 2>&1 < /dev/null &\nsleep 2\n"
             val b64 = android.util.Base64.encodeToString(line.toByteArray(), android.util.Base64.NO_WRAP)
             Adb.shell("echo $b64 | base64 -d > /data/local/tmp/adbphon-install.sh")
+            Adb.shell("rm -f $lg")
             Adb.shell("sh /data/local/tmp/adbphon-install.sh")
-            message = t(R.string.rb_started)
+            // при успехе процесс завершится системой; если он жив, а в журнале отказ, говорим честно, что ничего не изменено
+            var fail = ""
+            repeat(8) {
+                if (fail.isEmpty()) {
+                    kotlinx.coroutines.delay(1000)
+                    val log = Adb.shell("cat $lg 2>/dev/null")
+                    if (log.contains("Failure", true)) fail = log.lines().firstOrNull { it.contains("Failure", true) }.orEmpty().trim()
+                }
+            }
+            message = if (fail.isEmpty()) t(R.string.rb_started)
+                else if (fail.contains("DOWNGRADE", true)) t(R.string.rb_blocked)
+                else t(R.string.ver_failed) + ": " + fail.take(120)
         }
     }
 

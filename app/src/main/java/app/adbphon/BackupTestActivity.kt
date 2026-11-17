@@ -80,6 +80,27 @@ class BackupTestActivity : Activity() {
                         getSharedPreferences("icons", MODE_PRIVATE).edit().apply { if (v.isNullOrEmpty()) remove(k) else putString(k, v) }.commit()
                         log("seticon " + k + "=" + v)
                     }
+                    "silentinst" -> {
+                        // проверка тихой установки (InstallService): файл из extra "f", как будто его даёт клиент с нашей подписью
+                        val file = java.io.File(intent.getStringExtra("f").orEmpty())
+                        val uri = androidx.core.content.FileProvider.getUriForFile(this, packageName + ".files", file)
+                        val rx = object : android.os.ResultReceiver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                            override fun onReceiveResult(code: Int, b: Bundle?) { log("silent code=" + code + " status=" + b?.getString("status") + " pkg=" + b?.getString("package") + " ver=" + b?.getString("version") + " msg=" + b?.getString("message")) }
+                        }
+                        val si = android.content.Intent(this, InstallService::class.java).setAction(InstallService.ACTION).setData(uri)
+                            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra("caller", intent.getStringExtra("caller") ?: packageName).putExtra("receiver", rx)
+                        androidx.core.content.ContextCompat.startForegroundService(this, si)
+                        Thread.sleep((intent.getStringExtra("w") ?: "20000").toLong())
+                    }
+                    "verdown" -> {
+                        // проверка безопасного отката (AppBackups.installFiles): pkg, f (APK), wipe=1 — после подтверждения в окне
+                        val p = intent.getStringExtra("pkg").orEmpty()
+                        val ff = java.io.File(intent.getStringExtra("f").orEmpty())
+                        val pi = packageManager.getPackageArchiveInfo(ff.path, 0)
+                        val code = if (pi == null) 0L else if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()
+                        val r = kotlinx.coroutines.runBlocking { AppBackups.installFiles(this@BackupTestActivity, p, listOf(ff), code, intent.getStringExtra("wipe") == "1") }
+                        log("verdown result=" + r + " installed=" + AppBackups.installedVersion(this, p))
+                    }
                     "fakeupd" -> {
                         val v = intent.getStringExtra("v").orEmpty()
                         getSharedPreferences("adbphon", MODE_PRIVATE).edit().apply { if (v.isEmpty()) remove("test_fake_release") else putString("test_fake_release", v); putString("test_fake_body", intent.getStringExtra("b").orEmpty().replace("||", "\n")); if (intent.getStringExtra("k") != "1") remove("upd_dismissed"); remove("upd_last") }.commit()

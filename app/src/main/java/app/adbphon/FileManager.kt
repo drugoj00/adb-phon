@@ -136,7 +136,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.material.icons.filled.Lock
@@ -720,7 +719,8 @@ object Fm {
                         if (!mounted && !bad) continue
                         val uuid = v.uuid
                         val desc = v.getDescription(sctx)
-                        val usb = desc?.contains("USB", true) == true
+                        // 11.0: флешка с собственной меткой («KINGSTON») в названии слова USB не имеет: тип берётся ещё и по номеру устройства тома (старший номер 8 = USB-накопитель, 179 = карта SD)
+                        val usb = desc?.contains("USB", true) == true || usbByMajor(mounts, uuid, uuid?.let { ids[it] })
                         if (!mounted) { out.add(FmVol("", desc ?: uuid ?: "USB", null, 0L, 0L, usb, "", false, false, st0)); continue }
                         val dir = (if (android.os.Build.VERSION.SDK_INT >= 30) v.directory?.absolutePath else null)
                             ?: runCatching { v.javaClass.getMethod("getPath").invoke(v) as String }.getOrNull()
@@ -737,6 +737,13 @@ object Fm {
             // панель стояла на извлечённом носителе: вернуть во внутреннюю память
             panes.forEach { p -> if (p.src != "smb" && p.path.startsWith("/storage/") && !p.path.startsWith("/storage/emulated") && res.none { it.ok && (p.path == it.path || p.path.startsWith(it.path + "/")) }) load(p, "/sdcard", remember = false) }
         }
+    }
+
+    /** Том подключён по USB: у виртуальных томов vold в строке монтирования или в списке томов «public:8,N» (старший номер 8, диск SCSI). */
+    private fun usbByMajor(mounts: String, uuid: String?, volId: String?): Boolean {
+        if (volId != null && volId.startsWith("public:8,")) return true
+        if (uuid == null) return false
+        return mounts.lines().any { it.contains(uuid, true) && it.contains("public:8,") }
     }
 
     /** Файловая система и признак «только чтение» тома по /proc/mounts (строки с идентификатором тома; fuse и sdcardfs пропускаются). */
@@ -1160,11 +1167,21 @@ object Fm {
         val list = ops.map { it.from }
         // общий объём заранее: у локальных источников обходом, у остальных по размерам из списка; неизвестен: полоска бегущая
         val srcArc = (src.smb as? ArchiveFs)?.takeIf { src.src == "smb" }
+        // 11.0: папки на сети, облаке и ADB: объём считается по спискам (до 4000 записей), иначе полоса шла бы бегущей
+        val budget = intArrayOf(4000)
+        suspend fun rsize(dir: String): Long {
+            if (budget[0] <= 0) return -1L
+            val pp = FmPane(9, dir).also { it.src = src.src; it.smb = src.smb; it.net = src.net; it.auto = src.auto }
+            val l = try { FmIo.list(pp, dir) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { return -1L }
+            var t = 0L
+            for (e in l) { budget[0]--; if (e.isDir) { val s = rsize(join(dir, e.name)); if (s < 0) return -1L; t += s } else t += e.size }
+            return t
+        }
         val total: suspend () -> Long = total@{
             var t = 0L
             for (n in list) {
                 val item = src.items.firstOrNull { it.name == n }
-                t += if (src.src == "local") LocalOps.size(java.io.File(join(src.path, n))) else if (srcArc != null) srcArc.sizeOf(join(src.path, n)) else if (item != null && !item.isDir) item.size else return@total -1L
+                t += if (src.src == "local") LocalOps.size(java.io.File(join(src.path, n))) else if (srcArc != null) srcArc.sizeOf(join(src.path, n)) else if (item != null && !item.isDir) item.size else if (item != null) { val s = rsize(join(src.path, n)); if (s < 0) return@total -1L; s } else return@total -1L
             }
             t
         }
@@ -1690,7 +1707,7 @@ object Fm {
     }
 
     // ---------- перепаковка APK (10.0) ----------
-    private suspend fun fetchTo(p: FmPane, path: String, dest: File) {
+    internal suspend fun fetchTo(p: FmPane, path: String, dest: File) {
         when (p.src) {
             "local" -> File(path).copyTo(dest, true)
             "adb" -> Adb.pull(path, dest)
@@ -2105,7 +2122,7 @@ private fun FmTabs() {
             Row(
                 Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
                     .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = .10f))
-                    .clickable { Fm.active = p.id }.padding(horizontal = 8.dp, vertical = 4.dp),
+                    .heightIn(min = 48.dp).clickable { Fm.active = p.id }.padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -2120,15 +2137,15 @@ private fun FmTabs() {
     }
 }
 
-/** Строка в одну строку: многоточие, а для активной (под пальцем, мышью, фокусом, выделенной) бегущая строка с паузами. */
+/**
+ * Название или строка сведений в списках: переносится максимум на три строки, дальше многоточие; бегущей строки нет (11.0).
+ * Полный текст: долгое нажатие, меню действий, «Свойства». Параметры [active], [wrap], [names], [tapRun] оставлены для совместимости вызовов.
+ */
 @Composable
 fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
            lineHeight: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified, fontWeight: FontWeight? = null,
-           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false, names: Boolean = false) {
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (active || LocalRowActive.current), LocalMarqOnlyActive provides true) {
-        // wrap: перенос на несколько строк строками списков больше не используется (7.5: при «Вкл» одна строка и бегущая строка, при «Выкл» одна строка с многоточием)
-        Text(text, if (names || wrap || Marq.tv) modifier else modifier.heightIn(min = 28.dp), fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else if (names) (if (Marq.tv) 2 else 3) else 1, overflow = TextOverflow.Ellipsis)   // 10.5: название всегда переносится (до 3 строк, на ТВ до 2); бежит только нижняя строка по настройке «Прокрутка»
-    }
+           color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false, names: Boolean = false, tapRun: Boolean = true) {
+    Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = 3, overflow = TextOverflow.Ellipsis)
 }
 
 /** Главные кнопки узкой колонки (остальные в «Ещё»). */
@@ -2704,7 +2721,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     val pressed by hover.collectIsPressedAsState()
     var focused by remember { mutableStateOf(false) }
     val prim = MaterialTheme.colorScheme.primary
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (sel || hovered || pressed || focused)) {
+    run {
     Box {
         Row(
             Modifier.fillMaxWidth()
@@ -2807,7 +2824,10 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 val key = folderKey(p, full)
                 FolderOrAppIcon(full, UiPrefs.folderColors[key] ?: UiPrefs.folderDefault, isOpen, 32.dp,
                     Modifier, customKey = "f:" + key)
-            } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
+            } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp,
+                remote = if (p.src != "local" && !f.isDir && f.size > 0 && (f.ext == "apk" || f.ext == "apks" || f.ext == "xapk" || f.ext == "apkm"))
+                    RemoteApk(p.src + "|" + (p.net?.let { it.kind + "|" + it.host + "|" + it.user } ?: "") + "|" + full + "|" + f.size + "|" + f.date, f.size,
+                        p.src == "adb" || (p.src == "smb" && p.net?.kind != "cloud" && p.smb !is ArchiveFs)) { dest -> Fm.fetchTo(p, full, dest) } else null)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
                 MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, names = true)
                 val narrowSub = !tvRow && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420

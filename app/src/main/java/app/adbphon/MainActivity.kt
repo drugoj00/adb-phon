@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); FolderCounts.active = true; CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
     override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this) }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Marq.stop(); Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -226,16 +226,26 @@ object AppFull {
 /** Размер шрифта и размер элементов (7.0): множители, применяются ко всему интерфейсу программы. */
 object AppScale {
     val steps = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+    /** 11.0: «Размер элементов и значков»: ручные пункты умножают поверх автомасштаба экрана. */
+    val uiSteps = listOf(0.75f, 1.0f, 1.25f, 1.5f)
     var font by mutableStateOf(1.0f)
     var ui by mutableStateOf(1.0f)
+    /** 11.0: тонкая подстройка (шаг 0,05) поверх пункта размера. */
+    var fine by mutableStateOf(1.0f)
     private var loaded = false
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
     fun load(ctx: Context) {
         if (loaded) return
         loaded = true
         font = sp(ctx).getFloat("scale_font", 1.0f)
-        ui = sp(ctx).getFloat("scale_ui", 1.0f)
+        // прежние значения 0,85 / 1,15 / 1,3 переходят на ближайший из новых пунктов (0,75 / 1 / 1,25 / 1,5)
+        ui = sp(ctx).getFloat("scale_ui", 1.0f).let { v -> uiSteps.minByOrNull { kotlin.math.abs(it - v) } ?: 1f }
+        fine = sp(ctx).getFloat("scale_fine", 1.0f).coerceIn(0.5f, 2.0f)
     }
+    fun setFine(ctx: Context, v: Float) { fine = (Math.round(v.coerceIn(0.5f, 2.0f) * 20) / 20f); sp(ctx).edit().putFloat("scale_fine", fine).apply() }
+    fun resetUi(ctx: Context) { ui = 1.0f; fine = 1.0f; sp(ctx).edit().putFloat("scale_ui", 1.0f).putFloat("scale_fine", 1.0f).apply() }
+    /** Итоговый множитель размеров: автомасштаб экрана × пункт × подстройка. */
+    fun total(): Float = ui * fine * autoF
     /**
      * 10.5: автоматический множитель для автомагнитол и планшетов с низкой плотностью (крупный экран, а dp физически мелкие). 1: не действует.
      * Цель: основной текст (14 sp) около 3,4 % короткой стороны экрана, как на телефоне; множитель в пределах 1…2,2. Телевизор не затрагивается.
@@ -255,11 +265,12 @@ object AppScale {
         val tvMode = Marq.tv || type == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
         val swDp = shortPx / dm.density
         val bigLow = (shortPx >= 600 && dm.densityDpi <= 240) || (swDp >= 600f && dm.densityDpi <= 213)
-        autoF = if (tvMode || !(car || bigLow)) 1f else (shortPx / 412f / dm.density).coerceIn(1f, 2.2f)
+        // 11.0: мягкая калибровка: около 1,25 при 160 dpi, 1,15 при 213, 1,1 при 240; не больше 1,5
+        autoF = if (tvMode || !(car || bigLow)) 1f else (1.25f * Math.pow((160.0 / dm.densityDpi.coerceAtLeast(120)), 0.3).toFloat()).coerceIn(1.0f, 1.5f)
         sysFont = cfg.fontScale
         android.util.Log.i("AutoScale", "short=$shortPx dpi=${dm.densityDpi} d=${dm.density} car=$car tv=$tvMode bigLow=$bigLow -> $autoF")
     }
-    fun densMul(): Float = ui * autoF
+    fun densMul(): Float = ui * fine * autoF
     fun fontMul(): Float = font * (if (autoF > 1.001f && sysFont > 0f) 1f / sysFont else 1f)
     fun setFont(ctx: Context, v: Float) { font = v; sp(ctx).edit().putFloat("scale_font", v).apply() }
     fun setUi(ctx: Context, v: Float) { ui = v; sp(ctx).edit().putFloat("scale_ui", v).apply() }
@@ -337,21 +348,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     ImeGateHost {
     MaterialTheme(colorScheme = AppColors.scheme(dark, baseCtx)) {
     ClickSoundHost {
-        Surface(Modifier.fillMaxSize().imeGateKeys().pointerInput(Unit) {
-            // пока палец на экране (в том числе прокрутка списков), бегущие строки стоят: нагрузки нет
-            awaitPointerEventScope {
-                var start: androidx.compose.ui.geometry.Offset? = null
-                while (true) {
-                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    Marq.touching = e.changes.any { it.pressed }
-                    val c = e.changes.firstOrNull()
-                    if (c != null && c.pressed) {
-                        if (!c.previousPressed) start = c.position
-                        else if (start != null && (c.position - start).getDistance() > 36f) Marq.stop()   // прокрутка: бегущая строка останавливается
-                    }
-                }
-            }
-        }, color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize().imeGateKeys(), color = MaterialTheme.colorScheme.background) {
             var tab by remember { mutableStateOf(Startup.initialTab(baseCtx)) }
             LaunchedEffect(tab) { Startup.saveLastTab(baseCtx, tab) }
             // если процесс был убит посреди игры, а настройки ориентации остались изменёнными: тихо вернуть прежние значения, как только появится подключение
@@ -1129,16 +1126,16 @@ fun AppsScreen(vm: MainViewModel) {
                         // вторая строка: пакет и версия серым, метки («система», «мусор», «безопасно»…) цветом
                         val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
                         val acc = MaterialTheme.colorScheme.primary
-                        // нижняя строка бежит по настройке «Прокрутка» (названия переносятся)
+                        // нижняя строка переносится до трёх строк (11.0: бегущей строки нет)
                         // 10.5: нижняя строка: колонка архитектуры (ширина по «X86_64»), колонка плашки источника (ширина фиксированная), затем пакет · версия · статус; колонки есть у всех строк, поэтому всё стоит на одной вертикали
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (a.pkg == lastTap), LocalMarqOnlyActive provides true) {
+                        run {
                         Text(
                             androidx.compose.ui.text.buildAnnotatedString {
                                 withStyle(androidx.compose.ui.text.SpanStyle(color = dim)) { append(a.pkg) }
                                 if (tags.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = acc)) { append(" · " + tags.joinToString(" · ")) }
                             },
-                            Modifier.weight(1f).heightIn(min = if (Marq.tv) 0.dp else 28.dp), fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            Modifier.weight(1f), fontFamily = UiPrefs.listFont, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
                         )
                         }
                         Box(Modifier.width(colW), contentAlignment = Alignment.CenterEnd) { InstallSourceBadge(a.pkg, a.system) }   // 10.0: откуда установлено (InstallSource.kt); текст у правого края
@@ -1394,7 +1391,7 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
         wide = land,
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             androidx.compose.runtime.key(a.pkg) { AppIcon(a.pkg, 36.dp) }
-            Text(a.label, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(a.label, Modifier.weight(1f, fill = false), fontSize = 18.sp, fontWeight = FontWeight.Bold)   // 11.0: название целиком, с переносом
         } },
         // без прокрутки: страница 1 (основное и размеры, в ландшафте в две колонки) и страница 2 (пути к APK); кнопки действий короткие, в одну строку
         text = { Column(Modifier.tvFit(), verticalArrangement = Arrangement.spacedBy(8.dp)) {   // 10.0 (tvfont): на ТВ крупный текст ужимается, если не помещается

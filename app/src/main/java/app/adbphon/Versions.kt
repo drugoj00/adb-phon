@@ -163,12 +163,21 @@ object AppBackups {
         }
     }
 
+    private fun certs(pi: android.content.pm.PackageInfo?): Set<String> {
+        if (pi == null) return emptySet()
+        val sigs = if (Build.VERSION.SDK_INT >= 28) (pi.signingInfo?.apkContentsSigners ?: emptyArray()) else @Suppress("DEPRECATION") (pi.signatures ?: emptyArray())
+        return sigs.map { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b) } }.toSet()
+    }
+
     /**
-     * Ставит выбранную версию. Возвращает "ok", "system" (подтвердить в окне системы), "need_adb" или "fail:<причина>".
-     * Понижение версии: сначала обычная установка с флагом разрешения понижения; если система отказала, приложение
-     * удаляется с сохранением данных и ставится нужная версия; при неудаче возвращается прежняя версия из копии.
+     * Ставит выбранную версию. Возвращает "ok", "need_adb", "nodown" (система не даёт понизить версию без удаления; ничего не удалено),
+     * "nodown_self" (то же для самой программы: она себя не удаляет), "nosign" (подпись другая), "nocopy" (нет резервной копии),
+     * "restored:<причина>" (установка не вышла, прежняя версия возвращена из копии), "restorefail:<причина>" или "fail:<причина>".
+     * Понижение: сначала обычная установка с флагом -d, без всякого удаления. Только при [wipe] (отдельное подтверждение в окне)
+     * после проверок (копия текущей версии есть, подпись той же, это не сама программа и не системная) приложение удаляется с сохранением данных
+     * и ставится нужная версия; при неудаче сразу ставится прежняя версия из копии.
      */
-    suspend fun installFiles(ctx: Context, pkg: String, files: List<File>, code: Long): String = withContext(Dispatchers.IO) {
+    suspend fun installFiles(ctx: Context, pkg: String, files: List<File>, code: Long, wipe: Boolean = false): String = withContext(Dispatchers.IO) {
         val cur = installedVersion(ctx, pkg)?.second
         val down = cur != null && code < cur
         if (!AutoAdb.ensure()) return@withContext "need_adb"
@@ -176,19 +185,33 @@ object AppBackups {
             val r = Adb.installFiles(files, "-r")
             return@withContext if (r.contains("Success", true)) "ok" else "fail:" + r.take(140)
         }
+        val own = pkg == ctx.packageName
         val ai = runCatching { ctx.packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
         val system = ai != null && ai.flags and ApplicationInfo.FLAG_SYSTEM != 0
-        val safe = runCatching { save(ctx, pkg) }.getOrNull()
-        var r = Adb.installFiles(files, "-r -d")
-        if (r.contains("Success", true)) return@withContext "ok"
-        if (system) return@withContext "fail:" + r.take(140)
-        val u = Adb.shell("pm uninstall -k $pkg")
-        if (u.contains("Success", true)) {
-            r = Adb.installFiles(files, "-r")
+        if (!wipe) {
+            val r = Adb.installFiles(files, "-r -d")
             if (r.contains("Success", true)) return@withContext "ok"
-            safe?.let { Adb.installFiles(it.files, "-r") }
+            val blocked = r.contains("DOWNGRADE", true) || r.contains("VERSION", true)
+            if (!blocked || system) return@withContext "fail:" + r.take(140)
+            return@withContext if (own) "nodown_self" else "nodown"
         }
-        "fail:" + r.take(140)
+        // 11.0: удаление только после всех проверок
+        if (own) return@withContext "nodown_self"
+        if (system) return@withContext "fail:system"
+        val pm = ctx.packageManager
+        val fl = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        val a = certs(pm.getPackageArchiveInfo(files.first().path, fl))
+        val c = certs(runCatching { pm.getPackageInfo(pkg, fl) }.getOrNull())
+        if (a.isEmpty() || c.isEmpty() || a != c) return@withContext "nosign"
+        val safe = runCatching { save(ctx, pkg) }.getOrNull()
+        if (safe == null || safe.files.isEmpty() || safe.files.any { !it.isFile || it.length() == 0L }) return@withContext "nocopy"
+        val u = Adb.shell("pm uninstall -k $pkg")
+        if (!u.contains("Success", true)) return@withContext "fail:" + u.lines().firstOrNull { it.isNotBlank() }.orEmpty().take(120)
+        val r = Adb.installFiles(files, "-r")
+        if (r.contains("Success", true)) return@withContext "ok"
+        val back = Adb.installFiles(safe.files, "-r")
+        val why = r.lines().firstOrNull { it.isNotBlank() }.orEmpty().take(120)
+        (if (back.contains("Success", true)) "restored:" else "restorefail:") + why
     }
 }
 
@@ -202,6 +225,12 @@ private fun resultText(ctx: Context, r: String): String = when {
     r == "ok" -> ctx.getString(R.string.ver_done)
     r == "system" -> ctx.getString(R.string.net_system_dialog)
     r == "need_adb" -> ctx.getString(R.string.ver_need_adb)
+    r == "nodown" -> ctx.getString(R.string.ver_nodown)
+    r == "nodown_self" -> ctx.getString(R.string.ver_nodown_self)
+    r == "nosign" -> ctx.getString(R.string.ver_nosign)
+    r == "nocopy" -> ctx.getString(R.string.ver_nocopy)
+    r.startsWith("restored:") -> ctx.getString(R.string.ver_restored, r.removePrefix("restored:"))
+    r.startsWith("restorefail:") -> ctx.getString(R.string.ver_restorefail, r.removePrefix("restorefail:"))
     else -> ctx.getString(R.string.ver_failed) + r.removePrefix("fail").let { if (it.length > 1) ": " + it.removePrefix(":") else "" }
 }
 
@@ -220,6 +249,13 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
     var browser by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    // 11.0: понижение: сначала без удаления; если система не даёт, отдельное окно с выбором (удаление только после него)
+    var wipeAsk by remember { mutableStateOf<Pair<List<File>, Long>?>(null) }
+    suspend fun install(files: List<File>, code: Long): String = ViaAsk.installOrAsk(ctx, files) {
+        val r = AppBackups.installFiles(ctx, pkg, files, code)
+        if (r == "nodown") wipeAsk = files to code
+        resultText(ctx, r)
+    }
 
     fun run(block: suspend () -> String) {
         if (busy) return
@@ -240,12 +276,27 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                 val f = Batch.materialize(f0).file ?: return@run ctx.getString(R.string.ver_failed)
                 val copy = withContext(Dispatchers.IO) { AppBackups.importApk(ctx, f) } ?: return@run ctx.getString(R.string.ver_not_apk)
                 if (copy.pkg != pkg) return@run ctx.getString(R.string.ver_other_app, copy.pkg)
-                ViaAsk.installOrAsk(ctx, copy.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode)) }
+                install(copy.files, copy.versionCode)
             }
         },
         onClose = { browser = false },
     )
 
+    wipeAsk?.let { (wf, wc) ->
+        HDialog(onDismissRequest = { wipeAsk = null }) {
+            Column(Modifier.clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.ver_nodown), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ver_wipe_warn), color = t.sub, fontSize = 14.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(stringResource(R.string.ver_wipe_cancel), true) { wipeAsk = null }
+                    Chip(stringResource(R.string.ver_wipe_btn), false) {
+                        wipeAsk = null
+                        run { resultText(ctx, AppBackups.installFiles(ctx, pkg, wf, wc, wipe = true)) }
+                    }
+                }
+            }
+        }
+    }
     HDialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
@@ -281,7 +332,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                             Text("${when_(c.savedAt)} · ${mb(c.size)} " + stringResource(R.string.mb), color = t.hint, fontSize = 12.sp)
                         }
                         Chip(stringResource(R.string.ver_install), installed?.second == c.versionCode) {
-                            run { ViaAsk.installOrAsk(ctx, c.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, c.files, c.versionCode)) } }
+                            run { install(c.files, c.versionCode) }
                         }
                         Chip(stringResource(R.string.ver_delete_copy), false) { AppBackups.delete(c); tick++ }
                     }
@@ -300,7 +351,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                                     val apk = NetSearch.download(ctx, v.url) { mbDone -> status = ctx.getString(R.string.net_downloading, v.name, mbDone.toInt()) }?.file
                                         ?: return@run ctx.getString(R.string.net_failed)
                                     val copy = withContext(Dispatchers.IO) { AppBackups.importApk(ctx, apk) } ?: return@run ctx.getString(R.string.ver_not_apk)
-                                    ViaAsk.installOrAsk(ctx, copy.files) { resultText(ctx, AppBackups.installFiles(ctx, pkg, copy.files, copy.versionCode)) }
+                                    install(copy.files, copy.versionCode)
                                 }
                             }
                         }

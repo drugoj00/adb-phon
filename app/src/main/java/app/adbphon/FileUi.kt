@@ -203,8 +203,10 @@ object Thumbs {
     /** Оперативный кэш по размеру памяти (1/16 кучи), миниатюры 128 px (на ТВ и слабом железе 96 px). */
     val durations = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val cache = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 16).toInt().coerceIn(2_000_000, 40_000_000)) { override fun sizeOf(k: String, v: Bitmap) = v.byteCount }
-    private val none = HashSet<String>()
+    private val none = HashMap<String, Long>()   // ключ -> когда не вышло; значки APK пробуются снова через 20 с (11.0), остальное один раз
     private val gate = Semaphore(2)
+    private val apkGate = Semaphore(2)       // 11.0: значки APK не ждут миниатюры фото и видео (зависшее чтение видео держало оба места)
+    private val remoteGate = Semaphore(1)    // скачивание APK с телефона по ADB и из сети ради значка: по одному
     fun peek(key: String): Bitmap? = cache.get(key)
 
     suspend fun photo(path: String): Bitmap? = load("p:$path") {
@@ -260,19 +262,70 @@ object Thumbs {
      * Значок приложения из APK, без ADB и root. Файл, закрытый для обычного чтения (карта памяти под SAF), читается через выданный доступ:
      * копия во временную папку (до 400 МБ). Набор APKS/XAPK/APKM: значок из него или из основного APK. Не вышло: null, список покажет нейтральный значок.
      */
-    suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load(apkKey(path)) {
+    suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load(apkKey(path), apkGate) {
         val tmpDir = java.io.File(ctx.cacheDir, "apkicon").apply { mkdirs() }
         val copy = java.io.File(tmpDir, "c" + System.nanoTime().toString(36))
         try {
             var src = path
             if (!java.io.File(path).canRead() && SafAccess.needs(path) && SafAccess.covered(path)) {
-                if ((SafAccess.stat(path)?.size ?: Long.MAX_VALUE) > 400L * 1024 * 1024) return@load null
+                if ((SafAccess.stat(path)?.size ?: Long.MAX_VALUE) > 400L * 1024 * 1024) { AppLog.w("ApkIcon", "SAF: файл больше 400 МБ: $path"); return@load null }
                 SafAccess.openIn(path).use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
                 src = copy.path
             }
-            val ext = path.substringAfterLast('.', "").lowercase()
-            if (ext == "apk") iconOfApk(ctx, src) else iconOfBundle(ctx, src, tmpDir)
+            val r = iconOfFile(ctx, src, path.substringAfterLast('.', "").lowercase(), tmpDir)
+            if (r == null) AppLog.w("ApkIcon", "значок не получен: $path (читается=${java.io.File(path).canRead()}, SAF нужен=${SafAccess.needs(path)}, SAF выдан=${SafAccess.covered(path)}, размер=${java.io.File(src).length()})")
+            r
+        } catch (e: Throwable) {
+            AppLog.w("ApkIcon", "сбой чтения значка: $path: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
         } finally { copy.delete() }
+    }
+
+    private fun iconOfFile(ctx: Context, src: String, ext: String, tmpDir: java.io.File): Bitmap? =
+        if (ext == "apk") iconOfApk(ctx, src) else iconOfBundle(ctx, src, tmpDir)
+
+    /**
+     * 11.0: значок APK для источников без обычного пути файла (телефон по ADB, сеть, облако). Сначала дисковый кэш значков; если его нет и [allowFetch],
+     * файл (до 150 МБ) копируется во временный файл, значок вынимается и сохраняется в кэш (PNG), копия удаляется. Облако без кэша не качается
+     * (трафик и квота): [allowFetch] = false, значок остаётся обычным. Не вышло: null.
+     */
+    suspend fun apkIconRemote(ctx: Context, key: String, size: Long, ext: String, allowFetch: Boolean, fetch: suspend (java.io.File) -> Unit): Bitmap? {
+        val mk = "ar:$key"
+        cache.get(mk)?.let { return it }
+        val dir = java.io.File(ctx.cacheDir, "apkicons").apply { mkdirs() }
+        val png = java.io.File(dir, sha1(key) + ".png")
+        if (png.isFile) runCatching { BitmapFactory.decodeFile(png.path) }.getOrNull()?.let { cache.put(mk, it); return it }
+        if (!allowFetch || size <= 0L || size > 150L * 1024 * 1024) return null
+        if (synchronized(none) { none[mk]?.let { t -> System.currentTimeMillis() - t <= 20_000L } == true }) return null
+        val res = apkGate.withPermit {
+            remoteGate.withPermit {
+                cache.get(mk) ?: withContext(Dispatchers.IO) {
+                    val tmpDir = java.io.File(ctx.cacheDir, "apkicon").apply { mkdirs() }
+                    val copy = java.io.File(tmpDir, "r" + System.nanoTime().toString(36) + "." + ext)
+                    try {
+                        fetch(copy)
+                        val r = iconOfFile(ctx, copy.path, ext, tmpDir)
+                        if (r == null) AppLog.w("ApkIcon", "значок не получен из копии: $key (размер копии ${copy.length()})")
+                        else runCatching { png.outputStream().use { r.compress(Bitmap.CompressFormat.PNG, 90, it) }; prune(dir) }
+                        r
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e
+                    } catch (e: Throwable) {
+                        AppLog.w("ApkIcon", "сбой значка из удалённого файла: $key: ${e.javaClass.simpleName}: ${e.message}")
+                        null
+                    } finally { copy.delete() }
+                }
+            }
+        }
+        if (res != null) { cache.put(mk, res); synchronized(none) { none.remove(mk) } } else synchronized(none) { none[mk] = System.currentTimeMillis() }
+        return res
+    }
+
+    private fun sha1(s: String): String = java.security.MessageDigest.getInstance("SHA-1").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    /** Дисковый кэш значков не больше 400 файлов: лишние старые удаляются. */
+    private fun prune(dir: java.io.File) {
+        val all = dir.listFiles() ?: return
+        if (all.size > 400) all.sortedBy { it.lastModified() }.take(all.size - 400).forEach { it.delete() }
     }
 
     /** Значок действия приложения («пакет/класс»): как его показывает система в окне «Открыть с помощью». */
@@ -289,11 +342,11 @@ object Thumbs {
         Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also { b -> val c = android.graphics.Canvas(b); d.setBounds(0, 0, 96, 96); d.draw(c) }
     }
 
-    private suspend fun load(key: String, block: () -> Bitmap?): Bitmap? {
+    private suspend fun load(key: String, g: Semaphore = gate, block: () -> Bitmap?): Bitmap? {
         cache.get(key)?.let { return it }
-        if (synchronized(none) { key in none }) return null
-        return gate.withPermit {
-            cache.get(key) ?: withContext(Dispatchers.IO) { runCatching(block).getOrNull() }.also { b -> if (b != null) cache.put(key, b) else synchronized(none) { none.add(key) } }
+        if (synchronized(none) { none[key]?.let { t -> !((key.startsWith("a:") || key.startsWith("ar:")) && System.currentTimeMillis() - t > 20_000L) } == true }) return null
+        return g.withPermit {
+            cache.get(key) ?: withContext(Dispatchers.IO) { runCatching(block).getOrNull() }.also { b -> if (b != null) { cache.put(key, b); synchronized(none) { none.remove(key) } } else synchronized(none) { none[key] = System.currentTimeMillis() } }
         }
     }
 }
@@ -305,8 +358,11 @@ fun fmDate(s: String): String = Regex("""^(\d{4})-(\d{2})-(\d{2})(.*)$""").repla
  * Единый значок файла для списка, дерева и диалогов: цветной значок по типу; для фото и видео (локальные файлы) миниатюра; для APK значок самого
  * приложения; если для типа выбрано «открывать в другом приложении», значок этого приложения.
  */
+/** 11.0: APK на источнике без обычного пути (ADB, сеть, облако): ключ, размер и способ получить файл во временную копию. */
+class RemoteApk(val key: String, val size: Long, val allowFetch: Boolean, val fetch: suspend (java.io.File) -> Unit)
+
 @Composable
-fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifier: Modifier = Modifier) {
+fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifier: Modifier = Modifier, remote: RemoteApk? = null) {
     val customSpec = CustomIcons.specFor(ext, localPath, fileCat(ext))
     if (customSpec != null) { CustomIconView(customSpec, size, modifier); return }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -323,18 +379,24 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
         badge = Thumbs.peek(ref) ?: Thumbs.refIcon(ctx, ref)
         if (badge == null) ApkInstall.forget(ctx, ext)       // программу удалили: запоминание снимается, значок возвращается
     }
-    LaunchedEffect(localPath, other) {
+    LaunchedEffect(localPath, other, remote?.key) {
+        if (localPath == null && remote != null && other == null && cat == FCat.APK) {
+            bmp = Thumbs.peek("ar:" + remote.key) ?: run { delay(150); Thumbs.apkIconRemote(ctx, remote.key, remote.size, ext, remote.allowFetch, remote.fetch) }
+            return@LaunchedEffect
+        }
         if (other != null) {
             bmp = Thumbs.peek(other) ?: Thumbs.refIcon(ctx, other)
             if (bmp == null) ApkInstall.forget(ctx, ext)
             return@LaunchedEffect
         }
-        if (localPath == null || !UiPrefs.thumbs) return@LaunchedEffect
+        if (localPath == null || (!UiPrefs.thumbs && cat != FCat.APK)) return@LaunchedEffect   // 11.0: значок приложения у APK не зависит от «Миниатюр» (они для фото и видео)
         val key = when (cat) { FCat.PHOTO -> "p:$localPath"; FCat.VIDEO -> "v:$localPath"; FCat.APK -> Thumbs.apkKey(localPath); else -> null } ?: return@LaunchedEffect
         bmp = Thumbs.peek(key) ?: run {
             delay(120)       // при быстрой прокрутке строка успевает уйти с экрана до загрузки
             when (cat) { FCat.PHOTO -> Thumbs.photo(localPath); FCat.VIDEO -> Thumbs.video(localPath); else -> Thumbs.apkIcon(ctx, localPath) }
         }
+        // 11.0: значок APK с первого раза не вышел (файл ещё пишется, доступ только что выдан): одна повторная попытка
+        if (bmp == null && cat == FCat.APK) { delay(21_000); bmp = Thumbs.apkIcon(ctx, localPath) }
     }
     val shape = RoundedCornerShape(size * 0.2f)
     val b = bmp

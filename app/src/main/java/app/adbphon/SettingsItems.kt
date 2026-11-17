@@ -374,10 +374,19 @@ fun SetItem(key: String, vm: MainViewModel) {
             val scNames = listOf(R.string.sc_small, R.string.sc_normal, R.string.sc_large, R.string.sc_xlarge)
             val font = key == "font"
             Text(stringResource(if (font) R.string.sc_font else R.string.sc_ui), fontWeight = FontWeight.Medium)
-            EqChoices(AppScale.steps.mapIndexed { i, v ->
-                // 10.5: «Размер интерфейса»: средний пункт «Авто (по экрану)»: на автомагнитолах и планшетах с низкой плотностью интерфейс укрупняется сам; остальные пункты работают поверх
-                EqChoice(stringResource(if (!font && i == 1) R.string.sc_auto else scNames[i]), (if (font) AppScale.font else AppScale.ui) == v) { if (font) AppScale.setFont(ctx, v) else AppScale.setUi(ctx, v) }
+            EqChoices((if (font) AppScale.steps else AppScale.uiSteps).mapIndexed { i, v ->
+                // 11.0: «Размер интерфейса»: средний пункт «Авто (по экрану)»: на автомагнитолах и планшетах с низкой плотностью интерфейс укрупняется сам; остальные пункты работают поверх
+                EqChoice(stringResource(if (!font && i == 1) R.string.sc_auto else scNames[i]), (if (font) AppScale.font else AppScale.ui) == v) { if (font) AppScale.setFont(ctx, v) else { AppScale.setUi(ctx, v) } }
             }, perRow = 2)
+            if (!font) {
+                Text(stringResource(R.string.sc_total, "%.2f".format(AppScale.total())), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.OutlinedButton({ AppScale.setFine(ctx, AppScale.fine - 0.05f) }) { Text("−") }
+                    Text("%.2f".format(AppScale.fine), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    androidx.compose.material3.OutlinedButton({ AppScale.setFine(ctx, AppScale.fine + 0.05f) }) { Text("+") }
+                    androidx.compose.material3.OutlinedButton({ AppScale.resetUi(ctx) }) { Text("↺ " + stringResource(R.string.sc_default)) }
+                }
+            }
             if (!font && AppScale.autoF > 1.001f) Text(stringResource(R.string.sc_auto_now, "%.2f".format(AppScale.autoF)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         }
         "full" -> SettingSwitch(AppFull.on, { AppFull.set(ctx, it) }, stringResource(R.string.fs_title), stringResource(R.string.fs_hint))

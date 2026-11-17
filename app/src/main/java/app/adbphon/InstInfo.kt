@@ -177,7 +177,7 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
     val sizeText = sizeLabel(f.size)
     if (m == null) {
         Column(modifier) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides true) { Text(f.name, color = t.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Text(f.name, color = t.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(sizeText, color = t.hint, fontSize = 11.sp)
         }
         return
@@ -189,7 +189,7 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
     Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (m.icon != null) Image(m.icon, null, Modifier.size(40.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides true) { Text(m.label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Text(m.label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val parts = f.parts?.size
             Text(m.pkg + (if (parts != null) " · " + stringResource(R.string.ii_parts, parts) else "") + (if (!full) " · " + f.name else ""), color = t.hint, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(kindText, color = kindCol, fontSize = 12.sp, fontWeight = FontWeight.Bold)

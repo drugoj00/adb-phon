@@ -551,7 +551,7 @@ private class RR(
     val treeId: String? = null, val busy: Boolean = false, val appName: String? = null, val err: Boolean = false, val file: FmItem? = null, val side: String? = null,
     val pc: PcHost? = null, val adev: AdbDev? = null, val tnet: NetConn? = null, val titem: CloudTrash.TItem? = null, val subText: String? = null, val drive: Boolean = false, val selE: FmRootCfg.SelE? = null,
     val fitem: FmTrash.FItem? = null, val ftrash: Boolean = false, val retry: (() -> Unit)? = null, val wifi: Boolean = false, val tog: Boolean? = null, val lpath: String? = null, val gname: String? = null,
-    val dateRaw: String? = null, val cntKey: String? = null, val cntCls: FolderCounts.Cls? = null, val cntLoader: (suspend () -> Pair<Int, Int>?)? = null,
+    val dateRaw: String? = null, val cntKey: String? = null, val cntCls: FolderCounts.Cls? = null, val cntLoader: (suspend () -> Pair<Int, Int>?)? = null, val remoteApk: RemoteApk? = null,
 ) {
     /** Ветви дерева: для уровней 1..level true, если ниже есть ещё элемент того же уровня; lx: позиция вертикали уровня (dp). */
     var more: BooleanArray = BooleanArray(0)
@@ -661,7 +661,13 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             if (k.id.startsWith("Te|")) { rows += RR("t:" + k.id, k.name, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level); return@forEach }
             if (!k.isDir) {
                 val item = FmItem(k.name, false, k.size, "")
-                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null, act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
+                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null,
+                    // 11.0: значок APK и на телефоне по ADB, и в сети: временная копия (до 150 МБ), облако только из кэша значков
+                    remoteApk = if (!id.startsWith("L|") && k.size > 0 && item.ext in setOf("apk", "apks", "xapk", "apkm") && (c != null || id.startsWith("D|")))
+                        RemoteApk((if (c != null) "N|" + c.kind + "|" + c.host + "|" + c.user else "D") + "|" + k.path + "|" + k.size + "|" + k.date, k.size, c == null || c.kind != "cloud") { dest ->
+                            if (c != null) FmRootCfg.fsFor(c).copyTo(k.path, dest) else Adb.pull(k.path, dest)
+                        } else null,
+                    act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
             } else if (k.id.startsWith("Aitem|")) {
                 val key = k.id.split('|')[1]
                 rows += RR("t:" + k.id, k.name, Icons.Filled.Android, Color(0xFF9CCC65), level = level, appName = k.name, act = { Fm.openApps(p, key) })
@@ -1402,7 +1408,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
-            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderOrAppIcon(r.treeId.removePrefix("L|"), UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
+            if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderOrAppIcon(r.treeId.removePrefix("L|"), UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp, remote = r.remoteApk) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
@@ -1464,6 +1470,19 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 }
                 item(R.string.copy_name) { copyText(ctx, nm) }
                 if (!pth.isNullOrBlank()) item(R.string.fm_copy_path) { copyText(ctx, pth) }
+                // 11.0: «Свойства» есть у любой строки: имя, путь и сведения целиком (окно переносит текст)
+                item(R.string.fm_props) {
+                    val more = listOfNotNull(
+                        r.subText?.takeIf { it.isNotEmpty() },
+                        r.file?.let { fmSize(it.size) }?.takeIf { FmSub.mode != FmSub.NONE },
+                        r.dateRaw?.takeIf { FmSub.mode != FmSub.NONE }?.let { FmSub.date(ctx, it, false) },
+                    ).joinToString("  ·  ")
+                    Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), listOfNotNull(
+                        Fm.str(R.string.fm_name) + ": " + nm,
+                        pth?.takeIf { it.isNotBlank() }?.let { Fm.str(R.string.fm_path) + ": " + it },
+                        more.takeIf { it.isNotEmpty() }?.let { Fm.str(R.string.fm_size) + ": " + it },
+                    ).joinToString("\n"))
+                }
             }
             // своя иконка для любой строки корневого экрана (диски, места, подключения, облака)
             if (r.header == 0 && !r.err && !r.busy && r.key != "showhide" && !r.key.endsWith(":st") && !r.key.endsWith(":fix") && !r.key.endsWith(":empty") && !r.key.endsWith(":more") && r.key != "wifi:scan" && r.key != "wifi:none") item(R.string.ic_row) { iconPick = true }
