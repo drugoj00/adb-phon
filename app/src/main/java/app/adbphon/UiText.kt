@@ -1,6 +1,12 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package app.adbphon
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.mutableIntStateOf
+
 import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
@@ -67,7 +73,10 @@ import androidx.compose.ui.unit.sp
  */
 object Marq {
     /** Сколько строк бежит одновременно: на ТВ две, на телефоне (названия бегут сами у видимых строк) четыре. */
-    val MAX: Int get() = if (tv) 2 else 4
+    val MAX: Int get() = 1
+    /** Телефон: код единственной бегущей строки (по ней нажали), -1: ничего не бежит. */
+    var activeId by mutableIntStateOf(-1)
+    fun stop() { activeId = -1 }
     var mode by mutableStateOf(1)
     var tv = false
     var touching by mutableStateOf(false)
@@ -78,14 +87,12 @@ object Marq {
 
     fun init(ctx: Context) {
         // 7.5: два варианта, «Вкл» (бежит строка в фокусе/под мышью/выбранная) и «Выкл»; прежний режим 0 («для всех переполненных») стал «Вкл» (бывший «Только в фокусе»)
-        val saved = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getInt("marq_mode", 1)
-        mode = if (saved == 2) 2 else 1
-        if (saved == 0) ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putInt("marq_mode", 1).apply()
+        // 10.5: настройки «Прокрутка» больше нет: названия всегда переносятся, нижняя строка бежит, если не помещается; старое сохранённое значение игнорируется
+        mode = 1
         tv = runCatching { (ctx.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION }.getOrDefault(false) ||
             !ctx.packageManager.hasSystemFeature("android.hardware.touchscreen")
     }
 
-    fun setMode(ctx: Context, m: Int) { mode = m; running.clear(); ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putInt("marq_mode", m).apply() }
 
     fun request(id: Int, priority: Boolean) {
         if (id in running) return
@@ -122,39 +129,7 @@ fun Text(
     minLines: Int = 1,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
-) {
-    // 10.0 (tvfont): в окнах на ТВ мелкий размер поднимается до минимума роли (TvFont.kt); вне окон ТВ размер тот же
-    val fontSize = tvFontSize(fontSize, style)
-    val lineHeight = tvLineHeight(fontSize, lineHeight, style)
-    if (maxLines != 1 || Marq.effective == 2) {
-        androidx.compose.material3.Text(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, onTextLayout ?: {}, style)
-        return
-    }
-    val id = remember { Marq.nextId() }
-    var over by remember { mutableStateOf(false) }
-    val rowActive = LocalRowActive.current
-    val onlyActive = LocalMarqOnlyActive.current
-    // 10.2: на телефоне (касание) длинные названия строк «Файлов» бегут сами, пока строка видна на экране и список не прокручивается
-    val autoTouch = !Marq.tv && onlyActive
-    var vis by remember { mutableStateOf(!autoTouch) }
-    val want = over && !Marq.touching && (rowActive || (Marq.effective == 0 && !onlyActive) || (autoTouch && vis))
-    LaunchedEffect(want, rowActive) { if (want) Marq.request(id, rowActive) else Marq.release(id) }
-    val rootView = androidx.compose.ui.platform.LocalView.current
-    DisposableEffect(Unit) { onDispose { Marq.release(id) } }
-    val on = want && id in Marq.running
-    androidx.compose.material3.Text(
-        text,
-        modifier.then(if (autoTouch && over) Modifier.onGloballyPositioned { c ->
-            val b = c.boundsInWindow(); val v = c.isAttached && b.bottom > 0f && b.top < rootView.rootView.height
-            if (v != vis) vis = v
-        } else Modifier).liteMarquee(on),
-        color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight,
-        if (on) TextOverflow.Clip else if (overflow == TextOverflow.Clip) TextOverflow.Ellipsis else overflow,
-        if (on) false else softWrap, 1, 1,
-        { r -> if (!on && r.hasVisualOverflow != over) over = r.hasVisualOverflow; onTextLayout?.invoke(r) },
-        style,
-    )
-}
+) = Text(androidx.compose.ui.text.AnnotatedString(text), modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, onTextLayout, style)
 
 @Composable
 fun Text(
@@ -175,7 +150,47 @@ fun Text(
     minLines: Int = 1,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
-) = FloorText(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, emptyMap(), onTextLayout, style)
+) {
+    // 10.0 (tvfont): в окнах на ТВ мелкий размер поднимается до минимума роли (TvFont.kt); вне окон ТВ размер тот же
+    val fontSize = tvFontSize(fontSize, style)
+    val lineHeight = tvLineHeight(fontSize, lineHeight, style)
+    if (maxLines != 1 || Marq.effective == 2) {
+        androidx.compose.material3.Text(text, modifier, color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, minLines, emptyMap(), onTextLayout ?: {}, style)
+        return
+    }
+    val id = remember { Marq.nextId() }
+    var over by remember { mutableStateOf(false) }
+    val rowActive = LocalRowActive.current
+    val onlyActive = LocalMarqOnlyActive.current
+    // 10.5: никакого автобега. Телефон: бежит только одна строка, та, по которой нажали (повторное нажатие, нажатие на другую строку, прокрутка и уход из окна останавливают).
+    // ТВ: бежит одна строка под фокусом. Строка, которая помещается, ничего не запускает и нажатие отдаёт строке списка.
+    val want = if (Marq.tv) over && rowActive && !Marq.touching else over && Marq.activeId == id
+    LaunchedEffect(want) { if (Marq.tv) { if (want) Marq.request(id, true) else Marq.release(id) } }
+    DisposableEffect(Unit) { onDispose { Marq.release(id); if (Marq.activeId == id) Marq.activeId = -1 } }
+    val on = want && (!Marq.tv || id in Marq.running)
+    // нажатие по нижней (информационной) строке всегда её, строке списка не передаётся (ничего не раскрывает и не выбирает); бег запускается, если строка не помещается
+    val tapMod = if (!Marq.tv && onlyActive) Modifier.pointerInput(id) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val up = waitForUpOrCancellation()
+            if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
+                up.consume()
+                if (over) Marq.activeId = if (Marq.activeId == id) -1 else id
+            }
+        }
+    } else Modifier
+    androidx.compose.material3.Text(
+        text,
+        modifier.then(tapMod).liteMarquee(on),
+        color, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing, textDecoration, textAlign, lineHeight,
+        if (on) TextOverflow.Clip else if (overflow == TextOverflow.Clip) TextOverflow.Ellipsis else overflow,
+        if (on) false else softWrap, 1, 1,
+        emptyMap(),
+        { r -> if (!on && r.hasVisualOverflow != over) over = r.hasVisualOverflow; onTextLayout?.invoke(r) },
+        style,
+    )
+}
+
 
 // ------------------------------------------------------------------ сворачиваемые пояснения в настройках
 
@@ -248,15 +263,15 @@ fun Modifier.liteMarquee(on: Boolean): Modifier {
     if (!on) return this
     val st = remember { MarqState() }
     val offset = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { 30.dp.toPx() * 0.066f }
+    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { 30.dp.toPx() * 0.09f }
     LaunchedEffect(Unit) {
         while (true) {
             offset.floatValue = 0f
-            delay(1000)
+            delay(700)
             val max = (st.content - st.view).toFloat()
             if (max <= 0f) { delay(700); continue }
-            while (offset.floatValue < max) { offset.floatValue = minOf(max, offset.floatValue + stepPx); delay(66) }
-            delay(1500)
+            while (offset.floatValue < max) { offset.floatValue = minOf(max, offset.floatValue + stepPx); delay(90) }
+            delay(1200)
         }
     }
     return this.clipToBounds().layout { m, c ->

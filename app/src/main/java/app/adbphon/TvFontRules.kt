@@ -35,7 +35,19 @@ object TvFontRules {
     fun floorSp(role: Role, mult: Float): Float = role.minSp / min(if (mult > 0f) mult else 1f, 1f)
 
     /** Размер для окна на ТВ: заданный размер, поднятый до минимума своей роли. */
-    fun sizeSp(requestedSp: Float, mult: Float): Float {
+    fun sizeSp(requestedSp: Float, mult: Float, dialog: Boolean = false): Float {
+        if (dialog) {
+            // 10.5: всплывающие окна на ТВ крупнее: заголовок ~29 sp, текст ~24, подписи ~22, мелочь 18 (на экране, до множителя шрифта)
+            val m = if (mult > 0f) min(mult, 1f) else 1f
+            val want = when {
+                requestedSp.isNaN() -> 24f
+                requestedSp >= 20f -> 29f
+                requestedSp >= 14f -> 24f
+                requestedSp >= 11f -> 22f
+                else -> 18f
+            }
+            return if (requestedSp.isNaN()) want / m else max(requestedSp, want / m)
+        }
         val f = floorSp(roleOf(requestedSp), mult)
         return if (requestedSp.isNaN()) f else max(requestedSp, f)
     }
