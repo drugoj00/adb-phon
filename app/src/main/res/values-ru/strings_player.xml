@@ -30,4 +30,5 @@
     <string name="fm_sub_cre">Создано</string>
     <string name="fm_sub_none">Ничего</string>
     <string name="rt_counts_s">%1$d пап., %2$d файл.</string>
+    <string name="upd_whatsnew">Что нового</string>
 </resources>
