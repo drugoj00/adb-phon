@@ -18,7 +18,7 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 **Version 10.2.** [ADB-phon-10.2.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `c10e2f3af4a68e0d8d153f3bce7780b06050d7aba48b51f2b75005df0d391796`
+SHA-256: `1173161551f8f2f00919e18bffe0d2e7be7f2d669fb3b3404420f48feae11cb2`
 
 ## What's new in 10.2
 
