@@ -172,7 +172,7 @@ fun fileCat(ext: String): FCat = when (ext) {
     "ppt", "pptx", "odp" -> FCat.PPT
     "txt", "log", "md" -> FCat.TEXT
     "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "jar" -> FCat.ARCHIVE
-    "apk", "apks", "xapk" -> FCat.APK
+    "apk", "apks", "xapk", "apkm" -> FCat.APK
     "json", "xml", "html", "js", "css", "py", "sh", "java", "kt", "c", "cpp", "h", "conf", "ini", "yaml", "yml", "properties" -> FCat.CODE
     else -> FCat.OTHER
 }
@@ -217,14 +217,59 @@ object Thumbs {
         finally { runCatching { r.release() } }
     }
 
-    suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load("a:$path") {
-        val pm = ctx.packageManager
-        val info = pm.getPackageArchiveInfo(path, 0)?.applicationInfo
-        android.util.Log.i("ApkIcon", "path=$path exists=${java.io.File(path).canRead()} info=${info != null}")
-        if (info == null) return@load null
-        info.sourceDir = path; info.publicSourceDir = path
-        val d = info.loadIcon(pm)
+    /** Ключ значка APK: путь, размер и время файла (заменённый файл с тем же именем получает новый значок). */
+    fun apkKey(path: String): String {
+        val f = java.io.File(path)
+        return "a:$path:${f.length()}:${f.lastModified()}"
+    }
+
+    private fun drawBmp(d: android.graphics.drawable.Drawable): Bitmap =
         Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also { b -> val c = android.graphics.Canvas(b); d.setBounds(0, 0, 96, 96); d.draw(c) }
+
+    /** Значок самого приложения из APK (в том числе адаптивный). null: файл не читается или это не APK. */
+    private fun iconOfApk(ctx: Context, path: String): Bitmap? {
+        val pm = ctx.packageManager
+        val info = pm.getPackageArchiveInfo(path, 0)?.applicationInfo ?: return null
+        info.sourceDir = path; info.publicSourceDir = path
+        return drawBmp(info.loadIcon(pm))
+    }
+
+    /** APKS, XAPK, APKM: значок из «icon.png» набора или из основного APK внутри (его приходится вынуть во временный файл). */
+    private fun iconOfBundle(ctx: Context, path: String, tmpDir: java.io.File): Bitmap? {
+        java.util.zip.ZipFile(path).use { z ->
+            val all = z.entries().asSequence().filter { !it.isDirectory }.toList()
+            all.firstOrNull { it.name.equals("icon.png", true) }?.let { e ->
+                z.getInputStream(e).use { BitmapFactory.decodeStream(it) }?.let { return Bitmap.createScaledBitmap(it, 96, 96, true) }
+            }
+            val apks = all.filter { it.name.endsWith(".apk", true) }
+            val base = apks.firstOrNull { it.name.substringAfterLast('/').equals("base.apk", true) }
+                ?: apks.filter { n -> n.name.substringAfterLast('/').let { !it.startsWith("config.", true) && !it.startsWith("split_", true) } }.maxByOrNull { it.size }
+                ?: apks.maxByOrNull { it.size } ?: return null
+            val out = java.io.File(tmpDir, "b" + System.nanoTime().toString(36) + ".apk")
+            try {
+                z.getInputStream(base).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                return iconOfApk(ctx, out.path)
+            } finally { out.delete() }
+        }
+    }
+
+    /**
+     * Значок приложения из APK, без ADB и root. Файл, закрытый для обычного чтения (карта памяти под SAF), читается через выданный доступ:
+     * копия во временную папку (до 400 МБ). Набор APKS/XAPK/APKM: значок из него или из основного APK. Не вышло: null, список покажет нейтральный значок.
+     */
+    suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load(apkKey(path)) {
+        val tmpDir = java.io.File(ctx.cacheDir, "apkicon").apply { mkdirs() }
+        val copy = java.io.File(tmpDir, "c" + System.nanoTime().toString(36))
+        try {
+            var src = path
+            if (!java.io.File(path).canRead() && SafAccess.needs(path) && SafAccess.covered(path)) {
+                if ((SafAccess.stat(path)?.size ?: Long.MAX_VALUE) > 400L * 1024 * 1024) return@load null
+                SafAccess.openIn(path).use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
+                src = copy.path
+            }
+            val ext = path.substringAfterLast('.', "").lowercase()
+            if (ext == "apk") iconOfApk(ctx, src) else iconOfBundle(ctx, src, tmpDir)
+        } finally { copy.delete() }
     }
 
     /** Значок действия приложения («пакет/класс»): как его показывает система в окне «Открыть с помощью». */
@@ -266,7 +311,8 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
     // запомненный выбор программы для расширения: значок файла = значок этой программы (у фото и видео бейджем в углу поверх миниатюры)
     val ref = ApkInstall.iconRef(ctx, ext)
     val isMedia = cat == FCat.PHOTO || cat == FCat.VIDEO
-    val other = if (isMedia) null else ref
+    // APK и наборы (APKS, XAPK, APKM): значок самого приложения из файла, а не значок установщика («через ADB» и т.п.)
+    val other = if (isMedia || cat == FCat.APK) null else ref
     var bmp by remember(localPath, other) { mutableStateOf<Bitmap?>(null) }
     var badge by remember(ref, isMedia) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(ref, isMedia) {
@@ -281,7 +327,7 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
             return@LaunchedEffect
         }
         if (localPath == null || !UiPrefs.thumbs) return@LaunchedEffect
-        val key = when (cat) { FCat.PHOTO -> "p:$localPath"; FCat.VIDEO -> "v:$localPath"; FCat.APK -> "a:$localPath"; else -> null } ?: return@LaunchedEffect
+        val key = when (cat) { FCat.PHOTO -> "p:$localPath"; FCat.VIDEO -> "v:$localPath"; FCat.APK -> Thumbs.apkKey(localPath); else -> null } ?: return@LaunchedEffect
         bmp = Thumbs.peek(key) ?: run {
             delay(120)       // при быстрой прокрутке строка успевает уйти с экрана до загрузки
             when (cat) { FCat.PHOTO -> Thumbs.photo(localPath); FCat.VIDEO -> Thumbs.video(localPath); else -> Thumbs.apkIcon(ctx, localPath) }
