@@ -27,7 +27,7 @@ class InstallerChoiceTest {
 
     @Test fun savedButUnavailableShowsWindowAgain() {
         // запомнен ADB-phon тихо, а связи нет: окно с пометкой, фокус на первом доступном
-        assertEquals(Decision.Show(1, true), InstallerChoice.decide(noAdb, "adb"))
+        assertEquals(Decision.Auto("session"), InstallerChoice.decide(noAdb, "adb"))   // 10.2
         // системный не ставит пакеты из частей
         assertEquals(Decision.Show(1, true), InstallerChoice.decide(bundleNoAdb, "system"))
         // запомненную программу удалили: её нет в списке
