@@ -120,9 +120,12 @@ object UiPrefs {
 
     /** Узкий системный шрифт того же размера: в строку помещается больше текста. null: обычный. */
     val listFont: FontFamily? get() = if (narrow) CondFont else null
+    /** 10.5: жирное начертание узкого шрифта (семейство из готового шрифта не меняет толщину само). */
+    val listFontBold: FontFamily? get() = if (narrow) CondFontBold else null
 }
 
 val CondFont: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
+val CondFontBold: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.BOLD))
 
 /** Палитра папок: верх и низ градиента. Первая жёлтая (по умолчанию). */
 val FOLDER_COLORS = listOf(
@@ -581,7 +584,7 @@ private fun Modifier.androidx_scroll(): Modifier = this.then(Modifier.heightIn(m
 
 // ------------------------------------------------------------------ значки папок приложений (9.0)
 
-private val appFolderParent = Regex("^(/storage/emulated/\\d+|/sdcard|/storage/self/primary|/data/media/\\d+)/Android/(data|obb|media)$|^/data/(data|user/\\d+|user_de/\\d+)$")
+private val appFolderParent = Regex("^(/storage/emulated/\\d+|/sdcard|/storage/self/primary|/data/media/\\d+)/Android/(data|obb|media)$|^/storage/[^/]+/Android/(data|obb|media)$|^/data/(data|user/\\d+|user_de/\\d+)$")
 
 /** Имя пакета, если папка лежит в Android/data, obb, media или /data/data (имя папки совпадает с пакетом приложения), иначе null. */
 fun appFolderPkg(parentPath: String, name: String): String? =
@@ -595,10 +598,7 @@ fun AppFolderIcon(pkg: String, colorIdx: Int, open: Boolean, size: Dp, customKey
     LaunchedEffect(pkg) { if (bmp == null) bmp = Thumbs.appIcon(ctx, pkg) }
     val b = bmp
     if (b == null || (customKey != null && CustomIcons.spec(customKey) != null)) FolderIcon(colorIdx, open, size, modifier, customKey)
-    else Box(modifier.size(size)) {
-        Image(b.asImageBitmap(), null, Modifier.size(size * 0.84f).align(Alignment.TopStart).clip(RoundedCornerShape(size * 0.18f)))
-        FolderIcon(colorIdx, open, size * 0.5f, Modifier.align(Alignment.BottomEnd))
-    }
+    else Image(b.asImageBitmap(), null, modifier.size(size).clip(RoundedCornerShape(size * 0.2f)))   // 10.2 (58): значок самого приложения, без значка папки в углу
 }
 
 @Composable
@@ -620,9 +620,9 @@ fun PropsBody(body: String) {
             val at = r.indexOf(": ")
             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
                 if (at in 1..24) {
-                    FloorText(r.substring(0, at), Modifier.weight(0.44f).padding(end = 8.dp), color = keyColor, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 12.sp)
-                    FloorText(r.substring(at + 2), Modifier.weight(0.56f), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                } else FloorText(r, Modifier.fillMaxWidth(), fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    FloorText(r.substring(0, at), Modifier.weight(0.44f).padding(end = 8.dp), color = keyColor, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp)
+                    FloorText(r.substring(at + 2), Modifier.weight(0.56f), fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                } else FloorText(r, Modifier.fillMaxWidth(), fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
             }
             val nextBlank = i + 1 >= rows.size || rows[i + 1].isBlank()
             if (!nextBlank) androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = lineColor)
@@ -638,7 +638,7 @@ fun PropsBody(body: String) {
 @Composable
 fun PropsDialog(title: String, body: String, close: () -> Unit) {
     val land = isLandscapeUi()
-    val perCol = if (land) 4 else 6
+    val perCol = if (land) 3 else 4
     val perPage = if (land) perCol * 2 else perCol
     // каждый файл (блок до пустой строки) на своей странице; длинный блок делится по perPage строк
     val pages = remember(body, land) {
@@ -651,7 +651,7 @@ fun PropsDialog(title: String, body: String, close: () -> Unit) {
     LAlertDialog(
         wide = land,
         onDismissRequest = { if (page > 0) page-- else close() },
-        title = { Text(title + if (pages.size > 1) "  (" + (page + 1) + "/" + pages.size + ")" else "", maxLines = 2) },
+        title = { Text(title + if (pages.size > 1) "  (" + (page + 1) + "/" + pages.size + ")" else "", maxLines = 2, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         text = {
             val rows = pages[page.coerceIn(0, pages.lastIndex)]
             if (land) {

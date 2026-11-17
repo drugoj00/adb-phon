@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
  */
 
 /** Размер квадратика: телефон 26 dp, приставка 32 dp. */
-internal fun selBoxSize(tv: Boolean) = if (tv) 32.dp else 26.dp
+internal fun selBoxSize(tv: Boolean) = if (tv) 29.dp else 23.5.dp
 
 /** Квадратик отметки. [partial]: внутри папки отмечена только часть (полупрозрачная заливка и черта). */
 @Composable

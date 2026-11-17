@@ -119,7 +119,7 @@ object FmIo {
             val d = File(path)
             // съёмный том: ADB/root первыми; без них, если файловое чтение закрыто, список берётся из выданного дерева (или просится доступ)
             val onVol = SafPaths.parse(path) != null && !adbActive()
-            val first = if (onVol && SafAccess.isForced()) null else if (d.exists()) d.listFiles() else null
+            val first = if (onVol && SafAccess.isForced() && SafAccess.covered(path)) null else if (d.exists()) d.listFiles() else null
             if (onVol && first == null) {
                 if (!SafAccess.covered(path)) throw SafAccess.NeedGrant()
                 return@withContext SafAccess.list(path)

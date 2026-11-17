@@ -229,7 +229,7 @@ fun FilesScreen(vm: MainViewModel) {
                     ) {
                         if (f.isDir) FolderIcon(UiPrefs.folderDefault, false, 28.dp) else FileTypeIcon(f.name, f.name.substringAfterLast('.', "").lowercase(), null, 28.dp)
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            MqText(f.name, active = false, names = true)
                             Text(if (f.isDir) fmDate(f.date) else humanSize(f.size) + " · " + fmDate(f.date), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                         }
                     }

@@ -81,6 +81,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1365,7 +1366,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                     }
                 }
             }
-            .background(if (selected) prim.copy(alpha = .22f) else if (chkOn && e0 != null) prim.copy(alpha = .12f) else Color.Transparent, RoundedCornerShape(8.dp))
+            .background(if (selected) prim.copy(alpha = .22f) else if (chkOn && e0 != null) prim.copy(alpha = .12f) else if (r.level >= 1 && r.header == 0) Color(0xFF3F8FD2).copy(alpha = (0.08f + 0.05f * (r.level - 1)).coerceAtMost(0.28f)) else Color.Transparent, RoundedCornerShape(8.dp))
             .drawBehind { if (selected) drawRect(prim, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height)) }
             .then(if (focused) Modifier.border((if (tv) 3 else 2).dp, prim, RoundedCornerShape(8.dp)) else Modifier)
             .mouseSecondary { Fm.active = p.id; p.rootSel = r.key; menu = true }   // 10.0 (mouse): правая кнопка = меню строки, как долгое нажатие
@@ -1381,7 +1382,23 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
             if (r.expandKey != null) Icon(if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
-            else if (r.treeId != null && FmRootCfg.treeOn) Icon(if (r.treeId in p.rootOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(if (tv) 30.dp else 20.dp).clickable { rowToggle(r.treeId) }.padding(if (tv) 4.dp else 1.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f))
+            else if (r.treeId != null && FmRootCfg.treeOn) {
+                // 10.2 (58, как в X-plore): синий треугольник только у папок, в которых что-то есть
+                val open = r.treeId in p.rootOpen
+                val empty = !open && cntNow != null && cntNow.first + cntNow.second == 0
+                if (empty) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))
+                else Box(Modifier.size(if (tv) 30.dp else 20.dp).clickable { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.Canvas(Modifier.size(if (tv) 16.dp else 12.dp)) {
+                        val c = Color(0xFF1E88E5)
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            if (open) { moveTo(0f, size.height * .2f); lineTo(size.width, size.height * .2f); lineTo(size.width / 2, size.height * .9f) }
+                            else { moveTo(size.width * .15f, 0f); lineTo(size.width * .15f, size.height); lineTo(size.width, size.height / 2) }
+                            close()
+                        }
+                        drawPath(path, c)
+                    }
+                }
+            }
             else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
@@ -1389,7 +1406,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (r.err) Text(r.title, Modifier.weight(1f), fontSize = (13f * bigFont).sp, fontWeight = FontWeight.Normal, maxLines = 9, softWrap = true, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.error)
-                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont, names = true)
+                    else MqText(r.title, active = rowActive, modifier = Modifier.weight(1f), fontSize = ((if (r.level > 0) 14f else 15f) * bigFont).sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, names = true)
                     r.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } }?.let { NetDot(it) } }
                 }
                 // у томов первым свободное место (то, что нужно видеть), затем файловая система, счётчики папок и файлов в конце
@@ -1416,6 +1433,12 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             if (r.level == 0) r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
             if (chkClick != null) Box(Modifier.width(if (tv) 40.dp else 32.dp), contentAlignment = Alignment.CenterEnd) { SelBox(chkOn, chkPart, tv) }
         }
+        // 10.2 (58, как в X-plore): у папок и файлов телефона слева незаметная точка: нажатие открывает свойства, строка не выделяется
+        if (e0 != null && e0.net == null && e0.path.startsWith("/") && r.header == 0) Box(
+            Modifier.align(Alignment.CenterStart).offset(x = (-(8 + r.level * TREE_IND)).dp).size(16.dp, 32.dp)
+                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { Fm.active = p.id; Fm.propsPath(e0.path) },
+            contentAlignment = Alignment.Center,
+        ) { Box(Modifier.size(5.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
         if (chkClick != null) SelZone(tv, chkFr, rowFr, stringResource(if (chkOn) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.rootSel = r.key; menu = true }) { chkClick() }
         if (iconPick) CustomIconPicker(r.title, "d:" + r.key) { iconPick = false }
         LDropdownMenu(menu, { menu = false }) {

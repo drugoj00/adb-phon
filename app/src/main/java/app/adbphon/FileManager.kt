@@ -194,6 +194,10 @@ class FmPane(val id: Int, start: String) {
     var selected by mutableStateOf<Set<String>>(emptySet())
     var menuFor by mutableStateOf<String?>(null)
     var scrollToName by mutableStateOf<String?>(null)
+    /** 10.2 (58): место прокрутки списка (папка, первая видимая строка, сдвиг): возвращается при смене вкладок и повороте. */
+    @Volatile var scrollPath = ""
+    @Volatile var scrollIdx = 0
+    @Volatile var scrollOff = 0
     /** Облако или сеть, которые не удалось пересканировать при запуске (или ещё сканируются): панель показывает сохранённое место и подпись «не подключено», долгое нажатие даёт «Переподключиться». */
     var parked by mutableStateOf<FmParked?>(null)
     var parkedErr by mutableStateOf<String?>(null)
@@ -313,6 +317,8 @@ data class FmVol(val path: String, val label: String, val id: String?, val total
 object Fm {
     val panes = listOf(FmPane(0, "/sdcard"), FmPane(1, "/sdcard/Download"))
     var active by mutableStateOf(0)
+    /** 10.2 (58): когда экран «Файлы» показан последний раз; в первые полсекунды фокус, пришедший сам, не меняет активное окно. */
+    @Volatile var screenShownAt = 0L
     /** Счётчик изменений сортировки и дочитанных тегов: по нему списки пересортировываются. */
     var sortTick by mutableStateOf(0)
     var showHidden by mutableStateOf(false)
@@ -463,6 +469,9 @@ object Fm {
         inited = true
         panes.forEach { it.sortCfg = SortStore.loadGlobal(it.id) }
         showHidden = prefs().getBoolean("hidden", false)
+        // 10.2 (58): активное окно (левое или правое) помнится и после перезапуска программы
+        active = prefs().getInt("active_pane", 0).coerceIn(0, 1)
+        scope.launch { androidx.compose.runtime.snapshotFlow { active }.collect { a -> prefs().edit().putInt("active_pane", a).apply() } }
         dirTapExpand = prefs().getString("dir_tap", "expand") != "open"
         FmRootCfg.load(ctx)
         FmDel.init(ctx)
@@ -1326,6 +1335,12 @@ object Fm {
         return null
     }
 
+    /** Свойства по полному пути на телефоне (строки «домика»). */
+    fun propsPath(path: String) = scope.launch {
+        val lp = FmPane(-8, "/sdcard")
+        dlg = FmDlg.Props(str(R.string.fm_props_title), runCatching { FmIo.props(lp, path) }.getOrElse { FmIo.nice(it) })
+    }
+
     fun props(p: FmPane, names: List<String>) = scope.launch {
         val sb = StringBuilder()
         for (n in names.take(5)) {
@@ -1807,8 +1822,8 @@ fun iconFor(it: FmItem): ImageVector = if (it.isDir) Icons.Filled.Folder else wh
 object FmMetrics {
     val OUTER_PAD = 2.dp          // отступ раскладки от краёв окна
     val STRIP_END = 6.dp          // дополнительный отступ колонки от правого края (кнопки не лезут под жесты)
-    val STRIP_W = 46.dp           // ширина колонки (10.11.2026: было 52, кнопки уже; значок и подпись внутри не менялись)
-    val BTN_W = 44.dp             // ширина квадратной кнопки (прижата к левому краю колонки; было 50)
+    val STRIP_W = 54.dp           // ширина колонки (10.11.2026: было 52, кнопки уже; значок и подпись внутри не менялись)
+    val BTN_W = 52.dp             // ширина квадратной кнопки (прижата к левому краю колонки; было 50)
     /** Расстояние от правого края окна до оси кнопок правой колонки. */
     val stripCenterFromRight get() = OUTER_PAD + STRIP_END + (STRIP_W - BTN_W) + BTN_W / 2
 }
@@ -1824,6 +1839,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
     // 6.0: стоит старый модуль облаков (1.0), есть новый (1.1, меньше места): один раз за запуск предлагаем обновить обычной установкой (окно системы подтверждает установку)
     // 7.6: вопрос об обновлении модуля и само обновление теперь в корне экрана (ModuleHost), при запуске программы на любой вкладке
     Fm.sctx = ctx
+    remember { Fm.screenShownAt = System.currentTimeMillis(); 0 }
     // на Android 6-10 доступ просится обычным системным окном
     val legacy = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { Fm.recheck(ctx) }
     Fm.askLegacy = { legacy.launch(arrayOf("android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE")) }
@@ -1917,7 +1933,7 @@ object FmButtons {
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
     /** 9.3: размер кнопок боковой колонки телефона в ландшафте: 0 малые (44), 1 обычные (56, по умолчанию), 2 крупные (68). */
     var sideSize by mutableStateOf(1)
-    fun sideDp(): Int = when (sideSize) { 0 -> 44; 2 -> 68; else -> 56 }
+    fun sideDp(): Int = when (sideSize) { 0 -> 48; 2 -> 74; else -> 62 }
     fun setSideSize(ctx: Context, v: Int) { sideSize = v.coerceIn(0, 2); sp(ctx).edit().putInt("side_size", sideSize).apply() }
     fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet(); sideSize = sp(ctx).getInt("side_size", 1).coerceIn(0, 2); loadOrder(ctx) }
     fun key(ctx: Context, label: Int): String {
@@ -2111,7 +2127,7 @@ fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSiz
            color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, fontFamily: FontFamily? = null, wrap: Boolean = false, names: Boolean = false) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRowActive provides (active || LocalRowActive.current), LocalMarqOnlyActive provides true) {
         // wrap: перенос на несколько строк строками списков больше не используется (7.5: при «Вкл» одна строка и бегущая строка, при «Выкл» одна строка с многоточием)
-        Text(text, modifier, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else if (names && !Marq.tv && Marq.effective == 2) 2 else 1, overflow = TextOverflow.Ellipsis)
+        Text(text, if (names || wrap || Marq.tv) modifier else modifier.heightIn(min = 28.dp), fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, color = color, fontFamily = fontFamily, maxLines = if (wrap) 4 else if (names) (if (Marq.tv) 2 else 3) else 1, overflow = TextOverflow.Ellipsis)   // 10.5: название всегда переносится (до 3 строк, на ТВ до 2); бежит только нижняя строка по настройке «Прокрутка»
     }
 }
 
@@ -2140,7 +2156,7 @@ private fun FmSideColumn(actions: List<FmAction>, modifier: Modifier) {
             modifier = Modifier.fillMaxWidth())
         Column(Modifier.weight(1f).fillMaxWidth().tabScroll(rememberSavedScroll("files.side")), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val ks = actions.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }
-            actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmButtons.sideDp().dp, (FmButtons.sideDp() * 0.48f).dp, (FmButtons.sideDp() * 0.2f).sp, reorderKeys = ks) } }
+            actions.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmButtons.sideDp().dp, (FmButtons.sideDp() * 0.44f).dp, (FmButtons.sideDp() * 0.17f).sp, reorderKeys = ks) } }
         }
     }
 }
@@ -2204,9 +2220,10 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
         val dens = androidx.compose.ui.platform.LocalDensity.current
         val availPx = with(dens) { (size - (if (Marq.tv) 12.dp else 8.dp)).toPx() }
         val words = txt.split(' ').filter { it.isNotEmpty() }
-        var fs = label.value
-        val minFs = label.value * (if (Marq.tv) 0.3f else 0.5f)
-        while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), androidx.compose.material3.LocalTextStyle.current.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx * (if (Marq.tv) 0.8f else 1f) }) fs -= 0.25f
+        // 10.2 (58): подпись одного физического размера на всех экранах и при любом масштабе шрифта (как при масштабе 1,3: на A14 она «нормальная»)
+        var fs = label.value * 1.3f / dens.fontScale
+        val minFs = fs * (if (Marq.tv) 0.3f else 0.78f)
+        while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), androidx.compose.material3.LocalTextStyle.current.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx * (if (Marq.tv) 0.8f else 0.9f) }) fs -= 0.25f
         val lblSize = fs.sp
         Text(txt, Modifier.fillMaxWidth(), fontSize = lblSize, lineHeight = lblSize * 1.12f, maxLines = 2, overflow = TextOverflow.Clip, fontFamily = CondFont,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
@@ -2264,7 +2281,7 @@ private fun FmChip(text: String, click: () -> Unit) {
 private fun FmStrip(actions: List<FmAction>, modifier: Modifier) {
     Column(modifier.tabScroll(rememberSavedScroll("files.strip")), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
-        actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.let { vis -> val ks = vis.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; vis.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmMetrics.BTN_W, 21.dp, 7.5.sp, reorderKeys = ks) } } }
+        actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }.let { vis -> val ks = vis.map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; vis.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { FmSquareButton(a, FmMetrics.BTN_W, 21.dp, 8.1.sp, reorderKeys = ks) } } }
     }
 }
 
@@ -2289,7 +2306,13 @@ internal fun HintArrow(sizeDp: Int, modifier: Modifier = Modifier) {
 private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, volsRow: Boolean = true) {
     val active = Fm.active == p.id
     val prim = MaterialTheme.colorScheme.primary
-    val state = rememberLazyListState()
+    val sameSpot = p.scrollPath == p.path
+    val state = rememberLazyListState(if (sameSpot) p.scrollIdx else 0, if (sameSpot) p.scrollOff else 0)
+    LaunchedEffect(state) {
+        androidx.compose.runtime.snapshotFlow { Triple(p.path, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }.collect { (pa, i, o) ->
+            if (pa != p.scrollPath) { p.scrollPath = pa; p.scrollIdx = 0; p.scrollOff = 0 } else { p.scrollIdx = i; p.scrollOff = o }
+        }
+    }
     // место (источник, папка, вид, элемент с фокусом) запоминается через полсекунды после каждого заметного изменения: не только при выходе
     val saveCtx = LocalContext.current
     LaunchedEffect(p.id) {
@@ -2382,7 +2405,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, swipe: Boolean = false, vo
         modifier.clip(RoundedCornerShape(10.dp)).border(if (active) 2.dp else 1.dp,
             if (active) prim else MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(10.dp))
             .pointerInput(p.id) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); Fm.active = p.id } }
-            .onFocusChanged { if (it.hasFocus) Fm.active = p.id },
+            .onFocusChanged { if (it.hasFocus && System.currentTimeMillis() - Fm.screenShownAt > 700L) Fm.active = p.id },
     ) {
         val landPhone = rememberLandPhone()
         FmCrumbs(p, landPhone)
@@ -2470,7 +2493,7 @@ private fun FmParkedBody(p: FmPane, pk: FmParked, modifier: Modifier) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NetBrandIcon(pk.conn, if (Marq.tv) 36.dp else 28.dp)
-                Text(pk.conn.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFont, maxLines = 1)
+                Text(pk.conn.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, maxLines = 1)
             }
             if (pk.path.isNotBlank()) Text(pk.path, fontSize = 12.sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
             if (pk.name.isNotBlank()) Text(pk.name, fontSize = 12.sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), maxLines = 1)
@@ -2665,6 +2688,16 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     val part = f.isDir && !sel && SelTree.partial(p.selected, selKey)
     val rowFr = remember { FocusRequester() }
     val chkFr = remember { FocusRequester() }
+    val sctx = androidx.compose.ui.platform.LocalContext.current
+    // 10.2: у папки «N папок, N файлов»: дата сразу, цифры в фоне (FolderCounts), для архивов только дата
+    val cKey = if (f.isDir && FmSub.mode != FmSub.NONE && p.net?.kind != "cloud" && !(p.src == "smb" && p.smb is ArchiveFs)) "P|" + p.src + "|" + (p.net?.let { it.kind + "|" + it.host + "|" + it.user } ?: "") + "|" + full + "|" + f.date else null
+    var cntNow = cKey?.let { FolderCounts.peek(it) }
+    if (cKey != null && cntNow == null) { @Suppress("UNUSED_VARIABLE") val tick = FolderCounts.ver; cntNow = FolderCounts.peek(cKey) }
+    if (cKey != null) LaunchedEffect(cKey, cntNow == null) {
+        if (!FolderCounts.has(cKey)) FolderCounts.load(sctx, cKey, if (p.src == "local") FolderCounts.LOCAL else FolderCounts.clsOf(p.net ?: NetConn("smb", "", 0, "", "")), false) {
+            val l = FmIo.list(p, full); l.count { it.isDir && it.name != FmTrash.DIR } to l.count { !it.isDir }
+        }
+    }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -2676,11 +2709,11 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
         Row(
             Modifier.fillMaxWidth()
                 .then(if (f.hidden) Modifier.graphicsLayer { alpha = 0.6f } else Modifier).heightIn(min = if (tvRow) 54.dp else if (dense) 0.dp else 46.dp)
-                .background(if (sel) prim.copy(alpha = .20f) else if (hovered) prim.copy(alpha = .08f) else androidx.compose.ui.graphics.Color.Transparent)
+                .background(if (sel) prim.copy(alpha = .20f) else if (hovered) prim.copy(alpha = .08f) else if (treeOn && depth > 0) androidx.compose.ui.graphics.Color(0xFF3F8FD2).copy(alpha = (0.08f + 0.05f * (depth - 1)).coerceAtMost(0.28f)) else androidx.compose.ui.graphics.Color.Transparent)
                 .hoverable(hover)
                 .then(if (treeOn && depth > 0) Modifier.drawBehind {
                     // вертикальные линии ветвей и «колено» к значку папки
-                    val ind = 22.dp.toPx(); val x0 = 8.dp.toPx(); val w = 1.2.dp.toPx(); val mid = size.height / 2
+                    val ind = 22.dp.toPx(); val x0 = 24.dp.toPx(); val w = 1.2.dp.toPx(); val mid = size.height / 2
                     val last = node!!.last
                     for (k in 0 until depth) {
                         val cx = x0 + k * ind + ind / 2
@@ -2748,10 +2781,24 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 .padding(start = 8.dp, end = if (dense) 0.dp else 2.dp, top = if (tvRow) 4.dp else if (dense) 0.dp else 4.dp, bottom = if (tvRow) 4.dp else if (dense) 0.dp else 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // 10.2 (58, как в X-plore): слева от папок и файлов маленькая точка: нажатие открывает свойства, строка не выделяется
+            Box(Modifier.size(16.dp, 32.dp).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { Fm.active = p.id; Fm.props(p, listOf(selKey)) }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(5.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape))
+            }
             if (treeOn) {
                 Spacer(Modifier.width((TREE_IND * depth).dp))
-                if (f.isDir) androidx.compose.material3.IconButton({ Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, Modifier.size(22.dp)) {
-                    Icon(if (isOpen) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+                // синий треугольник только у папок, в которых что-то есть (пустым стрелки нет)
+                val nonEmpty = cntNow == null || cntNow.first + cntNow.second > 0
+                if (f.isDir && nonEmpty) androidx.compose.material3.IconButton({ Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, Modifier.size(22.dp)) {
+                    androidx.compose.foundation.Canvas(Modifier.size(12.dp)) {
+                        val c = androidx.compose.ui.graphics.Color(0xFF1E88E5)
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            if (isOpen) { moveTo(0f, size.height * .2f); lineTo(size.width, size.height * .2f); lineTo(size.width / 2, size.height * .9f) }
+                            else { moveTo(size.width * .15f, 0f); lineTo(size.width * .15f, size.height); lineTo(size.width, size.height / 2) }
+                            close()
+                        }
+                        drawPath(path, c)
+                    }
                 } else Spacer(Modifier.width(22.dp))
             }
             // «Плотно»: размеры как у строки в «Софте» (значок 32, шрифты 15/17 и 11/13, без вертикальных отступов)
@@ -2762,21 +2809,11 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                     Modifier, customKey = "f:" + key)
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
-                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = if (dense) FontWeight.Medium else FontWeight.Normal, fontFamily = UiPrefs.listFont, names = true)
+                MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, names = true)
                 val narrowSub = !tvRow && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420
-                val sctx = androidx.compose.ui.platform.LocalContext.current
-                // 10.2: у папки «N папок, N файлов»: дата сразу, цифры в фоне (FolderCounts), для архивов только дата
-                val cKey = if (f.isDir && FmSub.mode != FmSub.NONE && p.net?.kind != "cloud" && !(p.src == "smb" && p.smb is ArchiveFs)) "P|" + p.src + "|" + (p.net?.let { it.kind + "|" + it.host + "|" + it.user } ?: "") + "|" + full + "|" + f.date else null
-                var cntNow = cKey?.let { FolderCounts.peek(it) }
-                if (cKey != null && cntNow == null) { @Suppress("UNUSED_VARIABLE") val tick = FolderCounts.ver; cntNow = FolderCounts.peek(cKey) }
-                if (cKey != null) LaunchedEffect(cKey, cntNow == null) {
-                    if (!FolderCounts.has(cKey)) FolderCounts.load(sctx, cKey, if (p.src == "local") FolderCounts.LOCAL else FolderCounts.clsOf(p.net ?: NetConn("smb", "", 0, "", "")), false) {
-                        val l = FmIo.list(p, full); l.count { it.isDir && it.name != FmTrash.DIR } to l.count { !it.isDir }
-                    }
-                }
                 val cntTxt = cntNow?.let { stringResource(if (narrowSub) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second) }
                 val sub = (if (f.isDir) FmSub.fileLine(sctx, f.date, cntTxt, narrowSub) else FmSub.fileLine(sctx, f.date, if (Fm.showSize) fmSize(f.size) else null, narrowSub)) ?: ""
-                if (sub.isNotEmpty()) Text(sub, fontFamily = UiPrefs.listFont, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                if (sub.isNotEmpty()) MqText(sub, active = hovered || pressed || focused || sel, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), fontFamily = UiPrefs.listFont)
             }
             // 10.0 (fm1): квадратик крупнее (26 dp, приставка 32), нажимается вся правая часть строки (SelZone)
             Box(Modifier.padding(start = 4.dp, end = 4.dp)) { SelBox(sel, part, tvRow) }
