@@ -31,4 +31,22 @@
     <string name="fm_sub_none">None</string>
     <string name="rt_counts_s">%1$d dirs, %2$d files</string>
     <string name="upd_whatsnew">What’s new</string>
+    <string name="saf_not_granted">Memory card access was not granted</string>
+    <string name="saf_waiting">Waiting for memory card access…</string>
+    <string name="saf_need_title">Access to the memory card %1$s is needed</string>
+    <string name="saf_need_text">The system lets files on a memory card be changed only after the card is chosen once. The access is remembered for this card.</string>
+    <string name="saf_how">How to grant access</string>
+    <string name="saf_hint">In the next window choose the memory card and tap “Use this folder”</string>
+    <string name="saf_pick">Choose</string>
+    <string name="saf_pick_again">Choose again</string>
+    <string name="saf_err_not_root">Not the whole card %1$s was chosen (a folder inside it or another storage). Choose the card itself: open its root and tap “Use this folder”.</string>
+    <string name="saf_err_fail">The system did not keep the access. The choice can be repeated.</string>
+    <string name="saf_err_nopicker">This device has no system folder picker.</string>
+    <string name="set_saf_title">Memory card access</string>
+    <string name="set_saf_hint">Cards and drives given access through the system. It lets files on them be changed without ADB or root.</string>
+    <string name="saf_none">No removable storage</string>
+    <string name="saf_state_on">Access granted</string>
+    <string name="saf_state_off">Access not granted</string>
+    <string name="saf_forget">Forget access</string>
+    <string name="saf_grant">Grant access</string>
 </resources>
