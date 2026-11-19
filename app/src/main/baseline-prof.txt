@@ -1,0 +1,23 @@
+# 19.11.2026: профиль собственного кода для холодного запуска и первой прокрутки списков «Файлов» (без профиля код интерпретируется, пока JIT не прогреется)
+HSPLapp/adbphon/MainActivity**;->**(**)**
+HSPLapp/adbphon/MainViewModel**;->**(**)**
+HSPLapp/adbphon/Fm**;->**(**)**
+HSPLapp/adbphon/FileManager**;->**(**)**
+HSPLapp/adbphon/FileUi**;->**(**)**
+HSPLapp/adbphon/FileTypeIcon**;->**(**)**
+HSPLapp/adbphon/FolderCounts**;->**(**)**
+HSPLapp/adbphon/Sort**;->**(**)**
+HSPLapp/adbphon/UiPrefs**;->**(**)**
+HSPLapp/adbphon/Marq**;->**(**)**
+HSPLapp/adbphon/Thumbs**;->**(**)**
+HSPLapp/adbphon/CustomIcons**;->**(**)**
+HSPLapp/adbphon/BarStyle**;->**(**)**
+HSPLapp/adbphon/UiAnim**;->**(**)**
+HSPLapp/adbphon/ComposableSingletons**;->**(**)**
+Lapp/adbphon/MainActivity**;
+Lapp/adbphon/Fm**;
+Lapp/adbphon/FileManager**;
+Lapp/adbphon/FileUi**;
+Lapp/adbphon/Sort**;
+Lapp/adbphon/FolderCounts**;
+Lapp/adbphon/ComposableSingletons**;
