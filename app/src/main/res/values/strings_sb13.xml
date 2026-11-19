@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sb_more_hint">Hold a button and drag it to another place: the order is saved.</string>
+    <string name="sb_on_panel">On the panel</string>
+    <string name="sb_more_below">Under “More”</string>
+    <string name="sb_reset_order">Reset button order</string>
+</resources>

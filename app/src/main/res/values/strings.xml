@@ -548,6 +548,8 @@
     <string name="fm_extract_other">Extract to other panel</string>
     <string name="fm_extracting">Extracting</string>
     <string name="fm_found">Found: %1$d</string>
+    <string name="fm_search_busy">Searching in: %1$s…</string>
+    <string name="fm_search_in">Searched in: %1$s (with subfolders)</string>
     <string name="fm_free_of">%1$s free of %2$s</string>
     <string name="fm_hidden">Hidden</string>
     <string name="fm_hist_empty">History is empty</string>
@@ -570,6 +572,7 @@
     <string name="fm_packing">Packing</string>
     <string name="fm_pane_left">Left</string>
     <string name="fm_pane_right">Right</string>
+    <string name="fm_switch_pane">Switch pane</string>
     <string name="fm_path">Path</string>
     <string name="fm_props">Properties</string>
     <string name="fm_props_title">Properties</string>
@@ -627,6 +630,7 @@
     <string name="fm_smb_pass">Password</string>
     <string name="fm_connect">Connect</string>
     <string name="fm_priv_opt">Use root/ADB for restricted folders</string>
+    <string name="fm_tree_one">Keep only one folder expanded</string>
     <string name="fm_connecting">Connecting...</string>
     <string name="fm_fix_wifi_text">Wireless debugging is off.</string>
     <string name="fm_fix_wifi_btn">Turn on debugging over Wi-Fi</string>
@@ -954,7 +958,7 @@
     <string name="rt_group_storage">Storage</string>
     <string name="rt_group_net">Network</string>
     <string name="rt_free">Free %1$s of %2$s</string>
-    <string name="rt_counts">%1$d folders, %2$d files</string>
+    <string name="rt_counts">%1$d folders, %2$d files</string>
     <string name="rt_ro">read only</string>
     <string name="rt_showhide">Show / hide</string>
     <string name="rt_add_net">Add connection…</string>
@@ -1358,6 +1362,13 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="cm_need">Cloud module needed</string>
     <string name="cm_need_update">Cloud module needs an update</string>
     <string name="cm_tap_install">Tap to download and install</string>
+    <string name="cm_tap_update">Tap to download and update</string>
+    <string name="cm_recheck_title">Cloud module is ready</string>
+    <string name="cm_tap_recheck">Tap to reload the list</string>
+    <string name="cm_reason">Installed %1$s (code %2$d, protocol %3$d); protocol %4$d is needed</string>
+    <string name="cm_progress">%1$s of %2$s MB · %3$d%% · %4$s MB/s · %5$s left</string>
+    <string name="cm_wifi_hint">About %1$d MB: Wi-Fi is recommended</string>
+    <string name="cm_resuming">Connection lost, resuming…</string>
     <string name="okw_progress">Step %1$d of %2$d</string>
     <string name="okw_g1">Create a project: the name ADB-phon is copied.</string>
     <string name="okw_g2">Press “Enable” for the Google Drive API.</string>

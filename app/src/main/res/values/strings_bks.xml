@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bks_hint">Settings, devices, connections and clouds together with connection passwords: one file. No APKs, no cloud module.</string>
+    <string name="bks_protect">Protect with a password</string>
+    <string name="bks_protect_sub">Optional. The file is encrypted with the password (AES-256)</string>
+    <string name="bks_plain_note">Without a password the file stores connection passwords as plain text: keep it somewhere safe.</string>
+    <string name="bks_pick">Choose location</string>
+    <string name="bks_saving">Saving…</string>
+    <string name="bks_not_ours">This is not an ADB-phon settings backup. App backups are restored on the “Apps” tab.</string>
+</resources>

@@ -22,7 +22,7 @@
     <string name="bk3_priv_none">App data needs root or ADB (wireless debugging): connect in the Link tab. Settings and APKs are copied without them.</string>
     <string name="bk3_enc">Encrypt with password</string>
     <string name="bk3_enc_sub">AES-256. The password is remembered for next backups and the auto backup</string>
-    <string name="bk3_plain_warn">Without a password, connection passwords and the ADB key are readable in the file</string>
+    <string name="bk3_plain_warn">Without a password, passwords, cloud tokens and the ADB key are NOT saved in the file. Set a password to keep them</string>
     <string name="bk3_folder">Backup folder</string>
     <string name="bk3_err_nothing">Tick what to include in the backup</string>
     <string name="bk3_err_no_apps">Choose apps in the list</string>

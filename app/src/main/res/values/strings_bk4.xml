@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bk4_est">Copy size: about %1$s (settings %2$s, icons %3$s, connections and cloud keys %4$s)</string>
+    <string name="bk4_skipped">Not included as too large: %s</string>
+    <string name="bkp_sys_pick">Choose with the Android window…</string>
+    <string name="bkp_sys_pick_file">Choose a file with the Android window…</string>
+    <string name="bkp_sys_pick_sub">The usual system picker: memory, SD card, USB</string>
+    <string name="bkp_saf_unsupported">The Android window did not give a normal folder for this place. Choose memory, an SD card or USB, or use the list below.</string>
+    <string name="bk4_mod_hint">Cloud disks will connect by themselves after the cloud module is installed: tap “Download cloud module”.</string>
+    <string name="bk4_mod_progress">Cloud module: downloading %1$d%%</string>
+    <string name="bk4_mod_get">Download cloud module</string>
+    <string name="bk4_auto_nosecrets">Passwords and tokens were not saved: no backup password is set. Set it in Settings, Backup.</string>
+</resources>

@@ -24,6 +24,10 @@
     <string name="set_vp_keep_hint">On: the mode chosen with the “Fit to screen” button is remembered and used for the next videos and launches. Off: every video opens as “fit”, and the button works only while that video plays.</string>
     <string name="intake_label">ADB-phon: install</string>
     <string name="intake_fail">Could not read the file to install</string>
+    <string name="integrity_short">The app authenticity check failed</string>
+    <string name="integrity_title">Download the app from the official source</string>
+    <string name="integrity_text">This copy of ADB-phon does not look like the developer’s release. ADB connection, installs and updates are limited in it so that you are not harmed. Download the app from the releases page.</string>
+    <string name="integrity_open">Open the download page</string>
     <string name="ic_need_title">Access needed</string>
     <string name="ic_need_perm">Allow ADB-phon to install apps: the system will then confirm the install. Or connect ADB (Wi-Fi debugging) in ADB-phon settings, then the install runs without confirmations.</string>
     <string name="ic_open_perm">Allow installs</string>
@@ -33,7 +37,7 @@
     <string name="fm_sub_mod">Modified</string>
     <string name="fm_sub_cre">Created</string>
     <string name="fm_sub_none">None</string>
-    <string name="rt_counts_s">%1$d dirs, %2$d files</string>
+    <string name="rt_counts_s">%1$d dirs, %2$d files</string>
     <string name="upd_whatsnew">What’s new</string>
     <string name="saf_not_granted">Memory card access was not granted</string>
     <string name="saf_waiting">Waiting for memory card access…</string>

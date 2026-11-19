@@ -13,6 +13,7 @@
     <string name="bkp_wrong_pass">Wrong password. The file is not changed, try again.</string>
     <string name="bkp_create">Create</string>
     <string name="bkp_working">Working…</string>
+    <string name="bkp_pass_checking">Checking…</string>
     <string name="bkp_saved">Saved: %1$s, %2$s</string>
     <string name="bkp_sum">Inside: %1$d settings, %2$d connections, %3$d clouds, %4$d devices</string>
     <string name="bkp_enc_settings_yes">The file is encrypted with the password (AES-256)</string>
