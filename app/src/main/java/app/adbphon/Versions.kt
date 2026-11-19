@@ -284,7 +284,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
 
     wipeAsk?.let { (wf, wc) ->
         HDialog(onDismissRequest = { wipeAsk = null }) {
-            Column(Modifier.clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.ver_nodown), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.ver_wipe_warn), color = t.sub, fontSize = 14.sp)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -299,7 +299,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
     }
     HDialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
+            Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.88f).clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HintTitle(stringResource(R.string.pver_title, label), stringResource(R.string.pver_hint), titleColor = t.text, titleSize = 18.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
@@ -375,7 +375,7 @@ fun BackupsDialog(onClose: () -> Unit) {
     open?.let { VersionsDialog(it.first, it.second) { open = null; tick++ } }
     HDialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxWidth(0.8f).fillMaxHeight(0.85f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
+            Modifier.fillMaxWidth(0.8f).fillMaxHeight(0.85f).clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(stringResource(R.string.backups_title), color = t.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)

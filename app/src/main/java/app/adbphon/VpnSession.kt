@@ -372,6 +372,9 @@ object SysVpn {
         return null
     }
 
+    /** 14.0: настройка VPN ждёт службу (только тогда [step] что-то делает; окно для него читать не нужно, пока это false). */
+    fun waiting(): Boolean = wanted && !done
+
     /** Вызывается службой спецвозможностей на каждое событие и раз в секунду. */
     fun step(svc: AccessibilityService, root: AccessibilityNodeInfo?) {
         if (!wanted || done || root == null) return

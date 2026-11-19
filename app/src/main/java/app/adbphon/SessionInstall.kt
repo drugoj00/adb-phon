@@ -22,6 +22,7 @@ object SessionInstall {
 
     suspend fun install(ctx: Context, parts: List<File>): Result {
         if (parts.isEmpty()) return Result(-2, "no files")
+        if (!Integrity.safe(ctx)) return Result(-2, "integrity")
         val app = ctx.applicationContext
         val pi = app.packageManager.packageInstaller
         val id = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))

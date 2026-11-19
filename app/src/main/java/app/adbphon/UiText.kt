@@ -183,7 +183,7 @@ fun ActionWithHint(label: String, hint: String, onClick: () -> Unit) {
     var open by rememberCollapseOpen(label)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.OutlinedButton(onClick, Modifier.weight(1f)) { FloorText(label) }
+            OutlinedButton(onClick, Modifier.weight(1f)) { FloorText(label) }
             androidx.compose.material3.IconButton({ open = !open }) {
                 Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }

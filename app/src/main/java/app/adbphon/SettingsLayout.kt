@@ -76,7 +76,7 @@ fun SettingsGrouped(vm: MainViewModel) {
     // set2: нейтральные служебные цвета (переключатели, ползунки, рамки) вместо сиреневых по умолчанию Material
     val cs0 = MaterialTheme.colorScheme
     val cs = remember(cs0, AppColors.dynamic) { setNeutralScheme(cs0) }
-    MaterialTheme(colorScheme = cs, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) { SettingsGroupedBody(vm) }
+    MaterialTheme(colorScheme = cs, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) { SettingsGroupedBody(vm); BkSimpleHost() }
 }
 
 @Composable
@@ -120,6 +120,7 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
                     Column(Modifier.weight(1f).fillMaxHeight().onFocusChanged { inContent = it.hasFocus; if (it.hasFocus) SettingsMemory.zone = 1 }) {
                         SetSearchField(query, Modifier.align(Alignment.CenterHorizontally).widthIn(max = SET_MAX_W + 24.dp).fillMaxWidth()
                             .padding(start = 12.dp, end = 12.dp + 10.dp, top = 8.dp)) { query = it }
+                        if (query.isBlank()) Column(Modifier.align(Alignment.CenterHorizontally).widthIn(max = SET_MAX_W + 24.dp).fillMaxWidth().padding(start = 12.dp, end = 12.dp + 10.dp, top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { SetBackupQuick() }
                         if (query.isNotBlank()) {
                             TabColumn("tab.settings.search", Modifier.weight(1f).fillMaxWidth(), 12.dp) { SetCentered { SetResults(results, titles, query, jump) } }
                         } else key(sel) {
@@ -136,11 +137,16 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
             val firstRun = remember { booleanArrayOf(true) }   // при входе не сбивать запомненную прокрутку
             LaunchedEffect(group) {
                 if (firstRun[0]) { firstRun[0] = false; return@LaunchedEffect }
-                if (group.isNotEmpty()) { delay(200); runCatching { bring.getValue(group).bringIntoView() } }
+                // 12.0 (владелица: «любое раскрываемое место — название вверх окна», как в дереве файлов): не просто «сделать видимым»
+                // (bringIntoView() могла почти не сдвинуть прокрутку, если заголовок уже хоть немного виден), а подтянуть заголовок
+                // группы к самому верху списка — запрашиваем область намного выше самой группы, тогда скролл встаёт так, что
+                // видна именно верхняя кромка запроса (заголовок), а не произвольная точка внутри него
+                if (group.isNotEmpty()) { delay(200); runCatching { bring.getValue(group).bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, 100000f)) } }
             }
             TabColumn("tab.settings", Modifier.fillMaxSize(), 12.dp) {
                 SetCentered(8.dp) {
                     SetSearchField(query, Modifier.fillMaxWidth()) { query = it }
+                    if (query.isBlank()) SetBackupQuick()   // 19.11.2026: «Создать копию» и «Восстановить из копии» всегда на виду
                     if (query.isNotBlank()) SetResults(results, titles, query, jump)
                     else SetGroups.ORDER.forEach { g ->
                         SetGroupHead(g, open = g == group, Modifier.bringIntoViewRequester(bring.getValue(g))) { group = if (group == g) "" else g }

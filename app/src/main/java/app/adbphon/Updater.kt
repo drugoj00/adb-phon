@@ -8,7 +8,7 @@ import java.net.URL
 
 /** Версии самой программы: список выпусков на GitHub и загрузка выбранной версии. */
 object Updater {
-    private const val RELEASES = "https://api.github.com/repos/drugoj00/adb-phon/releases?per_page=30"
+    private val RELEASES: String get() = Sx.RELEASES
 
     data class Release(val tag: String, val title: String, val date: String, val url: String, val size: Long, val body: String = "") {
         /** versionCode из строки «versionCode: N» в описании выпуска (0: строки нет). Нужен, когда имя версии то же, а сборка новее (замена файла выпуска). */
@@ -101,6 +101,7 @@ object Updater {
 
     /** Скачивает APK выпуска в папку версий приложения и возвращает файл. */
     fun download(ctx: Context, r: Release): File {
+        if (!Integrity.safe(ctx)) throw IllegalStateException("integrity")
         val dest = File(VersionKeeper.dir(ctx), "ADB-phon-github-${r.tag.replace(Regex("[^A-Za-z0-9._-]"), "_")}.apk")
         val part = File(dest.path + ".part")
         val c = URL(r.url).openConnection() as HttpURLConnection

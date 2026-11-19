@@ -30,8 +30,10 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.em
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,7 +64,6 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -229,8 +230,6 @@ private fun SetHeroButtons(vm: MainViewModel) {
     var about by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SetAction(Icons.Filled.SystemUpdate, stringResource(R.string.set2_hero_upd), stringResource(R.string.set_h_upd, vm.appVersion), big = true) { vm.checkUpdate(true) }
-        SetAction(Icons.Filled.Backup, stringResource(R.string.set2_hero_bk), stringResource(R.string.set2_hero_bk_h), big = true) { SetHero.ask(SetHero.MAKE); jump("backup") }
-        SetAction(Icons.Filled.Restore, stringResource(R.string.set2_hero_restore), stringResource(R.string.set2_hero_restore_h), big = true) { SetHero.ask(SetHero.RESTORE); jump("backup") }
         SetAction(Icons.Filled.Info, stringResource(R.string.set2_hero_about), stringResource(R.string.set2_hero_about_h), big = true) { about = true }
     }
     if (about) LAlertDialog(
@@ -285,6 +284,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "colors" to listOf(R.string.col_dynamic, R.string.col_accent),
     "bars" to listOf(R.string.bar_contrast, R.string.bar_color),
     "tapguard" to listOf(R.string.tg_title),
+    "anim" to listOf(R.string.anim_title),
     "dir_tap" to listOf(R.string.set_dir_tap),
     "folder_color" to listOf(R.string.set_folder_color),
     "type_icons" to listOf(R.string.ic_types),
@@ -380,11 +380,12 @@ fun SetItem(key: String, vm: MainViewModel) {
             }, perRow = 2)
             if (!font) {
                 Text(stringResource(R.string.sc_total, "%.2f".format(AppScale.total())), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.OutlinedButton({ AppScale.setFine(ctx, AppScale.fine - 0.05f) }) { Text("−") }
+                // 14.0: «−», «+» и «По умолчанию» одной высоты, даже если подпись последней переносится (EqBtnRow, Btn.kt)
+                EqBtnRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton({ AppScale.setFine(ctx, AppScale.fine - 0.05f) }, Modifier.fillMaxHeight()) { Text("−") }
                     Text("%.2f".format(AppScale.fine), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    androidx.compose.material3.OutlinedButton({ AppScale.setFine(ctx, AppScale.fine + 0.05f) }) { Text("+") }
-                    androidx.compose.material3.OutlinedButton({ AppScale.resetUi(ctx) }) { Text("↺ " + stringResource(R.string.sc_default)) }
+                    OutlinedButton({ AppScale.setFine(ctx, AppScale.fine + 0.05f) }, Modifier.fillMaxHeight()) { Text("+") }
+                    OutlinedButton({ AppScale.resetUi(ctx) }, Modifier.weight(1f, fill = false).fillMaxHeight()) { Text("↺ " + stringResource(R.string.sc_default), fontSize = 12.sp, textAlign = TextAlign.Center) }   // без maxLines: подпись не обрезается на узком экране и в uk
                 }
             }
             if (!font && AppScale.autoF > 1.001f) Text(stringResource(R.string.sc_auto_now, "%.2f".format(AppScale.autoF)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
@@ -404,6 +405,7 @@ fun SetItem(key: String, vm: MainViewModel) {
         }
         "bars" -> BarContrastSetting()
         "tapguard" -> SettingSwitch(TapGuard.on, { TapGuard.set(ctx, it) }, stringResource(R.string.tg_title), stringResource(R.string.tg_hint))
+        "anim" -> SettingSwitch(UiAnim.on, { UiAnim.set(ctx, it) }, stringResource(R.string.anim_title), stringResource(R.string.anim_hint))
 
         // ---- Файлы
         "dir_tap" -> FilesDirTapSetting()
@@ -443,6 +445,7 @@ fun SetItem(key: String, vm: MainViewModel) {
         "side_btns" -> {
             var btnDlg by remember { mutableStateOf(false) }
             SetAction(Icons.Filled.Tune, stringResource(R.string.sb_title)) { btnDlg = true }
+            SetAction(Icons.Filled.Restore, stringResource(R.string.sb_reset_order)) { FmButtons.load(ctx); FmButtons.resetOrder(ctx) }   // 13.0: порядок кнопок меняется перетаскиванием в самой панели; здесь только сброс
             if (btnDlg) FmButtonsDialog { btnDlg = false }
         }
         "call_pics" -> CallPicSettings()

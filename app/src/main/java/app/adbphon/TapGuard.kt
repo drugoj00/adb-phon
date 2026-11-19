@@ -99,3 +99,22 @@ object TapGuard {
 fun TapGuardOff() {
     DisposableEffect(Unit) { TapGuard.suspended++; onDispose { TapGuard.suspended-- } }
 }
+
+/**
+ * 18.11.2026 (владелица): «раз у проги принудительная анимация [переходов, независимая от системного масштаба], то нужен
+ * выключатель, по умолчанию вкл» — общий переключатель на все анимации переходов, добавленные в этой правке: переключение панелей
+ * «Файлов», смена главных вкладок, раскрытие папки в дереве. Выключен — переход мгновенный (без анимации вообще), не просто быстрый.
+ */
+object UiAnim {
+    var on by mutableStateOf(true)
+        private set
+
+    fun init(ctx: Context) {
+        on = ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("ui_anim", true)
+    }
+
+    fun set(ctx: Context, v: Boolean) {
+        on = v
+        ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("ui_anim", v).apply()
+    }
+}
