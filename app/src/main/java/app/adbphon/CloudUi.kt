@@ -11,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,9 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -273,13 +272,13 @@ private fun CloudWaitBody(ctx: android.content.Context) {
             var askOverlay by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(!PermFlow.overlayOk(ctx) && !PermFlow.needOverlay(ctx)) }
             if (askOverlay) {
                 Text(stringResource(R.string.cl_overlay_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
+                EqBtnRow(horizontalArrangement = gap) {   // 14.0: кнопки одной высоты при переносе подписи (Btn.kt)
                     OutlinedButton({ sp.edit().putBoolean("cloud_overlay_asked", true).apply(); askOverlay = false
                         runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:" + ctx.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } },
-                        Modifier.weight(1f), contentPadding = pad) { Text(stringResource(R.string.cl_overlay_btn), fontSize = 12.sp, maxLines = 2) }
+                        Modifier.weight(1f).fillMaxHeight(), contentPadding = pad) { Text(stringResource(R.string.cl_overlay_btn), fontSize = 12.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                     OutlinedButton({ sp.edit().putBoolean("cloud_overlay_asked", true).apply(); askOverlay = false
                         runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } },
-                        Modifier.weight(1f), contentPadding = pad) { Text(stringResource(R.string.cl_notif_btn), fontSize = 12.sp, maxLines = 2) }
+                        Modifier.weight(1f).fillMaxHeight(), contentPadding = pad) { Text(stringResource(R.string.cl_notif_btn), fontSize = 12.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                     TextButton({ sp.edit().putBoolean("cloud_overlay_asked", true).apply(); askOverlay = false }) { Text(stringResource(R.string.cl_overlay_later), fontSize = 12.sp) }
                 }
             }

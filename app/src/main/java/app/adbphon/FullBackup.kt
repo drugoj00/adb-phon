@@ -366,8 +366,8 @@ fun FullBackupsDialog(onClose: () -> Unit) {
             title = { Text(stringResource(R.string.fbk_restore_title, c.label)) },
             text = { Text(stringResource(R.string.fbk_restore_warn, c.time) + if (c.user != 0) "\n" + stringResource(R.string.bk3_into_user, c.user) else "", fontSize = bkMainSp()) },
             // 10.0 (bk3): данные возвращаются тому пользователю, у которого сняты (второе пространство не перезапишет основное)
-            confirmButton = { androidx.compose.material3.TextButton({ confirmRestore = null; run { FullBackup.restore(ctx, c, c.user) { status = it } } }) { Text(stringResource(R.string.btn_yes)) } },
-            dismissButton = { androidx.compose.material3.TextButton({ confirmRestore = null }) { Text(stringResource(R.string.btn_cancel)) } },
+            confirmButton = { TextButton({ confirmRestore = null; run { FullBackup.restore(ctx, c, c.user) { status = it } } }) { Text(stringResource(R.string.btn_yes)) } },
+            dismissButton = { TextButton({ confirmRestore = null }) { Text(stringResource(R.string.btn_cancel)) } },
         )
     }
     confirmDelete?.let { c ->
@@ -375,14 +375,14 @@ fun FullBackupsDialog(onClose: () -> Unit) {
             onDismissRequest = { confirmDelete = null },
             title = { Text(stringResource(R.string.fbk_delete)) },
             text = { Text(stringResource(R.string.bk3_delete_q, c.label.ifEmpty { c.pkg }, c.time), fontSize = bkMainSp()) },
-            confirmButton = { androidx.compose.material3.TextButton({ confirmDelete = null; run { FullBackup.delete(c); ctx.getString(R.string.fbk_deleted) } }) { Text(stringResource(R.string.fbk_delete)) } },
-            dismissButton = { androidx.compose.material3.TextButton({ confirmDelete = null }) { Text(stringResource(R.string.btn_cancel)) } },
+            confirmButton = { TextButton({ confirmDelete = null; run { FullBackup.delete(c); ctx.getString(R.string.fbk_deleted) } }) { Text(stringResource(R.string.fbk_delete)) } },
+            dismissButton = { TextButton({ confirmDelete = null }) { Text(stringResource(R.string.btn_cancel)) } },
         )
     }
 
     HDialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).clip(RoundedCornerShape(24.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(24.dp)).padding(22.dp),
+            Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HintTitle(stringResource(R.string.bk3_old_title), stringResource(R.string.bk3_old_hint), titleColor = t.text, titleSize = 18.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)

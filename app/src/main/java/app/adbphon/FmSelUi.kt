@@ -119,27 +119,5 @@ internal fun FitText(text: androidx.compose.ui.text.AnnotatedString, max: Float,
     }
 }
 
-/**
- * Шапка колонки кнопок на приставке (между окнами): «Левая · Правая» (активная жирнее), «Объектов: N», «Выбрано: M».
- * 10.0 (fm1): не масштабируется настройками «Размер шрифта» и «Размер элементов» (как при «Обычный»), текст 18 sp и мельче только если иначе не влезет.
- */
-@Composable
-internal fun FmTvHead(p: FmPane) {
-    val pc = MaterialTheme.colorScheme.primary
-    val left = androidx.compose.ui.res.stringResource(R.string.fm_pane_left)
-    val right = androidx.compose.ui.res.stringResource(R.string.fm_pane_right)
-    val nSel = if (p.root) FmRootCfg.sel.size else SelTree.count(p.selected)
-    val cnt = androidx.compose.ui.res.stringResource(R.string.fm_count_n, Fm.shown(p).size)
-    val selT = androidx.compose.ui.res.stringResource(R.string.fm_count_sel, nSel)
-    NoAppScale {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val head = androidx.compose.ui.text.buildAnnotatedString {
-                fun part(t: String, on: Boolean) { pushStyle(androidx.compose.ui.text.SpanStyle(color = if (on) pc else pc.copy(alpha = .55f), fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)); append(t); pop() }
-                part(left, Fm.active == 0); append(" · "); part(right, Fm.active == 1)
-            }
-            FitText(head, 18f, 10f, pc.copy(alpha = .55f), modifier = Modifier.fillMaxWidth())
-            FitText(androidx.compose.ui.text.AnnotatedString(cnt), 18f, 10f, pc, FontWeight.Medium, Modifier.fillMaxWidth())
-            FitText(androidx.compose.ui.text.AnnotatedString(selT), 18f, 10f, pc, FontWeight.Medium, Modifier.fillMaxWidth())
-        }
-    }
-}
+// 12.0: шапка «Левая · Правая / Объектов / Выбрано» (FmTvHead) убрана — на приставке вместо неё крупная кнопка FmSwitchPaneButton
+// (FileManager.kt), которая и переключает активную панель, и не нуждается в текстовых подписях.

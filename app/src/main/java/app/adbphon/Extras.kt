@@ -314,7 +314,7 @@ fun RemoteScreen(vm: MainViewModel) {
                 var icMenu by remember { mutableStateOf(false) }   // 10.0: «Изменить значок…» по долгому нажатию (MiscUi.kt)
                 SegmentedButton(
                     selected = mode == i, onClick = { mode = i },
-                    shape = SegmentedButtonDefaults.itemShape(i, labels.size),
+                    shape = SegmentedButtonDefaults.itemShape(i, labels.size, AppUi.BTN_SHAPE),   // 14.0: малое скругление краёв вместо овала (Btn.kt)
                     modifier = Modifier.miscLongPress { icMenu = true },
                     icon = { MiscIconGlyph(MiscIconKeys.remote(i), 14.dp, androidx.compose.material3.LocalContentColor.current) },
                 ) { Text(stringResource(l), fontSize = 10.sp, maxLines = 1, softWrap = false); MiscIconMenu(icMenu, { icMenu = false }, stringResource(l), MiscIconKeys.remote(i)) }
@@ -707,7 +707,7 @@ private fun AirControls(vm: MainViewModel, cursor: androidx.compose.runtime.Muta
         )
         Box(
             Modifier.weight(1f).height(52.dp)
-                .background(if (active) Color(0xFF6D28D9) else Color(0xFFFF9800), RoundedCornerShape(26.dp))
+                .background(if (active) Color(0xFF6D28D9) else Color(0xFFFF9800), AppUi.BTN_SHAPE)   // 14.0: было овал 26dp
                 .pointerInput(Unit) {
                     // палец забираем себе целиком: иначе прокрутка страницы «перехватывает» касание и кнопка отпускается сама
                     awaitEachGesture {
@@ -1106,7 +1106,7 @@ fun BarContrastSetting() {
     val barThemeFr = remember { androidx.compose.ui.focus.FocusRequester() }
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         HintTitle(stringResource(R.string.bar_color), stringResource(R.string.bar_color_hint), Modifier.weight(1f))
-        androidx.compose.material3.TextButton({ BarStyle.setColor(ctx, BarStyle.THEME) }, Modifier.focusRequester(barThemeFr), enabled = BarStyle.colorIdx != BarStyle.THEME) { Text(stringResource(R.string.bar_color_theme)) }
+        TextButton({ BarStyle.setColor(ctx, BarStyle.THEME) }, Modifier.focusRequester(barThemeFr), enabled = BarStyle.colorIdx != BarStyle.THEME) { Text(stringResource(R.string.bar_color_theme)) }
     }
     var hv by remember { mutableStateOf(BarStyle.hue) }
     HueBarNum(hv, BarStyle.colorIdx == BarStyle.CUSTOM, { hv = it; BarStyle.hue = it; if (BarStyle.colorIdx != BarStyle.CUSTOM) BarStyle.colorIdx = BarStyle.CUSTOM }, { BarStyle.setColor(ctx, BarStyle.CUSTOM); BarStyle.setHue(ctx, hv) }, stringResource(R.string.bar_color), themeBtn = barThemeFr, themeBtnEnabled = BarStyle.colorIdx != BarStyle.THEME)

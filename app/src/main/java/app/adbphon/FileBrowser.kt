@@ -149,7 +149,7 @@ fun FileBrowser(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
 
     HDialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
+            Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (kind == "smb" && smb == null) HintTitle(stringResource(R.string.fb_title), stringResource(R.string.fb_net_hint), titleColor = t.text, titleSize = 17.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)
@@ -246,7 +246,7 @@ fun UploadDialog(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
     }
     HDialog(onDismissRequest = onClose) {
         Column(
-            Modifier.clip(RoundedCornerShape(20.dp)).background(t.tile).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(20.dp).fillMaxWidth(),
+            Modifier.clip(RoundedCornerShape(16.dp)).background(t.tile).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(20.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(stringResource(R.string.wifi_title), color = t.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)

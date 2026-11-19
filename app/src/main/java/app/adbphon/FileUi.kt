@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -140,25 +141,28 @@ val FOLDER_COLOR_NAMES = listOf(R.string.fc_yellow, R.string.fc_orange, R.string
 fun FolderIcon(colorIdx: Int, open: Boolean, size: Dp, modifier: Modifier = Modifier, customKey: String? = null) {
     if (customKey != null) { val cs = CustomIcons.spec(customKey); if (cs != null) { CustomIconView(cs, size, modifier); return } }
     val (top, bot) = FOLDER_COLORS[colorIdx.coerceIn(0, FOLDER_COLORS.size - 1)]
-    Canvas(modifier.size(size)) {
+    // 14.0: контуры и градиенты строятся один раз на размер (drawWithCache), а не на каждый кадр и каждую строку списка (на слабой приставке значки папок съедали заметную часть отрисовки)
+    androidx.compose.foundation.layout.Spacer(modifier.size(size).drawWithCache {
         val w = this.size.width; val h = this.size.height
         val r = CornerRadius(w * 0.09f)
-        // тень
-        drawRoundRect(Color.Black.copy(alpha = 0.18f), Offset(w * 0.05f, h * 0.30f), Size(w * 0.92f, h * 0.66f), r)
-        // задняя стенка с закладкой
+        val shadow = Color.Black.copy(alpha = 0.18f)
         val back = Path().apply {
             moveTo(w * 0.04f, h * 0.20f); lineTo(w * 0.36f, h * 0.20f); lineTo(w * 0.45f, h * 0.31f); lineTo(w * 0.96f, h * 0.31f); lineTo(w * 0.96f, h * 0.86f); lineTo(w * 0.04f, h * 0.86f); close()
         }
-        drawPath(back, Brush.verticalGradient(listOf(bot, bot.copy(alpha = 0.9f)), 0f, h))
-        // передняя стенка
-        if (open) {
-            val front = Path().apply { moveTo(w * 0.14f, h * 0.42f); lineTo(w * 1.0f, h * 0.42f); lineTo(w * 0.86f, h * 0.88f); lineTo(w * 0.0f, h * 0.88f); close() }
-            drawPath(front, Brush.verticalGradient(listOf(top, bot), h * 0.42f, h * 0.88f))
-        } else {
-            drawRoundRect(Brush.verticalGradient(listOf(top, bot), h * 0.38f, h * 0.88f), Offset(0f, h * 0.38f), Size(w, h * 0.50f), r)
-            drawRoundRect(Color.White.copy(alpha = 0.28f), Offset(w * 0.04f, h * 0.40f), Size(w * 0.92f, h * 0.05f), CornerRadius(w * 0.02f))
+        val backBrush = Brush.verticalGradient(listOf(bot, bot.copy(alpha = 0.9f)), 0f, h)
+        val front = if (open) Path().apply { moveTo(w * 0.14f, h * 0.42f); lineTo(w * 1.0f, h * 0.42f); lineTo(w * 0.86f, h * 0.88f); lineTo(w * 0.0f, h * 0.88f); close() } else null
+        val frontBrush = if (open) Brush.verticalGradient(listOf(top, bot), h * 0.42f, h * 0.88f) else Brush.verticalGradient(listOf(top, bot), h * 0.38f, h * 0.88f)
+        val shine = Color.White.copy(alpha = 0.28f)
+        onDrawBehind {
+            drawRoundRect(shadow, Offset(w * 0.05f, h * 0.30f), Size(w * 0.92f, h * 0.66f), r)
+            drawPath(back, backBrush)
+            if (front != null) drawPath(front, frontBrush)
+            else {
+                drawRoundRect(frontBrush, Offset(0f, h * 0.38f), Size(w, h * 0.50f), r)
+                drawRoundRect(shine, Offset(w * 0.04f, h * 0.40f), Size(w * 0.92f, h * 0.05f), CornerRadius(w * 0.02f))
+            }
         }
-    }
+    })
 }
 
 // ------------------------------------------------------------------ значки файлов
@@ -399,21 +403,25 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
         if (bmp == null && cat == FCat.APK) { delay(21_000); bmp = Thumbs.apkIcon(ctx, localPath) }
     }
     val shape = RoundedCornerShape(size * 0.2f)
-    val b = bmp
-    if (b != null) {
-        Box(modifier.size(size).clip(shape)) {
-            Image(b.asImageBitmap(), null, Modifier.size(size), contentScale = if (cat == FCat.PHOTO || cat == FCat.VIDEO) ContentScale.Crop else ContentScale.Fit)
-            badge?.let { bd -> Image(bd.asImageBitmap(), null, Modifier.size(size * 0.46f).align(Alignment.BottomEnd).clip(RoundedCornerShape(size * 0.1f))) }
-            if (cat == FCat.VIDEO && other == null && badge == null) {
-                Icon(Icons.Filled.PlayArrow, null, Modifier.size(size * 0.28f).align(Alignment.TopStart).padding(2.dp).background(Color.Black.copy(alpha = .5f), CircleShape), tint = Color.White)
-                Thumbs.durations[localPath ?: ""]?.let { ms ->
-                    val sec = ms / 1000
-                    FloorText(if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec % 3600 / 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60), Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(3.dp)).padding(horizontal = 2.dp), fontSize = 8.sp, color = Color.White, maxLines = 1)
+    // 12.0 (владелица, замечено на слабой приставке x96-2): миниатюра грузится в фоне и раньше подменяла обычный значок мгновенно,
+    // уже после того как сама строка доиграла свою анимацию появления — получался отдельный «скачок» одной иконки. Теперь переход
+    // от обычного значка к миниатюре (и наоборот, пока грузится следующая папка) идёт через Crossfade, а не мгновенную подмену.
+    androidx.compose.animation.Crossfade(bmp, label = "file_icon", animationSpec = androidx.compose.animation.core.tween(150)) { b ->
+        if (b != null) {
+            Box(modifier.size(size).clip(shape)) {
+                Image(b.asImageBitmap(), null, Modifier.size(size), contentScale = if (cat == FCat.PHOTO || cat == FCat.VIDEO) ContentScale.Crop else ContentScale.Fit)
+                badge?.let { bd -> Image(bd.asImageBitmap(), null, Modifier.size(size * 0.46f).align(Alignment.BottomEnd).clip(RoundedCornerShape(size * 0.1f))) }
+                if (cat == FCat.VIDEO && other == null && badge == null) {
+                    Icon(Icons.Filled.PlayArrow, null, Modifier.size(size * 0.28f).align(Alignment.TopStart).padding(2.dp).background(Color.Black.copy(alpha = .5f), CircleShape), tint = Color.White)
+                    Thumbs.durations[localPath ?: ""]?.let { ms ->
+                        val sec = ms / 1000
+                        FloorText(if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec % 3600 / 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60), Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(3.dp)).padding(horizontal = 2.dp), fontSize = 8.sp, color = Color.White, maxLines = 1)
+                    }
                 }
             }
+        } else {
+            FileGlyph(cat, ext, size, modifier)
         }
-    } else {
-        FileGlyph(cat, ext, size, modifier)
     }
 }
 
@@ -511,8 +519,8 @@ fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: 
                 }
             }
         },
-        confirmButton = { if (showReset) androidx.compose.material3.TextButton({ if (iconKey != null) CustomIcons.set(ctxFc, iconKey, null); onPick(null) }) { Text(androidx.compose.ui.res.stringResource(R.string.fc_reset)) } else androidx.compose.material3.TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
-        dismissButton = { if (showReset) androidx.compose.material3.TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
+        confirmButton = { if (showReset) TextButton({ if (iconKey != null) CustomIcons.set(ctxFc, iconKey, null); onPick(null) }) { Text(androidx.compose.ui.res.stringResource(R.string.fc_reset)) } else TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
+        dismissButton = { if (showReset) TextButton(onClose) { Text(androidx.compose.ui.res.stringResource(R.string.btn_close)) } },
     )
 }
 
@@ -557,20 +565,23 @@ fun CloudModuleSetting() {
     val cmV = CloudModule.installedVersion(ctx)
     var cmDel by remember { mutableStateOf(false) }
     // 9.0: обе кнопки всегда на месте: «Установить» (или «Обновить», если есть новая версия) и «Удалить»; неподходящая в этом состоянии серая
+    val cmState = CloudModule.state(ctx)
     val cmUp = cmV != null && CloudModule.upgradeAvailable(ctx)
-    val cmCanInstall = CloudModule.supportedDevice() && (cmV == null || cmUp)
+    // 12.0: кнопка живая не только при мягком обновлении (OK -> новее), но и когда стоящая версия вообще не подходит (OUTDATED/WRONG_ABI и т.п.,
+    // например старый модуль 1.2 под программу, которой нужен 1.3) — иначе тупик: поставить новую версию можно было только через «Удалить» и заново
+    val cmCanInstall = CloudModule.supportedDevice() && (cmV == null || cmUp || cmState != CloudModule.State.OK)
     androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
         FloorText(androidx.compose.ui.res.stringResource(R.string.set_cmod_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
         FloorText(if (cmV != null) androidx.compose.ui.res.stringResource(R.string.set_cmod_ver, cmV, CloudModule.variant()?.key ?: "-") else androidx.compose.ui.res.stringResource(R.string.set_cmod_none), fontSize = 13.sp)
-        SetAction(SetIcons.download, androidx.compose.ui.res.stringResource(if (cmUp) R.string.cmod_btn_update else R.string.cmod_btn_install), enabled = cmCanInstall) { CloudModule.reset(); CloudModule.start(ctx, null, upgrade = cmUp) }
+        SetAction(SetIcons.download, androidx.compose.ui.res.stringResource(if (cmV != null) R.string.cmod_btn_update else R.string.cmod_btn_install), enabled = cmCanInstall) { CloudModule.reset(); CloudModule.start(ctx, null, upgrade = cmUp) }
         SetAction(SetIcons.delete, androidx.compose.ui.res.stringResource(R.string.set_cmod_remove), enabled = cmV != null, danger = true) { cmDel = true }
     }
     if (cmDel) LAlertDialog(
         onDismissRequest = { cmDel = false },
         title = { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove_title)) },
         text = { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove_text), fontSize = 14.sp) },
-        confirmButton = { androidx.compose.material3.TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
-        dismissButton = { androidx.compose.material3.TextButton({ cmDel = false }) { FloorText(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
+        confirmButton = { TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
+        dismissButton = { TextButton({ cmDel = false }) { FloorText(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
     )
 }
 
@@ -603,10 +614,10 @@ fun FilesOpenAsSetting() {
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             FloorText("." + e + "  →  " + what, Modifier.weight(1f), fontSize = 13.sp)
-            androidx.compose.material3.TextButton({ ApkInstall.forget(ctx, e); remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.rt_forget)) }
+            TextButton({ ApkInstall.forget(ctx, e); remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.rt_forget)) }
         }
     }
-    if (remembered.isNotEmpty()) androidx.compose.material3.TextButton({ remembered.forEach { (e, _) -> ApkInstall.forget(ctx, e) }; remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.reset_all)) }
+    if (remembered.isNotEmpty()) TextButton({ remembered.forEach { (e, _) -> ApkInstall.forget(ctx, e) }; remTick++ }) { FloorText(androidx.compose.ui.res.stringResource(R.string.reset_all)) }
 }
 
 @Composable

@@ -3,6 +3,8 @@
 package app.adbphon
 
 import android.content.Context
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -67,7 +69,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -96,6 +97,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -121,6 +123,8 @@ object FmRootCfg {
 
     /** Повторное раскрытие узла: старый список виден сразу, но поверх всегда читается заново (так же для раскрытых внутри него узлов). */
     fun refresh(p: FmPane, id: String, favs: List<NetConn>) {
+        // 14.0: первое чтение папки телефона начинается сразу при нажатии, а не после перекомпоновки списка и запуска эффекта (на слабой приставке это лишние кадры)
+        if (id.startsWith("L|") && kids[id] == null && kidErr[id] == null) Fm.scope.launch { loadKids(id, favs) }
         val virt = favs.filter { it.kind == "cloud" && CloudTrash.supported(CloudTrash.typeFor(Fm.sctx, it)) }.map { "N|" + it.kind + "|" + it.host + "|" + it.user + "|" }.toSet()
         for (x in (p.rootOpen.toList() + id).distinct()) if (x.startsWith(id) && x !in virt && kids[x] != null) Fm.scope.launch { loadKids(x, favs) }
     }
@@ -203,7 +207,13 @@ object FmRootCfg {
      *  если ничего не раскрыто: папка строки с фокусом или последней нажатой (у файла его родитель). Иначе null (сообщение «раскрой папку»). */
     class RowRef(val key: String, val node: String?)
     private val lastRow = java.util.concurrent.ConcurrentHashMap<Int, RowRef>()
-    fun noteRow(paneId: Int, key: String, node: String?) { lastRow[paneId] = RowRef(key, node) }
+    /** T3: строка с фокусом (или последняя нажатая) каждой панели: помнится и после перезапуска (root_foc_p0/1). */
+    val focusKey = java.util.concurrent.ConcurrentHashMap<Int, String>()
+    fun noteRow(paneId: Int, key: String, node: String?, byFocus: Boolean = false) {
+        lastRow[paneId] = RowRef(key, node)
+        // фокус, пришедший сам при показе экрана (кнопок ещё не нажимали), запомненную строку не затирает
+        if ((!byFocus || FocusRestore.keys != FocusRestore.keysAtShow) && focusKey[paneId] != key) { focusKey[paneId] = key; runCatching { Fm.sctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("root_foc_p$paneId", key).apply() } }
+    }
     class Dst(val src: String, val net: NetConn?, val path: String, val node: String) {
         fun pane(): FmPane = FmPane(9, path).also { ps ->
             if (net != null) { ps.src = "smb"; ps.smb = fsFor(net); ps.net = net } else ps.src = src
@@ -246,10 +256,12 @@ object FmRootCfg {
     /** Файл «F|путь» и «f|…» лежит в папке «L|…» и «N|…»: для вложенности ключи приводятся к одному виду. */
     val canon: (String) -> String = { k -> if (k.startsWith("F|")) "L|" + k.substring(2) else if (k.startsWith("f|")) "N|" + k.substring(2) else k }
     private fun isTrash(e: SelE) = e.ti != null || e.fi != null
+    /** 14.0: индекс отметки дерева (одна сборка на каждое изменение набора): covered/partial за O(глубина пути) вместо просмотра всего набора на каждую строку и каждую перекомпоновку. */
+    val selIdx: androidx.compose.runtime.State<SelIndex> = androidx.compose.runtime.derivedStateOf { SelIndex(sel.keys.toList(), canon) }
     /** Отмечено само или через отмеченную папку выше. */
-    fun covered(key: String): Boolean = sel.containsKey(key) || SelTree.covered(sel.keys.toList(), key, canon)
+    fun covered(key: String): Boolean = selIdx.value.covered(key)
     /** Внутри папки отмечена только часть. */
-    fun partial(key: String): Boolean = SelTree.partial(sel.keys.toList(), key, canon)
+    fun partial(key: String): Boolean = selIdx.value.partial(key)
     private fun apply(paneId: Int, keys: Set<String>) {
         val v = visSel[paneId]
         val m = LinkedHashMap<String, SelE>()
@@ -374,8 +386,19 @@ object FmRootCfg {
     }
     val kids = mutableStateMapOf<String, List<TK>>()
     val kidErr = mutableStateMapOf<String, String>()
+    /** 12.0 (владелица: «раскрытая папка должна подняться наверх»): узел дерева, который только что раскрыли в панели [p.id] —
+     * FmRootList прокручивает к нему списком и сам стирает эту метку. */
+    val scrollTarget = mutableStateMapOf<Int, String>()
     /** Тип облака у узла, ошибку которого лечит «свой ключ» (лимит общего ключа, API выключен, не тот scope). */
     val kidErrOwnKey = mutableStateMapOf<String, String>()
+    /**
+     * 12.0 («развёрнутая папка в облаке оставалась в памяти, даже когда разворачивала другую»): списки облачных узлов дерева, которые не раскрыты
+     * ни в одной панели, выгружаются из памяти; раскрытые, ожидающие подключения и «Корзина» остаются. Работает при «Держать раскрытой только одну папку».
+     */
+    fun purgeClosedCloud() {
+        val open = Fm.panes.flatMap { it.rootOpen.toList() + it.rootPending.toList() }.toSet()
+        for (k in (kids.keys + kidErr.keys).toList()) if (k.startsWith("N|cloud|") && k !in open) { kids.remove(k); kidErr.remove(k); kidErrOwnKey.remove(k) }
+    }
     private val autoRetry = HashMap<String, Int>()
     /** Сколько элементов узла показывать сразу (остальное счётчиком): быстрая прокрутка длинных папок. */
     const val LIMIT = 200
@@ -390,8 +413,17 @@ object FmRootCfg {
     }.getOrDefault(emptyList())
     val treeOn get() = "tree" in shown
 
+    /** 14.0: узлы, у которых ПЕРВОЕ чтение уже идёт: повторный запуск (из эффекта списка после нажатия) не читает ту же папку второй раз. */
+    private val loadingFirst: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
+
     /** Идентификаторы: «L|путь» (память телефона) и «N|вид|адрес|логин|путь» (сеть, облако). */
     suspend fun loadKids(id: String, favs: List<NetConn>) {
+        val first = kids[id] == null
+        if (first && !loadingFirst.add(id)) return
+        try { loadKidsNow(id, favs) } finally { if (first) loadingFirst.remove(id) }
+    }
+
+    private suspend fun loadKidsNow(id: String, favs: List<NetConn>) {
         kidErr.remove(id); kidErrOwnKey.remove(id)
         // облачные узлы без модуля «ADB-phon Облака»: сеть не трогаем, узел покажет «Нужен модуль облаков»
         if ((id.startsWith("N|cloud|") || (id.startsWith("T|") && !NetTrash.isRid(id.removePrefix("T|")))) && !CloudModule.ok(Fm.sctx)) { kidErr[id] = CloudModule.MARK; return }
@@ -438,10 +470,21 @@ object FmRootCfg {
                     all.take(KEEP).map { if (it.isDir) TK(it.name, "L|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "F|" + it.path, it.path, false, it.size, it.date) }
                 } else
                 withContext(Dispatchers.IO) {
-                    val all = File(path).listFiles().orEmpty().filter { !it.name.startsWith(".") }.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
-                    appCount[id] = all.size
-                    val df = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                    all.take(KEEP).map { val dt = FmSub.stamp(it); if (it.isDirectory) TK(it.name, "L|" + it.absolutePath, it.absolutePath, true, 0L, dt) else TK(it.name, "F|" + it.absolutePath, it.absolutePath, false, it.length(), dt) }
+                    // 14.0: тот же список без второго чтения папки и без stat в каждом сравнении сортировки (раньше isDirectory считался на каждое сравнение, затем ещё lastModified/isDirectory/length):
+                    // один stat на запись, порядок прежний (папки, затем имя без учёта регистра)
+                    val fast = FmSub.mode != FmSub.CREATED
+                    class Ent(val f: File, val dir: Boolean, val size: Long, val dt: String, val low: String)
+                    val ents = ArrayList<Ent>(plain?.size ?: 0)
+                    for (f in plain.orEmpty()) {
+                        val nm = f.name
+                        if (nm.startsWith(".")) continue
+                        val st = if (fast) runCatching { android.system.Os.stat(f.path) }.getOrNull() else null
+                        if (st != null) { val d = android.system.OsConstants.S_ISDIR(st.st_mode); ents.add(Ent(f, d, if (d) 0L else st.st_size, FmSub.stampMs(st.st_mtime * 1000L), nm.lowercase())) }
+                        else { val d = f.isDirectory; ents.add(Ent(f, d, if (d) 0L else f.length(), FmSub.stamp(f), nm.lowercase())) }
+                    }
+                    ents.sortWith(compareByDescending<Ent> { it.dir }.thenBy { it.low })
+                    appCount[id] = ents.size
+                    ents.take(KEEP).map { if (it.dir) TK(it.f.name, "L|" + it.f.absolutePath, it.f.absolutePath, true, 0L, it.dt) else TK(it.f.name, "F|" + it.f.absolutePath, it.f.absolutePath, false, it.size, it.dt) }
                 }
             } else {
                 val a = id.split('|', limit = 5)
@@ -464,18 +507,47 @@ object FmRootCfg {
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
 
     /** Сколько раскрытых узлов «домика» помнить между запусками (на панель). */
-    const val MAX_OPEN = 60
+    const val MAX_OPEN = 200
 
     /** Восстановление раскрытых узлов панели. Сетевые, облачные узлы и ADB только запоминаются (rootPending) и раскрываются лениво, когда есть связь. false: ничего не сохранено. */
     fun restoreOpen(ctx: Context, p: FmPane): Boolean {
+        // T3 (19.11.2026): строка, на которой был фокус, помнится отдельно для каждой панели
+        sp(ctx).getString("root_foc_p${p.id}", null)?.let { focusKey[p.id] = it }
         val raw = sp(ctx).getString("ro_p${p.id}", null) ?: return false
-        raw.split('\n').filter { it.isNotBlank() }.takeLast(MAX_OPEN).forEach { id -> if (id.startsWith("N|") || id.startsWith("D|") || id.startsWith("T|")) p.rootPending.add(id) else if (id !in p.rootOpen) p.rootOpen.add(id) }
+        // T3 (слова владелицы 19.11.2026: «в каждом окне запоминалось, и когда запускаю прогу, было развёрнуто в обоих окнах то, что разворачивал»): помнятся ВСЕ раскрытые узлы
+        // обеих панелей. Группы и локальные папки раскрываются сразу (чтение с телефона быстрое); сетевые, облачные и ADB-узлы только запоминаются (rootPending) и раскрываются лениво,
+        // когда строка видна и есть связь (без обхода сети на старте); исчезнувшая локальная папка или том пропускаются тихо
+        raw.split('\n').filter { it.isNotBlank() }.takeLast(MAX_OPEN).forEach { id ->
+            val net = id.startsWith("N|") || id.startsWith("D|") || id.startsWith("T|")
+            if (net) p.rootPending.add(id)
+            else if (id !in p.rootOpen && (!id.startsWith("L|") || localNodeAlive(id))) p.rootOpen.add(id)
+        }
         return true
     }
 
     fun saveOpen(ctx: Context, p: FmPane) {
         val all = (p.rootOpen.toList() + p.rootPending.filter { it !in p.rootOpen }).distinct()
         sp(ctx).edit().putString("ro_p${p.id}", all.takeLast(MAX_OPEN).joinToString("\n")).apply()
+    }
+
+    /** T3: локальный узел «L|путь» ещё существует (том смонтирован, папка на месте); закрытые места (/data, Android/data) не проверяются: их читает root или ADB. */
+    private fun localNodeAlive(id: String): Boolean = runCatching {
+        val path = id.removePrefix("L|").ifEmpty { "/" }
+        path == "/" || FmIo.restricted(path) || java.io.File(path).isDirectory
+    }.getOrDefault(true)
+
+    /** T3: полная запись состояния обеих панелей (раскрытое, строка с фокусом, выбранная строка, активная панель); вызывается из onPause/onStop, переживает убийство процесса. */
+    fun flushState(ctx: Context, sync: Boolean) {
+        if (!Fm.inited) return      // экран «Файлы» ещё не открывали: сохранённое не затираем
+        val e = sp(ctx).edit()
+        for (p in Fm.panes) {
+            val all = (p.rootOpen.toList() + p.rootPending.filter { it !in p.rootOpen }).distinct()
+            e.putString("ro_p${p.id}", all.takeLast(MAX_OPEN).joinToString("\n"))
+            p.rootSel?.let { e.putString("root_sel_p${p.id}", it) }
+            focusKey[p.id]?.let { e.putString("root_foc_p${p.id}", it) }
+        }
+        e.putInt("active_pane", Fm.active)
+        if (sync) e.commit() else e.apply()
     }
 
     fun hasNetwork(ctx: Context): Boolean = runCatching {
@@ -517,6 +589,7 @@ fun fmHome(p: FmPane) {
     fmShowRoot(p)
     p.rootOpen.clear(); p.rootPending.clear(); p.rootSel = null
     FmRootCfg.sel.clear()
+    FmRootCfg.purgeClosedCloud()
     p.homeTick++
 }
 
@@ -544,6 +617,7 @@ fun fmOpenLocal(p: FmPane, path: String) {
     Fm.load(p, path, remember = false)
 }
 
+@androidx.compose.runtime.Immutable
 private class RR(
     val key: String, val title: String, val icon: ImageVector, val tint: Color, val path: String? = null,
     val total: Long = 0, val free: Long = 0, val ro: Boolean = false, val fs: String = "", val warn: Boolean = false,
@@ -565,6 +639,35 @@ private class RR(
     var selReq: Boolean = false
     /** Для устройства с «Корзиной» и «диском»: узел «диск» (корень источника), в котором отмечается всё. */
     var selTarget: String? = null
+
+    /**
+     * 14.0: сравнение строк по значению (без лямбд) для «обычных» строк: строка списка пропускается при перекомпоновке, если её описание не изменилось. Раньше список «Источники» при любом изменении
+     * (раскрытие, пачка цифр, смена связи) строил новые RR, и ВСЕ видимые строки обеих панелей перерисовывались заново (на слабой приставке по несколько мс на строку, в первом кадре после нажатия около 100 мс и больше).
+     * Лямбды таких строк (act, cntLoader) захватывают только то, что входит в подпись (ключ, путь, подключение с хэшем пароля, элемент). Строки с ошибками и служебные, корзины, устройства (ПК, Android),
+     * Wi-Fi и поиск по сети сравниваются по ссылке, как раньше (всегда «новые»).
+     */
+    private val memoOk: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        if (pc != null || adev != null || titem != null || fitem != null || retry != null || ftrash || tnet != null || wifi) false
+        else key == "dev" || key == "root" || key == "recent" || key.startsWith("vol:") || key.startsWith("h:") || key.startsWith("net:") || key.startsWith("lanf:") ||
+            (expandKey != null) || key.startsWith("t:L|") || key.startsWith("t:F|") || key.startsWith("t:N|") || key.startsWith("t:f|") || key.startsWith("t:D|") || key.startsWith("t:Aitem|")
+    }
+    private fun netSig(c: NetConn?): String = if (c == null) "-" else c.kind + "|" + c.host + "|" + c.port + "|" + c.user + "|" + c.pass.hashCode() + "|" + c.path + "|" + c.smb + "|" + c.name
+    private val sig: String by lazy(LazyThreadSafetyMode.NONE) {
+        val sb = StringBuilder(200)
+        val s = 1.toChar()
+        sb.append(key).append(s).append(title).append(s).append(System.identityHashCode(icon)).append(s).append(tint.value).append(s).append(path).append(s)
+            .append(total).append(s).append(free).append(s).append(ro).append(s).append(fs).append(s).append(warn).append(s).append(vol).append(s)
+            .append(netSig(net)).append(s).append(level).append(s).append(expandKey).append(s).append(header).append(s).append(treeId).append(s)
+            .append(busy).append(s).append(appName).append(s).append(err).append(s).append(file).append(s).append(side).append(s).append(subText).append(s)
+            .append(drive).append(s).append(tog).append(s).append(lpath).append(s).append(gname).append(s).append(dateRaw).append(s)
+            .append(cntKey).append(s).append(System.identityHashCode(cntCls)).append(s).append(remoteApk?.key).append(s)
+        selE?.let { e -> sb.append(e.key).append('|').append(e.parentId).append('|').append(e.parentPath).append('|').append(e.name).append('|').append(e.path).append('|').append(e.isDir).append('|').append(netSig(e.net)) }
+        sb.append(s).append(tick).append(half).append(selReq).append(selTarget).append(s).append(more.contentToString()).append(lx.contentToString()).append(s)
+        for (e in selAll) sb.append(e.key).append(',')
+        sb.toString()
+    }
+    override fun equals(other: Any?): Boolean = this === other || (other is RR && memoOk && other.memoOk && sig == other.sig)
+    override fun hashCode(): Int = if (memoOk) sig.hashCode() else System.identityHashCode(this)
 }
 
 private fun statOf(path: String): Pair<Long, Long> = runCatching {
@@ -602,6 +705,19 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val activate = ArrayList<String>()
     fun pend(id: String?) { if (id != null && id in p.rootPending && (if (id.startsWith("D|")) Adb.isConnected else online)) activate += id }
     LaunchedEffect(Unit) { androidx.compose.runtime.snapshotFlow { p.rootOpen.toList() }.collect { FmRootCfg.saveOpen(ctx, p) } }
+    // 19.11.2026 (владелица): вышла из «Источников» (другая вкладка, папка) и вернулась: раскрытые диски, устройства и папки свёрнуты, остаются только верхние группы;
+    // содержимое облака можно держать в кэше, но показывается свёрнутым. Поворот экрана (пересоздание окна) состояние не сбрасывает.
+    androidx.compose.runtime.DisposableEffect(p) {
+        onDispose {
+            var cw: android.content.Context = ctx; while (cw is android.content.ContextWrapper && cw !is android.app.Activity) cw = cw.baseContext
+            val chg = (cw as? android.app.Activity)?.isChangingConfigurations == true
+            if (!chg) {
+                // T3 (слова владелицы: «в каждом окне запоминалось ... развёрнуто в обоих окнах то, что разворачивал»): раскрытое, ожидающие узлы и выбранная строка при выходе с экрана НЕ сбрасываются
+                FmRootCfg.sel.clear()
+                FmRootCfg.purgeClosedCloud()
+            }
+        }
+    }
     val loadingTxt = stringResource(R.string.rt_loading)
     /** Квадратик выбора для файла или папки узла [parent]: путь родителя берётся из идентификатора узла. */
     fun selOf(k: FmRootCfg.TK, parent: String, c: NetConn?): FmRootCfg.SelE? {
@@ -618,8 +734,21 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
             // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
             if (er0 == CloudModule.MARK) {
-                rows += RR("t:" + id + ":cm", Fm.str(R.string.cm_need), Icons.Filled.Cloud, Color(0xFF9E9E9E), level = level, subText = Fm.str(R.string.cm_tap_install),
-                    act = { Fm.dlg = FmDlg.CloudModule { FmRootCfg.kidErr.remove(id); FmRootCfg.kids.remove(id); CloudTrash.ver++ } })
+                // 12.0: метка MARK не хранит само состояние (OUTDATED/MISSING/WRONG_ABI) — раньше тут всегда писалось «Нужен модуль»,
+                // даже когда он стоит, но устарел под эту версию программы; теперь текст берётся по актуальному state() заново
+                val cmSt = CloudModule.state(ctx)
+                val cmTitle = CloudModule.missingText(ctx, cmSt)
+                // 12.1: модуль уже рабочий, а пометка осталась (поставили снаружи): строка «Перепроверить» вместо «нужен/обновить»; причина для устаревшего
+                val cmSub = when (cmSt) {
+                    CloudModule.State.OK -> Fm.str(R.string.cm_tap_recheck)
+                    CloudModule.State.OUTDATED -> Fm.str(R.string.cm_tap_update) + (CloudModule.reasonText(ctx)?.let { "\n$it" } ?: "")
+                    else -> Fm.str(R.string.cm_tap_install)
+                }
+                rows += RR("t:" + id + ":cm", if (cmSt == CloudModule.State.OK) Fm.str(R.string.cm_recheck_title) else cmTitle, Icons.Filled.Cloud, Color(0xFF9E9E9E), level = level, subText = cmSub,
+                    act = {
+                        if (CloudModule.state(ctx) == CloudModule.State.OK) { FmRootCfg.kidErr.remove(id); FmRootCfg.kids.remove(id); CloudTrash.ver++ }
+                        else Fm.dlg = FmDlg.CloudModule { FmRootCfg.kidErr.remove(id); FmRootCfg.kids.remove(id); CloudTrash.ver++ }
+                    })
                 return
             }
             // нет root и нет связи ADB: один понятный шаг (включить отладку по Wi-Fi или ввести код сопряжения) вместо слов «нужен root»
@@ -924,16 +1053,47 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     }
     androidx.compose.runtime.SideEffect { val vis = rows.filter { it.header == 0 }; FmRootCfg.setRows(p.id, vis.map { it.key }, vis.map { it.level }); FmRootCfg.setVisSel(p.id, visSel) }
     val rootCtx = LocalContext.current
+    // 19.11.2026 (4PDA, mikolkavod: «передёргивание первой вкладки в файлах при переключении по нижним значкам»): строки, которые уже есть при создании списка
+    // (вход на экран «Файлы», возврат на «Источники»), показываются сразу, без «вырастания» и наложения текста друг на друга; анимация входа остаётся
+    // для строк, появившихся позже (раскрытие узла, догрузка). Признак живёт два кадра после создания списка и не вызывает перекомпоновку.
+    val born = remember { booleanArrayOf(true) }
+    LaunchedEffect(Unit) { androidx.compose.runtime.withFrameNanos { }; androidx.compose.runtime.withFrameNanos { }; born[0] = false }
+    // 14.0: содержимое тома телефона читается заранее, пока список стоит свёрнутым: первое раскрытие после запуска показывает строки из памяти сразу (листинг на FUSE приставки занимает 150–600 мс), а свежий список приходит следом (refresh при раскрытии)
+    // 14.0: один раз на версию программа просит систему скомпилировать свой код (если уже есть root или подключённый ADB), см. SelfCompile
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(40_000); runCatching { SelfCompile.maybe(rootCtx) } }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1200)
+        val vid = rows.firstOrNull { it.drive && it.treeId?.startsWith("L|") == true }?.treeId
+        if (vid != null && FmRootCfg.kids[vid] == null && FmRootCfg.kidErr[vid] == null) runCatching { FmRootCfg.loadKids(vid, NetStore.list(rootCtx)) }
+    }
     Column(modifier.then(Modifier.fillMaxWidth()).onPreviewKeyEvent { e ->
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FocusRestore.isDpad(e.nativeKeyEvent.keyCode)) FocusRestore.markKeys(rootCtx)
         // пульт: «Меню» или «Info» при отмеченном переводит фокус на нижнюю панель значков
         if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && FmRootCfg.sel.isNotEmpty() && (e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU || e.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_INFO)) { runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess } else false
     }) {
-        val rootState = rememberSavedTreeList("files.root." + p.id, rows.map { it.key }, p.rootSel)
+        val rootState = rememberSavedTreeList("files.root." + p.id, rows.map { it.key }, FmRootCfg.focusKey[p.id] ?: p.rootSel)   // T3: прокрутка и фокус возвращаются на строку, где был фокус
+        // 12.0 (владелица: «раскрытая папка должна подняться наверх, а не прятаться внизу экрана, где анимацию не видно»):
+        // сразу после раскрытия узла (treeToggle в FmRootRowView ставит метку) строка самой папки плавно едет к верху списка,
+        // если она и так не рядом с верхом — иначе новые дочерние строки уезжают за экран и кажется, что ничего не произошло
+        val scrollTargetId = FmRootCfg.scrollTarget[p.id]
+        LaunchedEffect(scrollTargetId, rows) {
+            val target = scrollTargetId ?: return@LaunchedEffect
+            val idx = rows.indexOfFirst { it.treeId == target }
+            if (idx < 0) return@LaunchedEffect
+            val vis = rootState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
+            // уже у верха (в пределах ~40dp) — лишний скачок не нужен; иначе едем так, чтобы строка легла к верхнему краю
+            val tolerancePx = 40f * rootCtx.resources.displayMetrics.density
+            val nearTop = vis != null && vis.offset <= tolerancePx
+            if (!nearTop) rootState.scrollToItem(idx, 0)   // 14.0: без плавной прокрутки (каждый кадр прокрутки заново раскладывал строки)
+            FmRootCfg.scrollTarget.remove(p.id)
+        }
         // «Дом»: список наверх и фокус первой строке (если пульт или мышь/клавиатура уже использовались)
         val firstKey = rows.firstOrNull { it.header == 0 }?.key
+        // T3 (19.11.2026): «Дом» срабатывает только на нажатие, а не при каждом новом создании списка: раньше после первого нажатия «Дом» список при каждом возврате на экран
+        // прокручивался наверх (и забывал положение), а на пульте фокус уходил на первую строку
+        val homeAtStart = remember { p.homeTick }
         LaunchedEffect(p.homeTick) {
-            if (p.homeTick > 0) {
+            if (p.homeTick != homeAtStart) {
                 kotlinx.coroutines.delay(150)
                 rootState.scrollToItem(0)
                 if (firstKey != null && FocusRestore.keyMode(Fm.sctx)) { FocusRestore.key = null; kotlinx.coroutines.delay(60); FocusRestore.key = firstKey }
@@ -943,14 +1103,28 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         LazyColumn(Modifier.fillMaxWidth().fillMaxHeight().verticalScrollbar(rootState)
             // пульт: «вниз» с последней строки списка уходит на нижнюю панель значков (если есть отмеченное), а не на нижнюю навигацию
             .focusProperties { exit = { d -> if (d == androidx.compose.ui.focus.FocusDirection.Down && FmRootCfg.sel.isNotEmpty()) FmRootCfg.barFocus else androidx.compose.ui.focus.FocusRequester.Default } }.focusGroup(), state = rootState, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (tv) 2.dp else 0.dp)) {
-            items(rows, key = { it.key }) { r -> FmRootRowView(p, r, tv) }
+            // 12.0 (владелица: «резко, надо как в X-plore — быстро но плавнее»): появление/исчезновение и сдвиг строк
+            // при раскрытии папки в дереве анимируются (коротко, с плавной кривой), а не щёлкают мгновенной подменой списка
+            items(rows, key = { it.key }, contentType = { it.header }) { r ->
+                // 12.0 (владелица: «слипшийся текст при первом раскрытии»): временные строки-заглушки («Загрузка…», ошибка,
+                // «нужен модуль» — ключ "t:...") на первом раскрытии появляются и тут же сменяются настоящим содержимым;
+                // если заглушка ТОЖЕ анимированно входит и выходит, обе волны (её исчезновение + появление реальных строк)
+                // накладываются и дают нахлёст текста. Заглушки показываются и убираются без анимации, растут только настоящие строки.
+                // 18.11.2026 (владелица): выключатель «Анимация переходов» — выключен, весь список раскрывается/сворачивается мгновенно.
+                // 14.0: строки списка «Файлов» без анимации появления и сдвига (animateItem и AnimatedVisibility стоили сотни мс на слабой приставке), независимо от выключателя
+                FmRootRowView(p, r, tv, Modifier, false, born[0])
+            }
         }
         ScrollbarHandle(rootState, Modifier.align(if (scrollbarLeft()) Alignment.CenterStart else Alignment.CenterEnd))
         }
         androidx.compose.runtime.SideEffect { FmRootCfg.lastVisKey = rootState.layoutInfo.visibleItemsInfo.lastOrNull()?.key as? String }
-        if (FmRootCfg.sel.isNotEmpty()) RootSelBar(p)
+        RootSelBarHost(p)
     }
 }
+
+/** 14.0: панель отмеченного показывается, пока есть отмеченное. Набор читается здесь, а не в самом списке «Источников»: список не перерисовывается целиком при каждой галочке. */
+@Composable
+private fun RootSelBarHost(p: FmPane) { if (FmRootCfg.sel.isNotEmpty()) RootSelBar(p) }
 
 /** Групповые действия над отмеченным в дереве «домика»: общие для панели выбора и кнопок центральной колонки. */
 internal object RootSelOps {
@@ -1152,9 +1326,9 @@ internal fun RootSelBar(p: FmPane) {
         title = { Text(stringResource(R.string.dd_t_perm, if (trash.size == 1) trash[0].name else stringResource(R.string.dd_items, trash.size))) },
         text = { Text(stringResource(R.string.dd_s_perm), color = red, fontWeight = FontWeight.SemiBold) },
         confirmButton = {
-            androidx.compose.material3.TextButton({ confirmForever = false; doForever() }) { Text(stringResource(R.string.sb_forever), color = red) }
+            TextButton({ confirmForever = false; doForever() }) { Text(stringResource(R.string.sb_forever), color = red) }
         },
-        dismissButton = { androidx.compose.material3.TextButton({ confirmForever = false }) { Text(stringResource(R.string.btn_cancel)) } },
+        dismissButton = { TextButton({ confirmForever = false }) { Text(stringResource(R.string.btn_cancel)) } },
     )
 }
 
@@ -1200,8 +1374,10 @@ private fun SelIcon(icon: ImageVector, label: Int, tint: Color, focusReq: androi
             },
             properties = androidx.compose.ui.window.PopupProperties(focusable = false),
         ) {
+            LangScopePublic {
             Box(Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.inverseSurface).padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Text(name, fontSize = 13.sp, color = MaterialTheme.colorScheme.inverseOnSurface, maxLines = 1)
+            }
             }
         }
     }
@@ -1273,6 +1449,9 @@ private fun rootAccordion(p: FmPane, id: String) {
     fun sameAcctTrashPair(o: String): Boolean = id.startsWith("T|") && myAcct != null && o.startsWith("N|") && acct(o) == myAcct && o.split('|', limit = 5).getOrNull(4).isNullOrEmpty()
     val drop = p.rootOpen.filter { o -> o != id && !isAncestor(o) && o != keepGroup && !sameAcctTrashPair(o) }
     p.rootOpen.removeAll(drop.toSet())
+    // 19.11.2026 (владелица: «развёрнутый диск облака не сворачивается, если разворачиваю другое»): запомненные «ожидающие» узлы (rootPending) раскрываются
+    // заново, как только их строка видна (activate), поэтому свёрнутый диск тут же раскрывался снова. Теперь вместе со свёрнутыми узлами убираются и ожидающие.
+    p.rootPending.removeAll { o -> o != id && !isAncestor(o) && o != keepGroup && !sameAcctTrashPair(o) }
 }
 
 /** Сдвиг одного уровня дерева (dp): вертикальные линии ветвей стоят максимально близко (было 22). Общая для дерева «домика» и дерева папок в панели. */
@@ -1280,54 +1459,89 @@ const val TREE_IND = 11
 
 // 10.0 (fm1): перетаскивание строк дерева убрано (владелица: мешало прокрутке); квадратик отметки SmallCheck/SelBox/SelZone в FmSelUi.kt
 
+/** 12.0: строка дерева растёт/гаснет при появлении ([animated]=true) или появляется сразу без анимации (временные заглушки «Загрузка…»/ошибка/«нужен модуль» — ключ "t:..."). */
 @Composable
-private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
+private fun FmRowEnter(animated: Boolean, visibleState: androidx.compose.animation.core.MutableTransitionState<Boolean>, modifier: Modifier, content: @Composable () -> Unit) {
+    // 18.11.2026 (владелица): общий выключатель «Анимация переходов» — выключен, раскрытие папки мгновенное, без анимации.
+    if (animated && UiAnim.on) {
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = visibleState,
+            modifier = modifier,
+            enter = androidx.compose.animation.fadeIn(tween(150)) + androidx.compose.animation.expandVertically(tween(180, easing = FastOutSlowInEasing)),
+            exit = androidx.compose.animation.fadeOut(tween(120)) + androidx.compose.animation.shrinkVertically(tween(150, easing = FastOutSlowInEasing)),
+        ) { content() }
+    } else {
+        androidx.compose.foundation.layout.Box(modifier, content = { content() })
+    }
+}
+
+@Composable
+private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Modifier, animated: Boolean = true, startShown: Boolean = false) {
     val prim = MaterialTheme.colorScheme.primary
     if (r.header == 1) {
-        Text(r.title, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp), fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = prim)
+        Text(r.title, modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp), fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, color = prim)
         return
     }
     val ctx = LocalContext.current
     val src = remember { MutableInteractionSource() }
-    val focused by src.collectIsFocusedAsState()
-    val focusedNow = androidx.compose.runtime.rememberUpdatedState(focused)
     // 9.3: строка, на которой фокус или которую нажали, запоминается как запасная папка-приёмник (файл: его родитель)
     val nodeForTarget = r.selE?.takeIf { it.ti == null && it.fi == null && r.file != null }?.parentId ?: r.treeId?.takeIf { it.startsWith("L|") || it.startsWith("N|") || it.startsWith("D|") }
-    androidx.compose.runtime.LaunchedEffect(focused) { if (focused) FmRootCfg.noteRow(p.id, r.key, nodeForTarget) }
+    // 14.0: фокус, наведение и нажатие строки собираются ОДНИМ сборщиком (раньше три collectIs*AsState = три корутины на каждую строку)
+    val ibitsSt = rowInteractionBits(src) { FmRootCfg.noteRow(p.id, r.key, nodeForTarget, true) }
+    val focused = (ibitsSt.value and 1) != 0
+    val focusedNow = androidx.compose.runtime.rememberUpdatedState(focused)
     androidx.compose.runtime.DisposableEffect(r.key) { onDispose { if (focusedNow.value) FmRootCfg.focusedRowGone(p.id, r.key) } }
     val rowFr = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if (focused) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
+    // 14.0: эффект запускается только у той строки, которой возвращают фокус (раньше у каждой строки)
+    if (FocusRestore.key == r.key) androidx.compose.runtime.LaunchedEffect(FocusRestore.key) { if (FocusRestore.key == r.key) { var tries = 0; while (FocusRestore.key == r.key && tries < 40) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }.onFailure { android.util.Log.i("FocusRestore", "request failed: " + it) }; tries++; if ((ibitsSt.value and 1) != 0) { android.util.Log.i("FocusRestore", "focused after " + tries); break } }; FocusRestore.key = null } }
+    // T3: фокус после запуска получает строка активной панели, где он был; запрос снимается, если владелица уже нажала кнопку пульта (фокус не «перескакивает»)
+    if (FocusRestore.startKey == r.key) androidx.compose.runtime.LaunchedEffect(FocusRestore.startKey) {   // 14.0: только у строки, которой возвращают фокус
+        if (FocusRestore.startKey == r.key && FocusRestore.startPane == p.id) {
+            var tries = 0; val m = FocusRestore.startMark
+            while (FocusRestore.startKey == r.key && tries < 40 && m == FocusRestore.keys) { kotlinx.coroutines.delay(250); runCatching { rowFr.requestFocus() }; tries++; if ((ibitsSt.value and 1) != 0) break }
+            android.util.Log.i("FocusRestore", "T3: запрос фокуса: панель " + p.id + " строка " + r.key + " попыток " + tries + " фокус " + ((ibitsSt.value and 1) != 0) + " нажатий пульта " + (FocusRestore.keys - m))
+            if (FocusRestore.startKey == r.key) FocusRestore.startKey = null
+        }
+    }
     var menu by remember { mutableStateOf(false) }
     var iconPick by remember { mutableStateOf(false) }
     // 10.0 (fm1): отметка строки (папка = всё содержимое, вложенные строки отмечены через неё); галочка с крупной зоной нажатия справа
     val chkFr = remember { androidx.compose.ui.focus.FocusRequester() }
     val e0 = r.selE
-    val chkOn: Boolean; val chkPart: Boolean; val chkClick: (() -> Unit)?
-    if (e0 != null) {
-        chkOn = FmRootCfg.covered(e0.key); chkPart = e0.isDir && !chkOn && FmRootCfg.partial(e0.key)
-        chkClick = { Fm.active = p.id; FmRootCfg.toggleTree(p.id, e0) }
-    } else if (r.selAll.isNotEmpty()) {
+    // 14.0: состояние галочки через derivedStateOf по индексу отметки: строка перерисовывается, только когда СВОЯ галочка (или «частично») поменялась. Раньше отметка читалась в композиции
+    // прямо из набора, и любая галочка пересоздавала весь список «Источников» и все видимые строки, а на каждую строку просматривался весь набор отмеченного
+    val chkBitsSt = remember(e0?.key, r.selAll) {
+        androidx.compose.runtime.derivedStateOf {
+            val ix = FmRootCfg.selIdx.value
+            if (e0 != null) { val on = ix.covered(e0.key); (if (on) 1 else 0) or (if (e0.isDir && !on && ix.partial(e0.key)) 2 else 0) }
+            else if (r.selAll.isNotEmpty()) { val on = r.selAll.all { ix.covered(it.key) }; (if (on) 1 else 0) or (if (!on && r.selAll.any { ix.covered(it.key) || ix.partial(it.key) }) 2 else 0) }
+            else 0
+        }
+    }
+    val chkBits = chkBitsSt.value
+    val chkOn = (chkBits and 1) != 0
+    val chkPart = (chkBits and 2) != 0
+    val chkClick: (() -> Unit)? =
+        if (e0 != null) { { Fm.active = p.id; FmRootCfg.toggleTree(p.id, e0) } }
         // раскрытое устройство, том или «диск» без своей отметки: галочка отмечает или снимает всё прямо внутри
-        chkOn = r.selAll.all { FmRootCfg.covered(it.key) }; chkPart = !chkOn && r.selAll.any { FmRootCfg.covered(it.key) || FmRootCfg.partial(it.key) }
-        chkClick = { Fm.active = p.id; FmRootCfg.setAll(p.id, r.selAll, !chkOn) }
-    } else { chkOn = false; chkPart = false; chkClick = null }
+        else if (r.selAll.isNotEmpty()) { { Fm.active = p.id; FmRootCfg.setAll(p.id, r.selAll, !chkOn) } }
+        else null
     val selected = p.rootSel == r.key
-    val hoveredRow by src.collectIsHoveredAsState()
-    val pressedRow by src.collectIsPressedAsState()
-    val rowActive = selected || focused || hoveredRow || pressedRow
+    val rowActive = selected || ibitsSt.value != 0
+    val rowBgColor = if (selected) prim.copy(alpha = .22f) else if (chkOn && e0 != null) prim.copy(alpha = .12f) else if (r.level >= 1 && r.header == 0) Color(0xFF3F8FD2).copy(alpha = (0.08f + 0.05f * (r.level - 1)).coerceAtMost(0.28f)) else Color.Transparent
     val expanded = r.expandKey != null && r.expandKey in p.rootOpen
     val cnt = r.path?.let { FmRootCfg.counts[it] }
     // 10.2: «N папок, N файлов» у папки: дата сразу, цифры подгружаются фоном после показа списка (FolderCounts)
     val cKey = r.cntKey?.takeIf { FmSub.mode != FmSub.NONE }
-    var cntNow = cKey?.let { FolderCounts.peek(it) }
-    if (cKey != null && cntNow == null) { @Suppress("UNUSED_VARIABLE") val tick = FolderCounts.ver; cntNow = FolderCounts.peek(cKey) }
+    // 14.0: цифры папки через derivedStateOf (строка перерисовывается, только когда её цифры появились), а не чтением FolderCounts.ver каждой строкой без цифр
+    val cntNow: Pair<Int, Int>? = if (cKey == null) null else remember(cKey) { androidx.compose.runtime.derivedStateOf { val t = FolderCounts.ver; if (t >= 0) FolderCounts.peek(cKey) else null } }.value
     var cVis by remember(cKey) { mutableStateOf(false) }
     val cView = androidx.compose.ui.platform.LocalView.current
     val cLoader = r.cntLoader
-    if (cKey != null && cLoader != null) LaunchedEffect(cKey, cVis, cntNow == null) { if (!FolderCounts.has(cKey)) FolderCounts.load(ctx, cKey, r.cntCls ?: FolderCounts.NET, cVis, cLoader) }
+    if (cKey != null && cLoader != null && cntNow == null) LaunchedEffect(cKey, cVis) { if (!FolderCounts.has(cKey)) FolderCounts.load(ctx, cKey, r.cntCls ?: FolderCounts.NET, cVis, cLoader) }
     val bigFont = if (tv) 1.15f else 1f
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .22f)
-    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id) } else { rootAccordion(p, id); p.rootOpen.add(id); FmRootCfg.refresh(p, id, NetStore.list(ctx)) } }
+    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id); if (Fm.treeOne) FmRootCfg.purgeClosedCloud() } else { if (Fm.treeOne || !id.startsWith("N|cloud|")) rootAccordion(p, id); p.rootOpen.add(id); if (Fm.treeOne) FmRootCfg.purgeClosedCloud(); FmRootCfg.refresh(p, id, NetStore.list(ctx)); FmRootCfg.scrollTarget[p.id] = id } }
     // устройство LAN (найденное или сохранённое): раскрытие дерева с автоматическим раскрытием общего ресурса из подключения
     val rowToggle = { id: String ->
         val isLan = r.level == 1 && !r.drive && r.net != null && id == r.treeId && (r.key.startsWith("lanf:") || (r.key.startsWith("net:") && r.net.kind != "dav" && r.net.kind != "cloud"))
@@ -1341,6 +1555,13 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
     }
     val rowClickR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (e0 != null && r.titem == null && r.fitem == null && FmRootCfg.sel.values.any { it.ti == null && it.fi == null }) FmRootCfg.toggleTree(p.id, e0) else if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else openGroup(p, r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() }
     val rowLongR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; menu = true }
+    // 12.0 (владелица: «рывок, а надо вообще без рывка» — одного animateItem() на сдвиг соседних строк мало, новая строка выскакивала
+    // сразу в полный рост, только прозрачность менялась): своя строка по-настоящему вырастает (fadeIn+expandVertically) при первом
+    // появлении на экране — ключ строки меняется при каждом новом раскрытии/закрытии узла, поэтому анимация входа всегда свежая.
+    // Временные строки-заглушки (animated=false, см. items() выше) растут без анимации — иначе их уход и приход настоящих строк
+    // накладываются друг на друга и текст на миг «слипается».
+    // 14.0: строки списка «Файлов» появляются мгновенно (раньше AnimatedVisibility на каждую строку: на слабой приставке раскладка и кадры анимации съедали сотни мс)
+    androidx.compose.foundation.layout.Box(modifier) {
     Box2(
         Modifier.fillMaxWidth().onKeyEvent { e ->
             val id = r.treeId
@@ -1371,9 +1592,10 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                         }
                     }
                 }
+                // 14.0: плашка строки и полоска выбора рисуются здесь же (раньше отдельные модификаторы background и drawBehind)
+                if (rowBgColor != Color.Transparent) drawRoundRect(rowBgColor, cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+                if (selected) drawRect(prim, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height))
             }
-            .background(if (selected) prim.copy(alpha = .22f) else if (chkOn && e0 != null) prim.copy(alpha = .12f) else if (r.level >= 1 && r.header == 0) Color(0xFF3F8FD2).copy(alpha = (0.08f + 0.05f * (r.level - 1)).coerceAtMost(0.28f)) else Color.Transparent, RoundedCornerShape(8.dp))
-            .drawBehind { if (selected) drawRect(prim, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height)) }
             .then(if (focused) Modifier.border((if (tv) 3 else 2).dp, prim, RoundedCornerShape(8.dp)) else Modifier)
             .mouseSecondary { Fm.active = p.id; p.rootSel = r.key; menu = true }   // 10.0 (mouse): правая кнопка = меню строки, как долгое нажатие
             .focusRequester(rowFr).hoverable(src).combinedClickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current,
@@ -1393,7 +1615,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
                 val open = r.treeId in p.rootOpen
                 val empty = !open && cntNow != null && cntNow.first + cntNow.second == 0
                 if (empty) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))
-                else Box(Modifier.size(if (tv) 30.dp else 20.dp).clickable { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {
+                else Box(Modifier.size(if (tv) 30.dp else 20.dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
                     androidx.compose.foundation.Canvas(Modifier.size(if (tv) 16.dp else 12.dp)) {
                         val c = Color(0xFF1E88E5)
                         val path = androidx.compose.ui.graphics.Path().apply {
@@ -1442,12 +1664,12 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
         // 10.2 (58, как в X-plore): у папок и файлов телефона слева незаметная точка: нажатие открывает свойства, строка не выделяется
         if (e0 != null && e0.net == null && e0.path.startsWith("/") && r.header == 0) Box(
             Modifier.align(Alignment.CenterStart).offset(x = (-(8 + r.level * TREE_IND)).dp).size(16.dp, 32.dp)
-                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { Fm.active = p.id; Fm.propsPath(e0.path) },
+                .tapOnly { Fm.active = p.id; Fm.propsPath(e0.path) },   // 14.0: служебная точка без узла семантики (tapOnly)
             contentAlignment = Alignment.Center,
         ) { Box(Modifier.size(5.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
         if (chkClick != null) SelZone(tv, chkFr, rowFr, stringResource(if (chkOn) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.rootSel = r.key; menu = true }) { chkClick() }
         if (iconPick) CustomIconPicker(r.title, "d:" + r.key) { iconPick = false }
-        LDropdownMenu(menu, { menu = false }) {
+        if (menu) LDropdownMenu(true, { menu = false }) {   // 14.0: меню строки создаётся только когда открыто (раньше у каждой строки)
             @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { menu = false; run() })
             // 9.0: найденные и сохранённые устройства (сеть, LAN, Wi-Fi, ПК, Android): копирование названия и адреса
             if (r.pc != null || r.adev != null || (r.net != null && !r.drive)) {
@@ -1611,6 +1833,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean) {
             if (r.key in setOf("root", "recent", "adb", "lan", "cloud", "wifi", "pc", "apps")) item(R.string.rt_hide) { FmRootCfg.set(ctx, r.key, false) }
         }
     }
+    }
 }
 
 /** Окно «Показать/Скрыть»: какие необязательные строки видны на корневом экране. */
@@ -1631,6 +1854,30 @@ fun RootShowDialog(close: () -> Unit) {
         },
         confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_close)) } },
     )
+}
+
+/** 14.0: фокус (бит 1), наведение (2) и нажатие (4) строки одним сборщиком; [onFocus] вызывается при получении фокуса. */
+@Composable
+private fun rowInteractionBits(src: androidx.compose.foundation.interaction.MutableInteractionSource, onFocus: () -> Unit): androidx.compose.runtime.State<Int> {
+    val st = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val onF = androidx.compose.runtime.rememberUpdatedState(onFocus)
+    androidx.compose.runtime.LaunchedEffect(src) {
+        var f = false; var h = false
+        val pressed = ArrayList<androidx.compose.foundation.interaction.PressInteraction.Press>()
+        src.interactions.collect { i ->
+            when (i) {
+                is androidx.compose.foundation.interaction.FocusInteraction.Focus -> { if (!f) onF.value(); f = true }
+                is androidx.compose.foundation.interaction.FocusInteraction.Unfocus -> f = false
+                is androidx.compose.foundation.interaction.HoverInteraction.Enter -> h = true
+                is androidx.compose.foundation.interaction.HoverInteraction.Exit -> h = false
+                is androidx.compose.foundation.interaction.PressInteraction.Press -> pressed.add(i)
+                is androidx.compose.foundation.interaction.PressInteraction.Release -> pressed.remove(i.press)
+                is androidx.compose.foundation.interaction.PressInteraction.Cancel -> pressed.remove(i.press)
+            }
+            st.intValue = (if (f) 1 else 0) or (if (h) 2 else 0) or (if (pressed.isNotEmpty()) 4 else 0)
+        }
+    }
+    return st
 }
 
 /** Контейнер без лишних зависимостей: обычный Column с общим модификатором. */

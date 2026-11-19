@@ -35,6 +35,9 @@ object FmSub {
 
     private val fmt = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
 
+    /** Та же строка по готовому времени изменения (мс): быстрый путь чтения списка, без лишних обращений к файловой системе. */
+    fun stampMs(ms: Long): String = fmt.get()!!.format(Date(ms))
+
     /** Время для списков (строка «yyyy-MM-dd HH:mm»): изменения или создания файла по настройке. */
     fun stamp(f: File): String {
         var ms = f.lastModified()
@@ -45,15 +48,37 @@ object FmSub {
         return fmt.get()!!.format(Date(ms))
     }
 
+    // 14.0: готовые строки даты и шаблон хранятся в кэше. Раньше каждая строка списка при КАЖДОЙ перекомпоновке заново разбирала дату, искала шаблон
+    // (getBestDateTimePattern) и создавала SimpleDateFormat: на слабой приставке это съедало заметную долю кадра (строк на экране десятки).
+    private val dateCache = object : java.util.LinkedHashMap<String, String>(256, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, String>?) = size > 3000
+    }
+    private var dateEnv = ""
+    private var dateEnvAt = 0L
+    private var dateOut: SimpleDateFormat? = null
+
     /** Строка даты из «yyyy-MM-dd HH:mm» по локали; [narrow]: без года, если год текущий. Не разобралась: как есть (дата сети бывает другого вида). */
-    fun date(ctx: Context, raw: String, narrow: Boolean): String {
-        val d = runCatching { fmt.get()!!.parse(raw) }.getOrNull() ?: return fmDate(raw)
-        val loc = Locale.getDefault()
-        val cal = java.util.Calendar.getInstance().apply { time = d }
-        val sameYear = cal.get(java.util.Calendar.YEAR) == java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-        val skeleton = (if (narrow && sameYear) "ddMM" else "ddMMyyyy") + (if (DateFormat.is24HourFormat(ctx)) "HHmm" else "hmma")
-        val pattern = DateFormat.getBestDateTimePattern(loc, skeleton).replace(", ", " ")
-        return SimpleDateFormat(pattern, loc).format(d)
+    fun date(ctx: Context, raw: String, narrow: Boolean): String = synchronized(dateCache) {
+        val now = android.os.SystemClock.uptimeMillis()
+        // язык, 24-часовой формат и часовой пояс сверяются не чаще раза в 2 с; при смене кэш сбрасывается
+        if (dateOut == null || now - dateEnvAt > 2000L) {
+            dateEnvAt = now
+            val loc = Locale.getDefault()
+            val h24 = DateFormat.is24HourFormat(ctx)
+            val env = loc.toString() + "|" + h24 + "|" + java.util.TimeZone.getDefault().id
+            if (env != dateEnv || dateOut == null) {
+                dateEnv = env; dateCache.clear()
+                // 12.0 (владелица: «в дате под файлами/папками добавь год») — раньше в узкой строке текущего года год убирался («21.08 23:46»),
+                // теперь год показывается всегда, независимо от ширины экрана и от того, текущий это год или нет.
+                val skeleton = "ddMMyyyy" + (if (h24) "HHmm" else "hmma")
+                dateOut = SimpleDateFormat(DateFormat.getBestDateTimePattern(loc, skeleton).replace(", ", " "), loc)
+            }
+        }
+        dateCache[raw]?.let { return@synchronized it }
+        val d = runCatching { fmt.get()!!.parse(raw) }.getOrNull()
+        val s = if (d == null) fmDate(raw) else dateOut!!.format(d)
+        dateCache[raw] = s
+        s
     }
 
     /** Вторая строка файла: «дата · размер»; пусто, если выбрано «ничего». */

@@ -10,10 +10,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,21 +52,23 @@ class CloudModuleMissing(msg: String) : IllegalStateException(msg)
 object CloudModule {
     const val PKG = "app.adbphon.clouds"
     /** Нужная версия протокола между основной программой и модулем (meta-data ENGINE_API у модуля). */
-    const val API_NEEDED = 1
+    const val API_NEEDED = 2
     /** Известная версия модуля, которую предлагаем скачать. Файлов четыре, по одному на архитектуру (один пакет, одна подпись). */
     // ЧЕРНОВИК (12.11.2026): 1.2 = модуль без значка в списке приложений; релиз clouds-1.2 на GitHub нужно выложить ДО выпуска основной программы с этой таблицей
-    const val VERSION = "1.2"   // 6.0: 1.1 = движок упакован (UPX), установленный вес модуля 105 → 44 МБ; протокол прежний (ENGINE_API 1), модуль 1.0 остаётся рабочим
-    const val VERSION_CODE = 3
+    const val VERSION = "1.3"   // 11.0 (код 61): 1.3 = модуль с защитой (R8, проверка подлинности); 1.2 и старше без защиты не используются, предлагается обновить
+    const val VERSION_CODE = 4
+    /** База versionCode самого старого допустимого модуля (1.3 = 4: коды 41..44). */
+    private const val MIN_BASE = 4
 
     /** Вариант модуля: ключ, имя файла, ABI, e_machine движка в ELF, versionCode (база*10+номер), размер (МБ) и SHA-256 файла. */
     class Variant(val key: String, val abi: String, val machine: Int, val code: Int, val sizeMb: Int, val sha: String) {
         val file get() = "ADB-phon-Clouds-$VERSION-$key.apk"
     }
     val VARIANTS = listOf(
-        Variant("arm64", "arm64-v8a", 183, 32, 22, "f6953d40e569905bb6e010c8c1caff895e6a0a158b5c608fa3ed4aa1c1386435"),
-        Variant("arm32", "armeabi-v7a", 40, 31, 24, "ebc6ed6715383d13d92bdba647be0432c15256fa6a788928338ca336a36ca358"),
-        Variant("x86_64", "x86_64", 62, 34, 26, "39fe0df21096cf1ac11f2dbaad405dc978e677216d9b95233310bed2534ea09b"),
-        Variant("x86", "x86", 3, 33, 24, "07bc3efaa10d695c861532a842081af591a300d5d2d9d889646e5ab5c7ea520c"),
+        Variant("arm64", "arm64-v8a", 183, 42, 21, "d868f34a43e247ec9aaa988cbbee6a49c576a6a794be0007e248d02e9a0b0d49"),
+        Variant("arm32", "armeabi-v7a", 40, 41, 23, "579468dc0e4aa31e0ba8876481e8f76f3ee02ccb2437748f1dab7b004169df40"),
+        Variant("x86_64", "x86_64", 62, 44, 25, "efc92cea18b0bfa08f8d3e0687c63a6a0a338f9819ff04a437b1d9476ebc8d7d"),
+        Variant("x86", "x86", 3, 43, 23, "332a198c102fdcc5aae5166dded6b6f74b47b0393d8683aa60c06577dbb492bf"),
     )
 
     /** Вариант для этого устройства: первый подходящий из SUPPORTED_ABIS (порядок задаёт система: на 64-разрядном ядре с 32-разрядным пространством пользователя в списке только 32-разрядные). null: архитектура не поддерживается. */
@@ -75,7 +77,7 @@ object CloudModule {
     }?.let { k -> VARIANTS.first { it.key == k } }
 
     fun sizeMb(): Int = variant()?.sizeMb ?: 0
-    private const val RELEASE_BASE = "https://github.com/drugoj00/adb-phon/releases/download/clouds-$VERSION/"
+    private val RELEASE_BASE: String get() = Sx.MODULE_BASE + VERSION + "/"
 
     enum class State { MISSING, OK, OUTDATED, FOREIGN, WRONG_ABI }
 
@@ -136,6 +138,9 @@ object CloudModule {
         val api = apiOf(ctx, pi)
         val code = if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()
         var st = if (api >= API_NEEDED || (api < 0 && code >= VERSION_CODE)) State.OK else State.OUTDATED
+        // 11.0 (код 61): модуль без защиты (база versionCode ниже 4) не используется, пока не обновлён; тронутая программа модулем не пользуется
+        if (code / 10 < MIN_BASE) st = State.OUTDATED
+        if (!Integrity.ok(ctx)) return State.FOREIGN
         // установлен вариант не для этой архитектуры (ручная установка, перенос): по ELF движка; предлагается поставить нужный
         if (st == State.OK) {
             val want = variant()
@@ -176,8 +181,30 @@ object CloudModule {
             addDataScheme("package")
         }
         androidx.core.content.ContextCompat.registerReceiver(app, object : android.content.BroadcastReceiver() {
-            override fun onReceive(c: Context, i: android.content.Intent) { if (i.data?.schemeSpecificPart == PKG) { ver++; if (state(c) == State.OK) cleanup(c) } }
+            override fun onReceive(c: Context, i: android.content.Intent) { if (i.data?.schemeSpecificPart == PKG) { ver++; if (state(c) == State.OK) { cleanup(c); refreshMarks(c) }
+                // пакет модуля появляется в системе не мгновенно: повтор через 1,5 и 4 с, ручной перезапуск программы не нужен
+                val h = android.os.Handler(android.os.Looper.getMainLooper()); h.postDelayed({ ver++; refreshMarks(c) }, 1500); h.postDelayed({ ver++; refreshMarks(c) }, 4000) } }
         }, f, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    /**
+     * 12.1 (владелица, A14: «обновила модуль, но так и висит в облаке: нужно модуль обновить»): пометка «нужен/устарел модуль» у облачных узлов
+     * дерева «Источники» хранится в FmRootCfg.kidErr и раньше снималась только после прохода по нашему окну установки. Модуль поставили
+     * снаружи (системой, файловым менеджером, закрыли окно раньше времени): пометка оставалась навсегда. Теперь, когда модуль рабочий,
+     * все такие узлы забываются и список облаков читается заново: при установке, при возврате в программу, в конце нашей загрузки.
+     */
+    fun refreshMarks(ctx: Context) {
+        if (FmRootCfg.kidErr.none { it.value == MARK }) return
+        if (state(ctx) != State.OK) return
+        FmRootCfg.kidErr.filterValues { it == MARK }.keys.toList().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.kids.remove(it) }
+        CloudTrash.ver++
+    }
+
+    /** Почему модуль «не подходит»: что стоит и что нужно (вместо голого «нужно обновить»). */
+    fun reasonText(ctx: Context): String? {
+        val pi = info(ctx) ?: return null
+        val code = if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()
+        return ctx.getString(R.string.cm_reason, pi.versionName ?: "?", code, apiOf(ctx, pi), API_NEEDED)
     }
 
     /** Сообщение для облачных узлов и ошибок. */
@@ -189,27 +216,72 @@ object CloudModule {
     /** Убрать скачанные и недокачанные файлы модуля (после установки, при ошибке, при запуске). */
     fun cleanup(ctx: Context) { runCatching { dir(ctx).deleteRecursively() } }
 
-    fun reset() { phase = 0; progress = 0; error = ""; cancelled = false }
+    fun reset() { phase = 0; progress = 0; error = ""; cancelled = false; bytesGot = 0; bytesTotal = 0; speedBps = 0; etaSec = -1; resuming = false }
     fun cancel(ctx: Context) { cancelled = true; if (phase !in 1..3) { reset() } }
 
+    // 12.0 (владелица, A14: «модуль облаков обновлялся очень медленно и не было, сколько осталось МБ»): ход загрузки в МБ, скорость, остаток времени
+    var bytesGot by mutableLongStateOf(0L)
+    var bytesTotal by mutableLongStateOf(0L)
+    var speedBps by mutableLongStateOf(0L)
+    var etaSec by mutableIntStateOf(-1)
+    /** Связь прервалась, идёт докачка с места обрыва. */
+    var resuming by mutableStateOf(false)
+
+    /** «Лучше по Wi-Fi»: модуль большой, а сеть сейчас платная (мобильный интернет). */
+    fun wifiHint(ctx: Context): Boolean = sizeMb() >= 15 && runCatching {
+        (ctx.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+    }.getOrDefault(false)
+
+    fun fmtEta(sec: Int): String = if (sec < 0) "…" else "%d:%02d".format(sec / 60, sec % 60)
+
+    /**
+     * Загрузка одним потоком с докачкой: при обрыве (таймаут, сброс соединения) повтор с места обрыва заголовком Range (до 8 попыток подряд без
+     * прироста, пауза растёт 1–8 с, отмена кнопкой слышна во время паузы); сервер не отдал Range (200 вместо 206): файл читается заново целиком.
+     * Скорость считается по окну ~1,5 с, на экране обновляется не чаще 4 раз в секунду.
+     */
     private fun download(ctx: Context, to: File) {
-        val c = URL(url(ctx)).openConnection() as HttpURLConnection
-        c.connectTimeout = 15_000; c.readTimeout = 30_000
-        c.setRequestProperty("User-Agent", "ADB-phon")
-        try {
-            if (c.responseCode != 200) throw java.io.IOException("HTTP ${c.responseCode}")
-            val total = c.contentLengthLong
-            to.parentFile?.mkdirs()
-            c.inputStream.use { i -> to.outputStream().use { o ->
-                val buf = ByteArray(256 * 1024); var got = 0L
-                while (true) {
-                    if (cancelled) throw LocalOps.Cancelled()
-                    val n = i.read(buf); if (n < 0) break
-                    o.write(buf, 0, n); got += n
-                    if (total > 0) progress = (got * 100 / total).toInt().coerceIn(0, 100)
-                }
-            } }
-        } finally { c.disconnect() }
+        to.parentFile?.mkdirs()
+        var got = 0L; var total = -1L; var fails = 0
+        var tWin = System.nanoTime(); var bWin = 0L; var spd = 0.0; var lastUi = 0L
+        val buf = ByteArray(512 * 1024)
+        while (true) {
+            if (cancelled) throw LocalOps.Cancelled()
+            val c = URL(url(ctx)).openConnection() as HttpURLConnection
+            c.connectTimeout = 15_000; c.readTimeout = 20_000
+            c.setRequestProperty("User-Agent", "ADB-phon")
+            c.setRequestProperty("Accept-Encoding", "identity")
+            if (got > 0) c.setRequestProperty("Range", "bytes=$got-")
+            try {
+                val rc = c.responseCode
+                if (rc != 200 && rc != 206) throw java.io.IOException("HTTP $rc")
+                if (rc == 200 && got > 0) { got = 0; to.delete() }          // Range не поддержан: сначала
+                total = if (rc == 206) (c.getHeaderField("Content-Range")?.substringAfter('/')?.trim()?.toLongOrNull() ?: (got + c.contentLengthLong)) else c.contentLengthLong
+                bytesTotal = total
+                resuming = false
+                java.io.FileOutputStream(to, got > 0).use { o -> c.inputStream.use { i ->
+                    while (true) {
+                        if (cancelled) throw LocalOps.Cancelled()
+                        val n = i.read(buf); if (n < 0) break
+                        o.write(buf, 0, n); got += n; fails = 0
+                        val now = System.nanoTime()
+                        if (now - tWin >= 1_500_000_000L) { val s = (got - bWin) * 1e9 / (now - tWin); spd = if (spd == 0.0) s else spd * 0.5 + s * 0.5; tWin = now; bWin = got }
+                        if (now - lastUi >= 250_000_000L) {
+                            lastUi = now; bytesGot = got; speedBps = spd.toLong()
+                            if (total > 0) { progress = (got * 100 / total).toInt().coerceIn(0, 100); etaSec = if (spd > 1) ((total - got) / spd).toInt() else -1 }
+                        }
+                    }
+                } }
+                bytesGot = got
+                if (total > 0 && got != total) throw java.io.IOException("short $got/$total")
+                progress = 100; return
+            } catch (e: LocalOps.Cancelled) { throw e
+            } catch (e: java.io.IOException) {
+                if (++fails > 8) throw e
+                resuming = true
+                var waited = 0; val pause = minOf(1000 * fails, 8000)
+                while (waited < pause) { if (cancelled) throw LocalOps.Cancelled(); Thread.sleep(250); waited += 250 }
+            } finally { c.disconnect() }
+        }
     }
 
     private fun sha256(f: File): String {
@@ -284,6 +356,7 @@ object CloudModule {
     /** Скачать, проверить, установить, убрать файл. true: модуль готов. Ошибка и причина остаются в [error]. */
     suspend fun fetchAndInstall(ctx: Context): Boolean {
         val app = ctx.applicationContext
+        if (!withContext(Dispatchers.IO) { Integrity.safe(app) }) { error = app.getString(R.string.integrity_short); phase = 4; return false }
         cancelled = false; error = ""; progress = 0
         val f = File(dir(app), variant()?.file ?: "module.apk")
         try {
@@ -305,7 +378,7 @@ object CloudModule {
             // пакет модуля появляется не мгновенно
             repeat(20) { if (ok(app)) return@repeat; delay(250) }
             if (!ok(app)) { error = app.getString(R.string.cm_failed); phase = 4; return false }
-            reset(); ver++; return true
+            reset(); ver++; refreshMarks(app); return true
         } catch (e: LocalOps.Cancelled) { reset(); return false
         } catch (e: kotlinx.coroutines.CancellationException) { reset(); throw e
         } catch (e: Throwable) { error = e.message ?: e.javaClass.simpleName; phase = 4; return false
@@ -323,6 +396,16 @@ object CloudModule {
             if (done) { Fm.say(ctx.getString(R.string.cm_done)); if (Fm.dlg is FmDlg.CloudModule) Fm.dlg = null; then?.invoke() }
         }
     }
+}
+
+/** Строка под полосой загрузки: «12,3 из 21,2 МБ · 58 % · 1,85 МБ/с · осталось 0:05» или «Связь прервалась, докачиваю…». */
+@Composable
+private fun DownloadDetail() {
+    if (CloudModule.phase != 1) return
+    val tot = CloudModule.bytesTotal
+    if (CloudModule.resuming) Text(stringResource(R.string.cm_resuming), fontSize = 12.sp)
+    else if (tot > 0) Text(stringResource(R.string.cm_progress, "%.1f".format(CloudModule.bytesGot / 1048576.0), "%.1f".format(tot / 1048576.0), CloudModule.progress,
+        "%.2f".format(CloudModule.speedBps / 1048576.0), CloudModule.fmtEta(CloudModule.etaSec)), fontSize = 12.sp)
 }
 
 /** Окно «Нужен модуль облаков»: вопрос, ход загрузки, ошибка. */
@@ -347,13 +430,17 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
                             CircularProgressIndicator(Modifier.size(20.dp).padding(end = 0.dp), strokeWidth = 2.dp)
                             Text(stringResource(when (phase) { 1 -> R.string.cm_downloading; 2 -> R.string.cm_verifying; else -> R.string.cm_installing }) + if (phase == 1 && CloudModule.progress > 0) " ${CloudModule.progress} %" else "", Modifier.padding(start = 12.dp), fontSize = 14.sp)
                         }
-                        if (phase == 1) ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp))
+                        if (phase == 1) { ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp)); DownloadDetail() }
                     }
                     4 -> {
                         Text(stringResource(R.string.cm_failed), fontSize = 14.sp)
                         if (CloudModule.error.isNotBlank()) Text(CloudModule.error.take(200), fontSize = 12.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
                     }
-                    else -> Text(stringResource(if (d.upgrade && st == CloudModule.State.OK) R.string.cm_ask_upgrade else when (st) { CloudModule.State.OUTDATED -> R.string.cm_ask_update; CloudModule.State.WRONG_ABI -> R.string.cm_ask_abi; else -> R.string.cm_ask }, CloudModule.sizeMb()), fontSize = 14.sp)
+                    else -> {
+                        Text(stringResource(if (d.upgrade && st == CloudModule.State.OK) R.string.cm_ask_upgrade else when (st) { CloudModule.State.OUTDATED -> R.string.cm_ask_update; CloudModule.State.WRONG_ABI -> R.string.cm_ask_abi; else -> R.string.cm_ask }, CloudModule.sizeMb()), fontSize = 14.sp)
+                        if (st == CloudModule.State.OUTDATED) CloudModule.reasonText(ctx)?.let { Text(it, fontSize = 12.sp) }
+                        if (CloudModule.wifiHint(ctx)) Text(stringResource(R.string.cm_wifi_hint, CloudModule.sizeMb()), fontSize = 12.sp)
+                    }
                 }
             }
         },
@@ -405,7 +492,7 @@ fun ModuleHost() {
                             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text(stringResource(if (CloudModule.phase == 1) R.string.cm_downloading else R.string.cm_verifying) + if (CloudModule.phase == 1 && CloudModule.progress > 0) " ${CloudModule.progress} %" else "", Modifier.padding(start = 12.dp), fontSize = 14.sp)
                         }
-                        if (CloudModule.phase == 1) ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp))
+                        if (CloudModule.phase == 1) { ThemedProgress({ CloudModule.progress / 100f }, Modifier.padding(top = 4.dp)); DownloadDetail() }
                     }
                 },
                 confirmButton = { },

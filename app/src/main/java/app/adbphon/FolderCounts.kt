@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -39,6 +40,13 @@ object FolderCounts {
         override fun removeEldestEntry(e: MutableMap.MutableEntry<String, Long>?) = size > 4000
     })
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * 14.0: подсчёт идёт на потоках ФОНОВОГО приоритета. Раньше цифры считались на общем Dispatchers.IO с обычным приоритетом: на слабой приставке (4 ядра, /sdcard через FUSE, на каждую запись stat)
+     * десятки папок читались разом и отнимали процессор у главного потока и потока рисования; нажатия, раскрытия и галочки ждали.
+     */
+    private val bg = java.util.concurrent.Executors.newFixedThreadPool(3) { r ->
+        Thread({ android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); r.run() }, "fm-counts").also { it.isDaemon = true }
+    }.asCoroutineDispatcher()
     @Volatile private var loaded = false
     @Volatile private var dirty = false
     @Volatile private var bumpPending = false
@@ -99,7 +107,7 @@ object FolderCounts {
         (if (visible) cls.v else cls.b).withPermit {
             while (!active) delay(400)
             if (has(key)) return
-            val r = withContext(Dispatchers.IO) { runCatching { loader() }.getOrNull() }
+            val r = withContext(bg) { runCatching { loader() }.getOrNull() }
             if (r != null) put(ctx, key, r)
         }
     }

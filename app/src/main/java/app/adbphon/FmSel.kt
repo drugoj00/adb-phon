@@ -97,3 +97,51 @@ object SelTree {
         return normalize(out, canon)
     }
 }
+
+/**
+ * 14.0: быстрый индекс отметки для МНОГИХ запросов к одному набору (по запросу на каждую видимую строку). SelTree.covered/partial просматривают весь набор
+ * (на каждый запрос O(число отмеченных), с конкатенацией строк на каждый элемент): при сотнях отмеченных и десятках строк каждая отметка пересчитывалась десятки миллисекунд
+ * на каждой перекомпоновке. Здесь индекс строится один раз на набор, запрос стоит O(глубина пути). Результаты те же, что у SelTree.covered/partial (в том же порядке проверок).
+ */
+class SelIndex(sel: Collection<String>, private val canon: (String) -> String = { it }) {
+    private val raw = HashSet<String>(sel)
+    private val cset = HashSet<String>()
+    private val anc = HashSet<String>()
+
+    init {
+        for (s in sel) {
+            val c = canon(s)
+            cset.add(c)
+            // предки отмеченного: каждый префикс до «/» (без слэша) и вместе со слэшем (кроме самого ключа)
+            var i = c.indexOf('/')
+            while (i >= 0) {
+                if (i > 0) anc.add(c.substring(0, i))
+                if (i + 1 < c.length) anc.add(c.substring(0, i + 1))
+                i = c.indexOf('/', i + 1)
+            }
+        }
+    }
+
+    val isEmpty get() = raw.isEmpty()
+
+    /** То же, что SelTree.covered(sel, k, canon): отмечен сам или через отмеченную папку выше. */
+    fun covered(k: String): Boolean {
+        if (raw.isEmpty()) return false
+        if (k in raw) return true
+        val ck = canon(k)
+        if (ck in cset) return true
+        var i = ck.indexOf('/')
+        while (i >= 0) {
+            if (i > 0 && ck.substring(0, i) in cset) return true
+            if (i + 1 < ck.length && ck.substring(0, i + 1) in cset) return true
+            i = ck.indexOf('/', i + 1)
+        }
+        return false
+    }
+
+    /** То же, что SelTree.partial(sel, k, canon): папка не отмечена целиком, но внутри неё что-то отмечено. */
+    fun partial(k: String): Boolean {
+        if (raw.isEmpty()) return false
+        return !covered(k) && canon(k) in anc
+    }
+}

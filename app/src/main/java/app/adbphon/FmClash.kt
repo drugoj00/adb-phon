@@ -174,7 +174,7 @@ fun FmDialogFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> 
         BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             val land = maxWidth > maxHeight
             val w = if (land || tv) minOf(maxWidth * 0.88f, if (tv) 720.dp else 760.dp) else maxWidth - 20.dp
-            androidx.compose.material3.Surface(Modifier.width(w).heightIn(max = maxHeight * 0.92f), shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp) {
+            androidx.compose.material3.Surface(Modifier.width(w).heightIn(max = maxHeight * 0.92f), shape = RoundedCornerShape(16.dp), tonalElevation = 6.dp) {
                 Column(Modifier.barScroll().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             }
         }

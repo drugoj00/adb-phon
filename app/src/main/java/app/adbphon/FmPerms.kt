@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,7 +70,7 @@ fun FmPermsDialog(p: FmPane, names: List<String>, close: () -> Unit) {
                     loading -> Text(stringResource(R.string.perm_loading), fontSize = 14.sp)
                     failed && fix != null -> {
                         Text(stringResource(if (fix == "wifi") R.string.fm_fix_wifi_text else R.string.fm_fix_pair_text), fontSize = 14.sp)
-                        androidx.compose.material3.Button({ if (fix == "wifi") { Fm.fixAction(p, "wifi"); retry++ } else { close(); Fm.fixAction(p, "pair") } }) {
+                        Button({ if (fix == "wifi") { Fm.fixAction(p, "wifi"); retry++ } else { close(); Fm.fixAction(p, "pair") } }) {
                             Text(stringResource(if (fix == "wifi") R.string.fm_fix_wifi_btn else R.string.fm_fix_pair_btn), fontSize = 13.sp)
                         }
                     }
