@@ -547,6 +547,8 @@
     <string name="fm_extract_other">Розпакувати в іншу панель</string>
     <string name="fm_extracting">Розпакування</string>
     <string name="fm_found">Знайдено: %1$d</string>
+    <string name="fm_search_busy">Шукаю в: %1$s…</string>
+    <string name="fm_search_in">Шукали в: %1$s (з вкладеними теками)</string>
     <string name="fm_free_of">вільно %1$s із %2$s</string>
     <string name="fm_hidden">Приховані</string>
     <string name="fm_hist_empty">Історія порожня</string>
@@ -569,6 +571,7 @@
     <string name="fm_packing">Пакування</string>
     <string name="fm_pane_left">Ліва</string>
     <string name="fm_pane_right">Права</string>
+    <string name="fm_switch_pane">Перемкнути панель</string>
     <string name="fm_path">Шлях</string>
     <string name="fm_props">Властивості</string>
     <string name="fm_props_title">Властивості</string>
@@ -626,6 +629,7 @@
     <string name="fm_smb_pass">Пароль</string>
     <string name="fm_connect">Підключити</string>
     <string name="fm_priv_opt">Використовувати root/ADB для обмежених тек</string>
+    <string name="fm_tree_one">Тримати розгорнутою лише одну теку</string>
     <string name="fm_connecting">Підключаюся…</string>
     <string name="fm_fix_wifi_text">Бездротове налагодження вимкнено.</string>
     <string name="fm_fix_wifi_btn">Увімкнути налагодження по Wi-Fi</string>
@@ -953,7 +957,7 @@
     <string name="rt_group_storage">Пам’ять</string>
     <string name="rt_group_net">Мережа</string>
     <string name="rt_free">Вільно %1$s з %2$s</string>
-    <string name="rt_counts">%1$d тек, %2$d файлів</string>
+    <string name="rt_counts">%1$d тек, %2$d файлів</string>
     <string name="rt_ro">лише читання</string>
     <string name="rt_showhide">Показати/Приховати</string>
     <string name="rt_add_net">Додати підключення…</string>
@@ -1344,6 +1348,13 @@
     <string name="cm_need">Потрібен модуль хмар</string>
     <string name="cm_need_update">Модуль хмар потрібно оновити</string>
     <string name="cm_tap_install">Натисни, щоб завантажити й установити</string>
+    <string name="cm_tap_update">Натисни, щоб завантажити й оновити</string>
+    <string name="cm_recheck_title">Модуль хмар готовий</string>
+    <string name="cm_tap_recheck">Натисни, щоб оновити список</string>
+    <string name="cm_reason">Встановлено %1$s (код %2$d, протокол %3$d); потрібен протокол %4$d</string>
+    <string name="cm_progress">%1$s з %2$s МБ · %3$d %% · %4$s МБ/с · залишилось %5$s</string>
+    <string name="cm_wifi_hint">Близько %1$d МБ: краще по Wi-Fi</string>
+    <string name="cm_resuming">Зв’язок перервано, докачую…</string>
     <string name="okw_progress">Крок %1$d з %2$d</string>
     <string name="okw_g1">Створи проєкт: назву ADB-phon скопійовано.</string>
     <string name="okw_g2">Натисни «Увімкнути» біля Google Drive API.</string>

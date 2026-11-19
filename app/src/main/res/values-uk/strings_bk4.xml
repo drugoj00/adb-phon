@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bk4_est">Розмір копії: близько %1$s (налаштування %2$s, значки %3$s, підключення та ключі хмар %4$s)</string>
+    <string name="bk4_skipped">Не увійшло як завелике: %s</string>
+    <string name="bkp_sys_pick">Вибрати звичайним вікном Android…</string>
+    <string name="bkp_sys_pick_file">Вибрати файл звичайним вікном Android…</string>
+    <string name="bkp_sys_pick_sub">Звичне системне вікно: пам’ять, SD-картка, USB</string>
+    <string name="bkp_saf_unsupported">Вікно Android не віддало звичайну папку для цього місця. Вибери пам’ять, SD-картку або USB, або список нижче.</string>
+    <string name="bk4_mod_hint">Хмарні диски підключаться самі після встановлення модуля хмар: натисни «Завантажити модуль хмар».</string>
+    <string name="bk4_mod_progress">Модуль хмар: завантаження %1$d%%</string>
+    <string name="bk4_mod_get">Завантажити модуль хмар</string>
+    <string name="bk4_auto_nosecrets">Паролі й токени не збережено: пароль копії не задано. Задай його в Налаштування, Резервна копія.</string>
+</resources>

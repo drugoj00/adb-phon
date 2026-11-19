@@ -24,6 +24,10 @@
     <string name="set_vp_keep_hint">Увімкнено: режим, вибраний кнопкою «Під екран», запам’ятовується й застосовується до наступних відео та запусків. Вимкнено: кожне відео відкривається «за розміром», а кнопка діє лише на час цього відео.</string>
     <string name="intake_label">ADB-phon: встановлення</string>
     <string name="intake_fail">Не вдалося прочитати файл для встановлення</string>
+    <string name="integrity_short">Перевірку справжності програми не пройдено</string>
+    <string name="integrity_title">Завантажте програму з офіційного джерела</string>
+    <string name="integrity_text">Ця копія ADB-phon не схожа на випуск розробника. Зв’язок через ADB, встановлення й оновлення в ній обмежені, щоб вам не нашкодили. Завантажте програму зі сторінки випусків.</string>
+    <string name="integrity_open">Відкрити сторінку завантаження</string>
     <string name="ic_need_title">Потрібен доступ</string>
     <string name="ic_need_perm">Дозвольте ADB-phon встановлювати застосунки: так система підтвердить встановлення. Або підключіть ADB (налагодження по Wi-Fi) у налаштуваннях ADB-phon, тоді встановлення пройде без підтверджень.</string>
     <string name="ic_open_perm">Дозволити встановлення</string>
@@ -33,7 +37,7 @@
     <string name="fm_sub_mod">Змінено</string>
     <string name="fm_sub_cre">Створено</string>
     <string name="fm_sub_none">Нічого</string>
-    <string name="rt_counts_s">%1$d тек, %2$d файл.</string>
+    <string name="rt_counts_s">%1$d тек, %2$d файл.</string>
     <string name="upd_whatsnew">Що нового</string>
     <string name="saf_not_granted">Доступ до карти пам’яті не надано</string>
     <string name="saf_waiting">Чекаємо на надання доступу до карти пам’яті…</string>

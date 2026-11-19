@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bks_hint">Налаштування, пристрої, підключення і хмари разом із паролями підключень: один файл. Без APK і модуля хмар.</string>
+    <string name="bks_protect">Захистити паролем</string>
+    <string name="bks_protect_sub">Необов’язково. Файл шифрується паролем (AES-256)</string>
+    <string name="bks_plain_note">Без пароля файл зберігає паролі підключень відкритим текстом: тримай його в надійному місці.</string>
+    <string name="bks_pick">Обрати місце</string>
+    <string name="bks_saving">Зберігаю…</string>
+    <string name="bks_not_ours">Це не копія налаштувань ADB-phon. Копії застосунків відновлюються на вкладці «Софт».</string>
+</resources>

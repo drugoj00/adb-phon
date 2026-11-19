@@ -22,7 +22,7 @@
     <string name="bk3_priv_none">Для даних застосунків потрібен root або ADB (бездротове налагодження): підключи на вкладці «Звʼязок». Налаштування і APK копіюються і без них.</string>
     <string name="bk3_enc">Шифрувати паролем</string>
     <string name="bk3_enc_sub">AES-256. Пароль запамʼятовується для наступних копій і автокопії</string>
-    <string name="bk3_plain_warn">Без пароля паролі підключень і ключ ADB лежать у файлі відкрито</string>
+    <string name="bk3_plain_warn">Без пароля паролі, токени хмар і ключ ADB у файл НЕ кладуться. Задай пароль, щоб вони зберіглися</string>
     <string name="bk3_folder">Папка для копій</string>
     <string name="bk3_err_nothing">Познач, що включити в копію</string>
     <string name="bk3_err_no_apps">Вибери застосунки у списку</string>
