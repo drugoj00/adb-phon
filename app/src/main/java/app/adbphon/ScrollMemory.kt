@@ -93,15 +93,19 @@ fun rememberSavedTreeList(key: String, rowKeys: List<String>, selKey: String?): 
     val sel = androidx.compose.runtime.rememberUpdatedState(selKey)
     var restored by remember(key) { androidx.compose.runtime.mutableStateOf(false) }
     LaunchedEffect(key) {
+        val keys0 = FocusRestore.keys      // T3: счётчик нажатий кнопок пульта на момент создания списка
         var waited = 0
+        var found = false
         while (waited < 6000) {
             val ks = keys.value
             val idx = savedKey?.let { ks.indexOf(it) } ?: -1
-            if (idx >= 0) { state.scrollToItem(idx, o); break }
+            if (idx >= 0) { state.scrollToItem(idx, o); found = true; break }
             if (i == 0 && o == 0 && ks.isNotEmpty()) break
-            if (ks.size > i + 3) { state.scrollToItem(i, o); break }
+            // T3: сохранённая верхняя строка известна: ждём её появления (раскрытые папки подгружаются после запуска), а не прыгаем по индексу в ещё короткий список
+            if (savedKey == null && ks.size > i + 3) { state.scrollToItem(i, o); break }
             delay(200); waited += 200
         }
+        if (!found && savedKey != null && !(i == 0 && o == 0) && keys.value.size > i + 3) state.scrollToItem(i, o)
         // выделенная/открытая строка должна быть видна (выбор мог восстановиться чуть позже строк: ждём до двух секунд)
         var w2 = 0
         while (sel.value == null && w2 < 2000) { delay(100); w2 += 100 }
@@ -122,8 +126,19 @@ fun rememberSavedTreeList(key: String, rowKeys: List<String>, selKey: String?): 
             if (si2 >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == si2 }) state.scrollToItem((si2 - 2).coerceAtLeast(0))
         }
         android.util.Log.i("FocusRestore", "tree restored: keyMode=" + FocusRestore.keyMode(ctx) + " sel=" + sel.value + " si=" + si + " n=" + ks.size + "->" + keys.value.size + " first=" + state.firstVisibleItemIndex)
-        if (FocusRestore.keyMode(ctx) && sel.value != null) FocusRestore.key = sel.value
         restored = true
+        if (FocusRestore.keyMode(ctx) && sel.value != null) {
+            // T3: корневой список панели («files.root.<номер>»): фокус только в АКТИВНОЙ панели (обе панели ищут строку с одним и тем же ключом), запрос снимается после нажатия кнопки пульта
+            val paneId = key.substringAfterLast('.').toIntOrNull() ?: -1
+            if (paneId < 0) FocusRestore.key = sel.value
+            else if (Fm.active == paneId && FocusRestore.keys == keys0) {   // кнопку пульта уже нажали, пока список восстанавливался: фокус не отнимаем
+                val tgt = sel.value
+                FocusRestore.startPane = paneId; FocusRestore.startMark = keys0; FocusRestore.startKey = tgt
+                android.util.Log.i("FocusRestore", "T3: фокус после запуска: панель " + paneId + ", строка " + tgt)
+                delay(8000)
+                if (FocusRestore.startKey == tgt) FocusRestore.startKey = null
+            }
+        }
     }
     LaunchedEffect(state, restored) {
         if (!restored) return@LaunchedEffect
@@ -142,9 +157,16 @@ fun rememberSavedTreeList(key: String, rowKeys: List<String>, selKey: String?): 
 object FocusRestore {
     /** Ключ строки, которой нужно передать фокус (сбрасывается строкой после запроса). */
     var key by androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** T3: фокус после запуска: строка [startKey] панели [startPane] (только активной); [startMark] = счётчик нажатий [keys] на момент запроса: нажали кнопку пульта, запрос снимается. */
+    var startKey by androidx.compose.runtime.mutableStateOf<String?>(null)
+    @Volatile var startPane = -1
+    @Volatile var startMark = 0
+    /** Сколько раз нажимали стрелки/ОК (растёт в markKeys); [keysAtShow]: значение при показе экрана «Файлы» (фокус сам не переключает активную панель, пока кнопок не нажимали). */
+    @Volatile var keys = 0
+    @Volatile var keysAtShow = 0
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
     fun keyMode(ctx: Context): Boolean = Marq.tv || ctx.resources.configuration.navigation == android.content.res.Configuration.NAVIGATION_DPAD || sp(ctx).getBoolean("kbd_used", false)
-    fun markKeys(ctx: Context) { if (!sp(ctx).getBoolean("kbd_used", false)) sp(ctx).edit().putBoolean("kbd_used", true).apply() }
+    fun markKeys(ctx: Context) { keys++; if (!sp(ctx).getBoolean("kbd_used", false)) sp(ctx).edit().putBoolean("kbd_used", true).apply() }
     fun isDpad(code: Int) = code == android.view.KeyEvent.KEYCODE_DPAD_UP || code == android.view.KeyEvent.KEYCODE_DPAD_DOWN || code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
         code == android.view.KeyEvent.KEYCODE_DPAD_RIGHT || code == android.view.KeyEvent.KEYCODE_DPAD_CENTER
 }

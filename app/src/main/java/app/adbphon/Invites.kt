@@ -21,14 +21,13 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -585,10 +584,11 @@ fun InvitesSection() {
                 }) { Text(stringResource(R.string.inv_copy)) }
             }
             // 10.0: рядом с приёмом приглашения отправка своего (Tailscale API, MiscUi.kt)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // 14.0: кнопки одной высоты, даже если подпись одной из них переносится (EqBtnRow, Btn.kt)
+            EqBtnRow {
                 val bp = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                OutlinedButton({ paste = true; bad = false; text = "" }, Modifier.weight(1f), contentPadding = bp) { Text(stringResource(R.string.inv_have), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-                OutlinedButton({ sendInv = true }, Modifier.weight(1f), contentPadding = bp) { Text(stringResource(R.string.misc_inv_send_btn), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                OutlinedButton({ paste = true; bad = false; text = "" }, Modifier.weight(1f).fillMaxHeight(), contentPadding = bp) { Text(stringResource(R.string.inv_have), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                OutlinedButton({ sendInv = true }, Modifier.weight(1f).fillMaxHeight(), contentPadding = bp) { Text(stringResource(R.string.misc_inv_send_btn), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
             }
             if (sess != null) {
                 Text(stringResource(R.string.inv_sess_text, sess.label), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)

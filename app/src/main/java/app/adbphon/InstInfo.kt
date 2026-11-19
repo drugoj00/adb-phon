@@ -159,10 +159,12 @@ private fun sigShort(set: Set<String>): String = if (set.isEmpty()) "—" else s
 @Composable
 private fun CmpRow(caption: String, cur: String, new: String, changed: Boolean, newCol: Color) {
     val t = LocalTh.current
+    // 12.0 (владелица, окно «Установка»): текст крупнее (11 -> 13sp), но строки плотнее — явный lineHeight вместо унаследованного
+    // от диалога (там ~20sp на 11sp шрифт, отсюда и был лишний пустой зазор между строками при мелком тексте).
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-        Text(caption, color = t.hint, fontSize = 11.sp, modifier = Modifier.weight(1.2f))
-        Text(cur, color = if (changed) badCol(t.dark) else t.sub, fontSize = 11.sp, modifier = Modifier.weight(1f))
-        Text(new, color = if (changed) newCol else t.sub, fontSize = 11.sp, fontWeight = if (changed) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
+        Text(caption, color = t.hint, fontSize = 13.sp, lineHeight = 15.sp, modifier = Modifier.weight(1.2f))
+        Text(cur, color = if (changed) badCol(t.dark) else t.sub, fontSize = 13.sp, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+        Text(new, color = if (changed) newCol else t.sub, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = if (changed) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
     }
 }
 
@@ -404,10 +406,10 @@ fun InstallRunDialog(d: FmDlg.InstallRunDlg, close: () -> Unit) {
         title = null,
         text = { InstProgressView(d.run) },
         confirmButton = {
-            if (d.run.finished) androidx.compose.material3.TextButton(close, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_close)) }
+            if (d.run.finished) TextButton(close, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_close)) }
             else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (d.run.total > 1 && !d.run.stop) androidx.compose.material3.TextButton({ d.run.stop = true }) { Text(stringResource(R.string.ii_stop)) }
-                androidx.compose.material3.TextButton({ InstBg.begin(ctx, d.run); close() }, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_bg)) }
+                if (d.run.total > 1 && !d.run.stop) TextButton({ d.run.stop = true }) { Text(stringResource(R.string.ii_stop)) }
+                TextButton({ InstBg.begin(ctx, d.run); close() }, Modifier.focusRequester(bgFocus)) { Text(stringResource(R.string.ii_bg)) }
             }
         },
     )
@@ -433,13 +435,13 @@ fun InstallConfirmDialog(d: FmDlg.InstallConfirm, close: () -> Unit) {
             val one = d.files.singleOrNull()?.let { d.metas[it.name] }
             when {
                 one != null && one.curPlainSystem && one.kind == ApkMeta.Kind.DOWNGRADE -> {}
-                one != null && one.downgradeNeedsWipe -> androidx.compose.material3.TextButton({ close(); d.go(true) }) { Text(stringResource(if (one.downgradeKeepsData) R.string.ii_confirm_keep else R.string.ii_confirm_wipe)) }
+                one != null && one.downgradeNeedsWipe -> TextButton({ close(); d.go(true) }) { Text(stringResource(if (one.downgradeKeepsData) R.string.ii_confirm_keep else R.string.ii_confirm_wipe)) }
                 else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    androidx.compose.material3.TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
-                    androidx.compose.material3.TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
+                    TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
+                    TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
                 }
             }
         },
-        dismissButton = { androidx.compose.material3.TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },
+        dismissButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },
     )
 }

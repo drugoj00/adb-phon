@@ -98,7 +98,7 @@ fun NetDialog(onFiles: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
     )
     HDialog(onDismissRequest = { if (!busy) onClose() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp),
+            Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HintTitle(stringResource(R.string.pnet_title), stringResource(R.string.net_hint), titleColor = t.text, titleSize = 17.sp, titleWeight = FontWeight.Bold, hintColor = t.hint)

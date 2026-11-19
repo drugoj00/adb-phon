@@ -141,17 +141,17 @@ fun AutoConnectCard(vm: MainViewModel) {
             if (old) {
                 HintTitle(androidx.compose.ui.res.stringResource(R.string.old_title), androidx.compose.ui.res.stringResource(R.string.old_hint), titleWeight = FontWeight.Bold, hintSize = 14.sp)
                 Text(androidx.compose.ui.res.stringResource(R.string.old_waiting), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                androidx.compose.material3.OutlinedButton({
+                OutlinedButton({
                     (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
                         .setPrimaryClip(android.content.ClipData.newPlainText("adb", "adb tcpip 5555"))
                     android.widget.Toast.makeText(ctx, ctx.getString(R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
                 }) { Text(androidx.compose.ui.res.stringResource(R.string.old_copy)) }
             } else {
                 HintTitle(androidx.compose.ui.res.stringResource(R.string.autopair_title), androidx.compose.ui.res.stringResource(R.string.autopair_hint), titleWeight = FontWeight.Bold, hintSize = 14.sp)
-                if (!autoOn) androidx.compose.material3.OutlinedButton({
+                if (!autoOn) OutlinedButton({
                     runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }) { Text(androidx.compose.ui.res.stringResource(R.string.autopair_enable)) }
-                androidx.compose.material3.Button(onClick = {
+                Button(onClick = {
                     Pairing.startAutoFlow(ctx)
                 }, enabled = autoOn && !vm.busy) { Text(androidx.compose.ui.res.stringResource(R.string.autopair_run)) }
             }

@@ -187,7 +187,7 @@ object Feedback {
 
 @Composable
 fun Button(
-    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = ButtonDefaults.shape,
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = AppUi.BTN_SHAPE,   // 14.0: форма кнопок одна на всех (Btn.kt), не «таблетка» Material3
     colors: ButtonColors = ButtonDefaults.buttonColors(), elevation: ButtonElevation? = ButtonDefaults.buttonElevation(),
     border: BorderStroke? = null, contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     interactionSource: MutableInteractionSource? = null, content: @Composable RowScope.() -> Unit,
@@ -199,7 +199,7 @@ fun Button(
 
 @Composable
 fun OutlinedButton(
-    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = ButtonDefaults.outlinedShape,
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = AppUi.BTN_SHAPE,
     colors: ButtonColors = ButtonDefaults.outlinedButtonColors(), elevation: ButtonElevation? = null,
     border: BorderStroke? = ButtonDefaults.outlinedButtonBorder(enabled), contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     interactionSource: MutableInteractionSource? = null, content: @Composable RowScope.() -> Unit,
@@ -211,7 +211,7 @@ fun OutlinedButton(
 
 @Composable
 fun TextButton(
-    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = ButtonDefaults.textShape,
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = AppUi.BTN_SHAPE,
     colors: ButtonColors = ButtonDefaults.textButtonColors(), elevation: ButtonElevation? = null, border: BorderStroke? = null,
     contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
     interactionSource: MutableInteractionSource? = null, content: @Composable RowScope.() -> Unit,
@@ -223,7 +223,7 @@ fun TextButton(
 
 @Composable
 fun FilledTonalButton(
-    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = ButtonDefaults.filledTonalShape,
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, shape: Shape = AppUi.BTN_SHAPE,
     colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(), elevation: ButtonElevation? = ButtonDefaults.filledTonalButtonElevation(),
     border: BorderStroke? = null, contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     interactionSource: MutableInteractionSource? = null, content: @Composable RowScope.() -> Unit,

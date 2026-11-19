@@ -629,7 +629,7 @@ fun PadOverlay(onExit: () -> Unit, onLetterboxed: () -> Unit = {}) {
       PadSurface(false, rot, onExit = onExit, onSettings = { settings = true }, onDevices = { devices = true })
       if (devices) PadDevices { devices = false }
       if (settings) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .55f)).clickable { settings = false }, contentAlignment = Alignment.Center) {
-          androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
+          androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
               modifier = Modifier.fillMaxWidth(0.88f).fillMaxHeight(0.94f)) {
               Column(Modifier.padding(16.dp)) {
                   Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1038,12 +1038,12 @@ private fun PadDevices(onClose: () -> Unit) {
     }
     val cur = BtHid.hostAddress()?.uppercase()
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .55f)).clickable { onClose() }, contentAlignment = Alignment.Center) {
-        androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
+        androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth(0.7f).heightIn(max = 320.dp).clickable(enabled = false) {}) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.pad_devices_title), Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    androidx.compose.material3.TextButton(onClose) { Text(stringResource(R.string.fm_close)) }
+                    TextButton(onClose) { Text(stringResource(R.string.fm_close)) }
                 }
                 Column(Modifier.weight(1f, fill = false).barScroll()) {
                     rows.forEach { r ->
@@ -1080,7 +1080,8 @@ fun startPadTrial() { BtHid.dryRun = true; Pad.playing = true }
 fun PadTrialButton(compact: Boolean = false, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val label = stringResource(R.string.pad_try_nopc)
-    val sh = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    // 14.0 (владелица): кнопки с малым скруглением, как остальные (AppUi.BTN_RADIUS, Btn.kt); было 16dp
+    val sh = AppUi.BTN_SHAPE
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier.heightIn(min = 40.dp).clip(sh)
@@ -1100,7 +1101,8 @@ fun PadTrialButton(compact: Boolean = false, modifier: Modifier = Modifier) {
 @Composable
 fun PadLocalButton(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
-    val sh = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    // 14.0 (владелица): кнопки с малым скруглением, как остальные (AppUi.BTN_RADIUS, Btn.kt); было 16dp
+    val sh = AppUi.BTN_SHAPE
     val label = stringResource(R.string.pad_local)
     Row(
         modifier.heightIn(min = 40.dp).clip(sh).border(1.dp, MaterialTheme.colorScheme.outline, sh)

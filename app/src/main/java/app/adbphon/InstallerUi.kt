@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -20,9 +21,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -213,9 +212,10 @@ fun InstallerDefaultSetting() {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         HintTitle(stringResource(R.string.inst_u_default), stringResource(R.string.inst_u_default_hint))
         Text(Installers.labelOf(ctx, now), fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ dlg = true }, Modifier.weight(1f)) { Text(stringResource(R.string.inst_u_change), maxLines = 2) }
-            OutlinedButton({ InstallerStore.reset(ctx) }, Modifier.weight(1f), enabled = now != null) { Text(stringResource(R.string.inst_u_reset), maxLines = 2) }
+        // 14.0: кнопки одной высоты при переносе подписи (EqBtnRow, Btn.kt)
+        EqBtnRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({ dlg = true }, Modifier.weight(1f).fillMaxHeight()) { Text(stringResource(R.string.inst_u_change), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            OutlinedButton({ InstallerStore.reset(ctx) }, Modifier.weight(1f).fillMaxHeight(), enabled = now != null) { Text(stringResource(R.string.inst_u_reset), maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
     }
     if (dlg) {

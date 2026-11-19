@@ -36,6 +36,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.defaultMinSize
@@ -155,10 +159,10 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onResume() { super.onResume(); FolderCounts.active = true; CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this) }
-    override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this) }
+    override fun onResume() { super.onResume(); FolderCounts.active = true; CloudReturn.resumedAt = System.currentTimeMillis(); CloudOverlay.onAppResume(); CloudReturn.cancelNotice(this); PermFlow.onResume(this); Invites.start(this); CallListen.start(this); VpnSession.onStart(this); CloudModule.refreshMarks(this) }
+    override fun onPause() { super.onPause(); Invites.stopUi(); CloudOverlay.onAppPause(this); FmRootCfg.flushState(this, false) }
     /** 7.6: простые окна «Файлов» не запоминаются при выходе из программы (поворот экрана их не закрывает). */
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) { FolderCounts.active = false; Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
+    override fun onStop() { super.onStop(); FmRootCfg.flushState(this, true); if (!isChangingConfigurations) { FolderCounts.active = false; Fm.closeSimpleDialogsOnLeave(); CollapseAll.bump() } }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -177,6 +181,7 @@ class MainActivity : ComponentActivity() {
         FmSub.init(applicationContext)
         ApkIntake.cleanup(applicationContext, 15 * 60_000L)
         TapGuard.init(applicationContext)
+        UiAnim.init(applicationContext)
         PadKeeper.start(this)
         AutoPairService.ensureEnabled(this)
         AppBackup.autoIfDue(this)
@@ -346,7 +351,10 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     val dens0 = androidx.compose.ui.platform.LocalDensity.current
     CompositionLocalProvider(LocalContext provides uiCtx, LocalLangCode provides vm.lang, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(dens0.density * AppScale.densMul(), dens0.fontScale * AppScale.fontMul())) {
     ImeGateHost {
-    MaterialTheme(colorScheme = AppColors.scheme(dark, baseCtx)) {
+    // 18.11.2026 (владелица: «окна на телефоне сильно скруглены, а на приставке норм»): дефолтная форма Material3 для диалогов
+    // (AlertDialogDefaults.shape = shapes.extraLarge = 28dp) нигде в проекте не переопределялась — на маленьком телефонном диалоге
+    // такой большой радиус выглядит «пузырём»; единая, менее крупная форма — одной правкой на все диалоги через LAlertDialog.
+    MaterialTheme(colorScheme = AppColors.scheme(dark, baseCtx), shapes = androidx.compose.material3.Shapes(large = RoundedCornerShape(14.dp), extraLarge = RoundedCornerShape(16.dp))) {
     ClickSoundHost {
         Surface(Modifier.fillMaxSize().imeGateKeys(), color = MaterialTheme.colorScheme.background) {
             var tab by remember { mutableStateOf(Startup.initialTab(baseCtx)) }
@@ -456,6 +464,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             InviteDialogHost()
             ViaAskHost()
             InstallGateHost()
+            IntegrityHost()
             InstBgHost()
             ModuleHost()
             // 10.2 (правило 23): окно обновления показывает «Что нового» из описания выпуска
@@ -589,12 +598,75 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 Column(Modifier.padding(pad).fillMaxSize()) {
                     Spacer(Modifier.height(4.dp))
                     if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    if (showSettings) SettingsScreen(vm) else when (tab) {
-                        0 -> ConnectScreen(vm)
-                        1 -> NeedConnection(vm) { if (vm.remoteHost != null) LocalOnly(vm) else AppsScreen(vm) }
-                        2 -> FileManagerScreen(vm) { tab = 0 }
-                        3 -> NeedConnection(vm) { RemoteScreen(vm) }
-                        else -> MoreScreen(vm)
+                    // 18.11.2026 (владелица, тот же «переезд», что понравился у панелей «Файлов»): переключение главных вкладок
+                    // раньше было мгновенной подменой без всякой анимации — теперь тот же сильный слайд. На приставке короче и
+                    // легче (меньше длительность, меньше сдвиг), чтобы не грузить слабое железо: экран там и так тяжелее телефонного.
+                    // 18.11.2026 (владелица, на x96-2 «никакие эффекты не работают»): обычный AnimatedContent слушает системную
+                    // настройку «Масштаб анимации» (на этой приставке урезана сильнее, чем на телефоне — 0.25/0/0) — переход
+                    // доигрывал почти мгновенно. Заменено на свой Animatable с withContext(FmFullMotion), как у панелей «Файлов»:
+                    // всегда полная скорость независимо от системной настройки, с общим выключателем «Анимация переходов».
+                    val screenKey = if (showSettings) 99 else tab
+                    @Composable fun screenFor(key: Int) {
+                        if (key == 99) SettingsScreen(vm) else when (key) {
+                            0 -> ConnectScreen(vm)
+                            1 -> NeedConnection(vm) { if (vm.remoteHost != null) LocalOnly(vm) else AppsScreen(vm) }
+                            2 -> FileManagerScreen(vm) { tab = 0 }
+                            3 -> NeedConnection(vm) { RemoteScreen(vm) }
+                            else -> MoreScreen(vm)
+                        }
+                    }
+                    var shownScreen by remember { mutableStateOf(screenKey) }
+                    var incomingScreen by remember { mutableStateOf(screenKey) }
+                    var tabSlideToRight by remember { mutableStateOf(true) }
+                    val tabProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(screenKey) {
+                        // 19.11.2026: нажали другой значок, пока шёл прежний переход: тот доводится сразу до ближайшего состояния (экран не «отскакивает» назад
+                        // и не застревает посередине, если вернулись на прежнюю вкладку)
+                        if (shownScreen != incomingScreen) {
+                            if (tabProgress.value >= 0.5f) shownScreen = incomingScreen else incomingScreen = shownScreen
+                            tabProgress.snapTo(0f)
+                        }
+                        if (screenKey != shownScreen) {
+                            incomingScreen = screenKey
+                            tabSlideToRight = screenKey > shownScreen
+                            if (UiAnim.on) withContext(FmFullMotion) {
+                                tabProgress.snapTo(0f)
+                                tabProgress.animateTo(1f, tween(if (Marq.tv) 150 else 280, easing = FastOutSlowInEasing))
+                            } else tabProgress.snapTo(1f)
+                            shownScreen = incomingScreen
+                            tabProgress.snapTo(0f)
+                        }
+                    }
+                    val tabFrac = if (Marq.tv) 1f / 3f else 9f / 10f
+                    // 19.11.2026 (4PDA, mikolkavod: «передёргивание первой вкладки в файлах при переключении по нижним значкам»): раньше уходящий и входящий
+                    // экраны стояли в двух РАЗНЫХ местах дерева (два Box), и после конца анимации входящий экран «переезжал» в первое место: Compose уничтожал
+                    // его и создавал заново (терялись прокрутка списка и полосы пути, иконки рисовались заново, повторно срабатывали эффекты запуска, у «Источников»
+                    // срабатывало сворачивание при выходе), отсюда рывок в самом конце перехода. Теперь оба экрана стоят в ОДНОМ цикле под key(экран):
+                    // после перехода остаётся тот же экземпляр. Ход анимации читается только при рисовании (graphicsLayer), экран по кадрам не перекомпонуется.
+                    val tabPhase by remember { androidx.compose.runtime.derivedStateOf { val q = tabProgress.value; if (q <= 0f) 0 else if (q >= 1f) 2 else 1 } }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        val shownNow = shownScreen
+                        val incomingNow = incomingScreen
+                        val anim = shownNow != incomingNow
+                        // уходящий виден, пока ход < 1; входящий (поверх него) виден, пока ход > 0
+                        val keys = if (!anim) listOf(shownNow) else when (tabPhase) { 0 -> listOf(shownNow); 2 -> listOf(incomingNow); else -> listOf(shownNow, incomingNow) }
+                        for (k in keys) androidx.compose.runtime.key(k) {
+                            val isIn = anim && k == incomingNow
+                            Box(
+                                Modifier.fillMaxSize().graphicsLayer {
+                                    if (anim) {
+                                        val q = tabProgress.value
+                                        if (isIn) {
+                                            translationX = (if (tabSlideToRight) 1f else -1f) * size.width * tabFrac * (1f - q)
+                                            alpha = q
+                                        } else {
+                                            translationX = (if (tabSlideToRight) -1f else 1f) * size.width * tabFrac * q
+                                            alpha = 1f - q
+                                        }
+                                    }
+                                },
+                            ) { screenFor(k) }
+                        }
                     }
                 }
             }
@@ -1397,7 +1469,7 @@ fun AppInfoDialog(a: AppEntry, onClose: () -> Unit) {
         text = { Column(Modifier.tvFit(), verticalArrangement = Arrangement.spacedBy(8.dp)) {   // 10.0 (tvfont): на ТВ крупный текст ужимается, если не помещается
             AppInfoBlocks(a, extra, twoCols = land && page == 0, big = false, header = false, full = true, stack = true, part = if (page == 0) 1 else 2)
             if (page == 0) {
-                @Composable fun act(label: Int, mod: Modifier, run: () -> Unit) = androidx.compose.material3.OutlinedButton(run, mod, contentPadding = btnPad) { Text(stringResource(label), fontSize = 13.sp, maxLines = 1, softWrap = false) }
+                @Composable fun act(label: Int, mod: Modifier, run: () -> Unit) = OutlinedButton(run, mod, contentPadding = btnPad) { Text(stringResource(label), fontSize = 13.sp, maxLines = 1, softWrap = false) }
                 val canRepack = a.installed && a.paths.isNotEmpty()
                 if (land) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (canRepack) act(R.string.rp_menu, Modifier.weight(1f)) { startRepack() }

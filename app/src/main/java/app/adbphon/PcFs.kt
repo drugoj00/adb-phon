@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -330,6 +328,7 @@ fun PcScreenDialog(h: PcHost, close: () -> Unit) {
     DisposableEffect(Unit) { c.connect(h.ip, h.code, pcMyName(ctx)); started = true; onDispose { c.disconnect() } }
     LaunchedEffect(c.state, started) { if (started && c.state == 0 && c.status.isBlank()) close() }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
+        LangScopePublic {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             if (c.state == 2) ScreenPcLive(c)
             else Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -337,6 +336,7 @@ fun PcScreenDialog(h: PcHost, close: () -> Unit) {
                 Text(c.status.ifBlank { stringResource(R.string.spc_connecting) }, fontSize = 14.sp, color = if (c.state == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
                 Button(close, Modifier.padding(top = 16.dp)) { Text(stringResource(R.string.btn_close)) }
             }
+        }
         }
     }
 }

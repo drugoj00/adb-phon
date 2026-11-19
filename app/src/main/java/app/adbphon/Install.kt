@@ -96,7 +96,7 @@ fun InstallHub(onClose: () -> Unit) {
         stage == "net" -> NetDialog(onFiles = { pending = it; stage = "menu" }) { stage = "menu" }
         else -> HDialog(onDismissRequest = onClose) {
             Column(
-                Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth()
+                Modifier.clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(18.dp).fillMaxWidth()
                     .heightIn(max = 640.dp).barScroll(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -139,7 +139,7 @@ fun InstallDialog(files: List<ApkFile>, onClose: () -> Unit) {
     val showProgress = busy || run.running || run.finished
     HDialog(onDismissRequest = { if (!busy && !run.running) { onClose() } }) {
         Column(
-            Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(20.dp)).padding(18.dp).fillMaxWidth(),
+            Modifier.clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(18.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!showProgress) {

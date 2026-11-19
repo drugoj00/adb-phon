@@ -25,14 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -289,7 +286,7 @@ fun ScreenPcLive(c: ScreenPcClient) {
             OutlinedButton({ c.disconnect() }) { Text(stringResource(R.string.spc_disconnect), fontSize = 12.sp) }
             Box {
                 OutlinedButton({ qMenu = true }) { Text(stringResource(R.string.spc_quality), fontSize = 12.sp) }
-                DropdownMenu(qMenu, { qMenu = false }) {
+                LDropdownMenu(qMenu, { qMenu = false }) {
                     DropdownMenuItem({ Text(stringResource(R.string.spc_q_auto)) }, { c.qAuto = true; c.qW = 1600; c.qQ = 75; c.qFps = 12; c.sendQ(); qMenu = false })
                     DropdownMenuItem({ Text(stringResource(R.string.spc_q_fast)) }, { c.qAuto = false; c.qW = 960; c.qQ = 50; c.qFps = 15; c.sendQ(); qMenu = false })
                     DropdownMenuItem({ Text(stringResource(R.string.spc_q_sharp)) }, { c.qAuto = false; c.qW = 1920; c.qQ = 85; c.qFps = 8; c.sendQ(); qMenu = false })
@@ -297,7 +294,7 @@ fun ScreenPcLive(c: ScreenPcClient) {
             }
             if (c.monitors.size > 1) Box {
                 OutlinedButton({ mMenu = true }) { Text(stringResource(R.string.spc_monitor), fontSize = 12.sp) }
-                DropdownMenu(mMenu, { mMenu = false }) {
+                LDropdownMenu(mMenu, { mMenu = false }) {
                     c.monitors.forEach { l ->
                         val p = l.split('|')
                         DropdownMenuItem({ Text((p[0].toIntOrNull() ?: 0).plus(1).toString() + ": " + p.getOrElse(1) { "" } + "x" + p.getOrElse(2) { "" }) }, { c.mon = p[0].toIntOrNull() ?: 0; c.sendQ(); mMenu = false })

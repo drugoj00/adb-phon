@@ -65,6 +65,7 @@ class InstallService : Service() {
         }
         // 1. кто просит: тот же издатель (подпись пакета-вызывающего совпадает с подписью ADB-phon)
         if (uri == null || caller.isEmpty() || !trusted(caller)) { reply(R_DENIED, "denied", msg = "caller not allowed"); return }
+        if (!withContext(Dispatchers.IO) { Integrity.safe(app) }) { reply(R_DENIED, "denied", msg = "integrity"); return }
         reply(R_STARTED, "started")
         // 2. файл во временную папку (разрешение на чтение выдал клиент)
         val dir = File(cacheDir, "silent").apply { mkdirs() }
