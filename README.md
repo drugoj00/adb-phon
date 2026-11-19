@@ -16,15 +16,16 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 11.0.** [ADB-phon-11.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 13.0.** [ADB-phon-13.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `ddd8775fe25fc6abadf49488db7064e71bf4989fc2330751a32e87940492b709`
+SHA-256: `8a7ff410fc577c9060cac011c6b2859a7564915b88268be3654ad2ea9cb2c67f`
 
-## What's new in 11.0
+## What's new in 13.0
 
-- Auto interface scale for car radios and large screens
-- Copy progress bar fills up and shows percent
-- Bug fixes
+- Plain backup: one file, optional password, system location picker
+- Clouds and sources collapse on leaving and when another one is expanded
+- File manager side panel: “More” is visible on any screen
+- Reorder side panel buttons by long press and drag
 
 **Requirements and limits**
 
@@ -33,7 +34,7 @@ SHA-256: `ddd8775fe25fc6abadf49488db7064e71bf4989fc2330751a32e87940492b709`
 - “On-screen buttons” work through the accessibility service
 - Moving a backup with data to another device needs the same app signature
 - Video and music from archives, ADB devices and root are still copied first
-- Not tested on 11.0: TV box and remote control
+- Not tested on 13.0: remote control on a TV box (long OK, arrows)
 
 ## Features
 
@@ -93,7 +94,7 @@ SHA-256: `ddd8775fe25fc6abadf49488db7064e71bf4989fc2330751a32e87940492b709`
 
 ## Quick start
 
-1. Download ADB-phon-11.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-13.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
