@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
 object AppBackup {
     const val EXT = "adbpb"
     const val FORMAT = 1
-    private val MAGIC = "ADBPB".toByteArray()
+    val MAGIC = "ADBPB".toByteArray()
     private const val ITER = 300_000
 
     /** Файлы настроек, которые не входят в копию: адрес папки копий (он свой на каждом устройстве) и служебные отметки. */
@@ -42,7 +42,13 @@ object AppBackup {
     /** Файлы filesDir, входящие в копию как секреты. */
     private val SECRET_FILES = listOf("adb_key.pk8", "adb_cert.der", "clouds.conf")
 
-    class Summary(val settings: Int, val links: Int, val clouds: Int, val devices: Int, val secrets: Boolean)
+    /** [skipped]: что не вошло как слишком большое (кэши в настройках, значки сверх лимита): «имя (размер)». */
+    class Summary(val settings: Int, val links: Int, val clouds: Int, val devices: Int, val secrets: Boolean, val skipped: List<String> = emptyList()) {
+        fun skippedNote(ctx: Context): String = if (skipped.isEmpty()) "" else "\n" + ctx.getString(R.string.bk4_skipped, skipped.joinToString(", "))
+    }
+    /** Предел: одна группа настроек и все значки в копии «только настройки». Настройки это килобайты; сверх лимита это кэши и лишние картинки. */
+    const val MAX_PREF_CHARS = 512 * 1024
+    const val MAX_ICONS_BYTES = 6L * 1024 * 1024
     class BadFormat(msg: String) : Exception(msg)
     class NeedPass : Exception("need passphrase")
     class WrongPass : Exception("wrong passphrase")
@@ -132,14 +138,22 @@ object AppBackup {
         val root = JSONObject().put("app", "ADB-phon").put("format", FORMAT).put("created", System.currentTimeMillis())
             .put("appVersion", runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrDefault("")).put("secrets", secrets)
         val prefs = JSONObject()
-        prefsNames(ctx).forEach { prefs.put(it, prefToJson(ctx, it)) }
+        val skipped = ArrayList<String>()
+        prefsNames(ctx).forEach { n ->
+            val pj = prefToJson(ctx, n)
+            val len = pj.toString().length
+            if (len > MAX_PREF_CHARS) { skipped += n + " (" + (len / 1024) + " KB)"; AppLog.note("копия: группа настроек $n слишком большая ($len), не вошла") } else prefs.put(n, pj)
+        }
         root.put("prefs", prefs)
         val net = JSONArray()
         NetStore.list(ctx).forEach { c ->
             net.put(JSONObject().put("k", c.kind).put("h", c.host).put("p", c.port).put("u", c.user).put("d", c.path).put("v", c.smb).put("n", c.name).apply { if (secrets) put("w", c.pass) })
         }
         root.put("net", net)
-        root.put("icons", iconsToJson(ctx))
+        val iconsDir = File(ctx.filesDir, "icons")
+        val iconsTotal = iconsDir.listFiles()?.filter { it.isFile && it.length() < 400_000 }?.sumOf { it.length() } ?: 0L
+        if (iconsTotal <= MAX_ICONS_BYTES) root.put("icons", iconsToJson(ctx)) else skipped += "icons (" + (iconsTotal / 1048576) + " MB)"
+        root.put("skipped", JSONArray(skipped))
         if (secrets) {
             val files = JSONObject()
             SECRET_FILES.forEach { n -> File(ctx.filesDir, n).takeIf { it.isFile }?.let { files.put(n, Base64.encodeToString(it.readBytes(), Base64.NO_WRAP)) } }
@@ -163,7 +177,18 @@ object AppBackup {
         ad?.optJSONObject("favs")?.optString("v")?.let { devices += it.split("\n").count { l -> l.isNotBlank() } }
         ad?.optJSONObject("names")?.optString("v")?.let { devices += it.split("\n").count { l -> l.isNotBlank() } }
         prefs.optJSONObject("bt_last")?.keys()?.forEach { if (it.startsWith("last_")) devices++ }
-        return Summary(settings, links, clouds, devices, j.optBoolean("secrets"))
+        val sk = j.optJSONArray("skipped")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+        return Summary(settings, links, clouds, devices, j.optBoolean("secrets"), sk)
+    }
+
+
+    /** Оценка размера копии «только настройки» по частям (для окна «Создать копию…»): байты настроек, подключений, значков, ключей и облаков, итог. */
+    class Estimate(val prefs: Long, val net: Long, val icons: Long, val files: Long, val total: Long, val skipped: List<String>)
+    fun estimate(ctx: Context): Estimate {
+        val j = collect(ctx, true)
+        fun len(k: String): Long = (j.opt(k)?.toString()?.length ?: 0).toLong()
+        val sk = j.optJSONArray("skipped")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+        return Estimate(len("prefs"), len("net"), len("icons"), len("files"), j.toString().length.toLong(), sk)
     }
 
     // ------------------------------------------------------------------ создание
@@ -172,7 +197,7 @@ object AppBackup {
 
     /** Готовые байты файла копии и краткие сведения. */
     fun create(ctx: Context, pass: CharArray?): Pair<ByteArray, Summary> {
-        val withSecrets = true    // 7.0: пароли, токены облаков и ключ ADB входят всегда, чтобы после восстановления диски сразу открывались; фраза их шифрует
+        val withSecrets = true   // 19.11.2026 (слово владелицы: «обычный бекап»): пароли подключений, токены облаков и ключ ADB входят всегда; без пароля файл открытый, с паролем зашифрован
         val j = collect(ctx, withSecrets)
         return seal(j.toString().toByteArray(Charsets.UTF_8), pass) to summarize(j)
     }

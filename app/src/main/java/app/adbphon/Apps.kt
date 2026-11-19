@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.runtime.Composable
@@ -264,8 +263,10 @@ fun AppsRowIcon(name: String, size: Dp) {
             runCatching { FmIo.app.packageManager.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap() }.getOrNull()?.also { appIconCache.put(pkg, it) }
         }
     }
-    val b = bmp
-    if (b != null) Image(b, null, Modifier.size(size)) else Box(Modifier.size(size)) { Icon(Icons.Filled.Android, null, Modifier.size(size), tint = androidx.compose.ui.graphics.Color(0xFF9CCC65)) }
+    // 12.0: та же правка, что и у FileTypeIcon — значок программы грузится в фоне, Crossfade вместо мгновенной подмены плейсхолдера
+    androidx.compose.animation.Crossfade(bmp, label = "app_icon", animationSpec = androidx.compose.animation.core.tween(150)) { b ->
+        if (b != null) Image(b, null, Modifier.size(size)) else Box(Modifier.size(size)) { Icon(Icons.Filled.Android, null, Modifier.size(size), tint = androidx.compose.ui.graphics.Color(0xFF9CCC65)) }
+    }
 }
 
 /** Сохранённая копия APK (бэкап ADB-phon): kind 0 = архив копий (AppMenuBackups), 1 = «Копия с данными» (ADB-phon/Backups). */

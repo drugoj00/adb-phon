@@ -32,7 +32,7 @@ object BkStore {
     private const val ENC = "bk2_enc"
     /** Пароль хранится только зашифрованным ключом Android Keystore этого устройства; в копию настроек не входит (AppBackup.EXCLUDE_KEYS). */
     private const val PASS = "bkp_auto_pass"
-    fun encOn(ctx: Context) = prefs(ctx).getBoolean(ENC, false)
+    fun encOn(ctx: Context) = prefs(ctx).getBoolean(ENC, false)   // 19.11.2026 (слово владелицы: «обычный бекап»): по умолчанию без пароля, «Защитить паролем» необязательно
     fun setEncOn(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(ENC, on).apply() }
     fun pass(ctx: Context): String = prefs(ctx).getString(PASS, null)?.let { runCatching { NetStore.decrypt(it) }.getOrNull() }.orEmpty()
     fun setPass(ctx: Context, p: String) {
@@ -44,7 +44,7 @@ object BkStore {
     fun passForCopy(ctx: Context): CharArray? {
         if (!encOn(ctx)) return null
         val p = pass(ctx)
-        if (p.isEmpty()) throw NeedPass()
+        if (p.isEmpty()) return null   // 19.11.2026: шифрование без пароля = копия без пароля (раньше ошибка NeedPass)
         return p.toCharArray()
     }
     class NeedPass : Exception("no password")

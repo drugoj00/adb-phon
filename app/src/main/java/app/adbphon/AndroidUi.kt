@@ -11,12 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import app.adbphon.FloorText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -123,6 +120,7 @@ fun AndroidConsoleDialog(d: AdbDev, close: () -> Unit) {
     }
     LaunchedEffect(out.length) { sc.scrollTo(sc.maxValue) }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false)) {
+        LangScopePublic {
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).androidx_imePad().padding(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(d.title + " · " + stringResource(R.string.dev_console), fontSize = 15.sp, modifier = Modifier.weight(1f))
@@ -144,6 +142,7 @@ fun AndroidConsoleDialog(d: AdbDev, close: () -> Unit) {
                     ses?.let { s -> scope.launch(Dispatchers.IO) { runCatching { s.line(t) } } }
                 }) { Text(stringResource(R.string.spc_send)) }
             }
+        }
         }
     }
 }

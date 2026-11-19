@@ -208,17 +208,19 @@ class CloudFs(private val remote: String, private val display: String) : RemoteF
         CloudTestHook.fakeErr?.let { throw CloudErr.fromText(ctx, it, type) }   // 10.0: стенд, подмена текста ошибки движка
         val lock = locks.getOrPut(remote) { kotlinx.coroutines.sync.Mutex() }
         // один запрос к облаку за раз: MEGA при параллельных входах отвечает пустым ответом («unexpected end of JSON input»)
-        var r: Rclone.Result = lock.withLock { Rclone.run(ctx, listOf("lsjson", spec(path), "--no-mimetype", "--no-modtime") + Rclone.common, 150_000) }
+        // 12.0 (fix): без --no-modtime — иначе у файлов нет даты и сортировка «по дате» в облаках не действует
+        var r: Rclone.Result = lock.withLock { Rclone.run(ctx, listOf("lsjson", spec(path), "--no-mimetype") + Rclone.common, 150_000) }
         // лимит общего ключа и временные сбои облака бывают кратковременными: до трёх повторов с паузой, затем понятная ошибка
         var tries = 0
-        while (!r.ok && CloudErr.retryable(CloudErr.classify(r.err + r.out)) && tries < 3) { tries++; kotlinx.coroutines.delay(3_000L * tries); r = lock.withLock { Rclone.run(ctx, listOf("lsjson", spec(path), "--no-mimetype", "--no-modtime") + Rclone.common, 150_000) } }
+        while (!r.ok && CloudErr.retryable(CloudErr.classify(r.err + r.out)) && tries < 3) { tries++; kotlinx.coroutines.delay(3_000L * tries); r = lock.withLock { Rclone.run(ctx, listOf("lsjson", spec(path), "--no-mimetype") + Rclone.common, 150_000) } }
         if (!r.ok) throw CloudErr.fromText(ctx, r.err + "\n" + r.out, type)
         val a = JSONArray(r.out.trim().ifEmpty { "[]" })
         val base = path.trimEnd('/')
         // корзина программы лежит в корне облака и в обычных списках не показывается
         return (0 until a.length()).map { a.getJSONObject(it) }.filter { o -> !(base.isEmpty() && o.getString("Name") == CloudTrash.DIR) }.map { o ->
             val n = o.getString("Name"); val dir = o.optBoolean("IsDir")
-            FsEntry(n, "$base/$n", dir, if (dir) 0 else o.optLong("Size", 0).coerceAtLeast(0))
+            // ModTime у rclone — ISO 8601 («2026-11-16T10:30:00.123Z»); у части облаков для папок его нет
+            FsEntry(n, "$base/$n", dir, if (dir) 0 else o.optLong("Size", 0).coerceAtLeast(0), FmDates.ofMillis(FmDates.httpMillis(o.optString("ModTime", ""))))
         }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     }
 

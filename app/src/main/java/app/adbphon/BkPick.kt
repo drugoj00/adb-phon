@@ -1,6 +1,7 @@
 package app.adbphon
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +57,18 @@ fun bkVolumes(ctx: Context): List<Triple<String, String, Boolean>> = runCatching
     }
 }.getOrDefault(emptyList())
 
+
+/** Адреса системного окна выбора (Storage Access Framework) → путь файловой системы: память «primary», SD-карта и USB «XXXX-XXXX», «raw:». null: не файловое место (облачный провайдер и т.п.). */
+private fun bkSafIdPath(id: String): String? {
+    if (id.startsWith("raw:")) return id.removePrefix("raw:").takeIf { it.startsWith("/") }
+    val i = id.indexOf(':'); if (i < 0) return null
+    val vol = id.substring(0, i); val rel = id.substring(i + 1).trim('/')
+    val base = if (vol == "primary") "/storage/emulated/0" else "/storage/$vol"
+    return if (rel.isEmpty()) base else "$base/$rel"
+}
+fun bkSafTreePath(uri: android.net.Uri): String? = runCatching { bkSafIdPath(android.provider.DocumentsContract.getTreeDocumentId(uri)) }.getOrNull()
+fun bkSafDocPath(uri: android.net.Uri): String? = runCatching { bkSafIdPath(android.provider.DocumentsContract.getDocumentId(uri)) }.getOrNull()
+
 /** Начальная папка сетевого подключения: общий ресурс или папка из записи подключения, иначе корень источника. */
 private fun netStart(c: NetConn, fs: RemoteFs): String =
     c.path.trim().trim('/').takeIf { it.isNotEmpty() }?.let { if (c.kind == "smb") "smb://" + c.host.trim().trim('/') + "/" + it + "/" else if (c.kind == "cloud") null else "/$it" } ?: fs.root
@@ -87,6 +99,24 @@ fun BkPickDialog(title: String, start: BkPlace?, ext: String?, onPick: (BkPlace,
             l += BkRoot(c.title, if (c.kind == "cloud") ctx.getString(R.string.bkp_cloud) else c.kind.uppercase(), if (c.kind == "cloud") Icons.Filled.Cloud else Icons.Filled.Lan, BkPlace(false, "", c.kind, c.host, c.user))
         }
         l
+    }
+
+    // обычное системное окно выбора Android: папка (создание копии) или файл (восстановление); путь берётся из него, доступ запоминается
+    val sysTree = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            val path = bkSafTreePath(uri)
+            if (path == null) err = ctx.getString(R.string.bkp_saf_unsupported)
+            else { runCatching { SettingsBackup.setFolder(ctx, uri) }; onPick(BkPlace(true, path), null) }
+        }
+    }
+    val sysFile = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val doc = bkSafDocPath(uri)
+            val parent = doc?.let { File(it).parent }
+            if (doc == null || parent == null) err = ctx.getString(R.string.bkp_saf_unsupported)
+            else onPick(BkPlace(true, parent), File(doc).name)
+        }
     }
 
     LaunchedEffect(cur, tick) {
@@ -141,6 +171,7 @@ fun BkPickDialog(title: String, start: BkPlace?, ext: String?, onPick: (BkPlace,
                         }
                     }
                     if (p == null) {
+                        item { row(Icons.Filled.Folder, stringResource(if (ext == null) R.string.bkp_sys_pick else R.string.bkp_sys_pick_file), stringResource(R.string.bkp_sys_pick_sub)) { if (ext == null) sysTree.launch(null) else sysFile.launch(arrayOf("*/*")) } }
                         items(roots.size) { i -> val r = roots[i]; row(r.icon, r.title, r.sub) { cur = r.place } }
                     } else {
                         item { row(Icons.Filled.ArrowUpward, ".. " + stringResource(R.string.start_up), null) { up() } }

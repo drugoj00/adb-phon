@@ -2,6 +2,8 @@
 
 package app.adbphon
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -61,14 +63,23 @@ import androidx.compose.ui.unit.dp
 /** Размер квадратика: телефон 26 dp, приставка 32 dp. */
 internal fun selBoxSize(tv: Boolean) = if (tv) 29.dp else 23.5.dp
 
+/** 14.0: нажатие без узла семантики, без фокуса и без ряби: для служебных значков внутри строки (стрелка раскрытия, точка «свойства»). Строка целиком и зона галочки остаются доступными. */
+@Composable
+internal fun Modifier.tapOnly(onTap: () -> Unit): Modifier {
+    val cur = androidx.compose.runtime.rememberUpdatedState(onTap)
+    return this.pointerInput(Unit) { detectTapGestures { cur.value() } }
+}
+
 /** Квадратик отметки. [partial]: внутри папки отмечена только часть (полупрозрачная заливка и черта). */
 @Composable
 internal fun SelBox(on: Boolean, partial: Boolean = false, tv: Boolean = Marq.tv, enabled: Boolean = true) {
     val sz = selBoxSize(tv)
     val cs = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(5.dp)
+    // 18.11.2026 (владелица): у квадратиков отметки скругление убрано совсем (острые углы), в отличие от остальных элементов —
+    // это отдельное, явное исключение из общей правки радиуса.
+    val shape = RoundedCornerShape(0.dp)
     Box(
-        Modifier.size(sz).alpha(if (enabled) 1f else .45f).clip(shape)
+        Modifier.size(sz).then(if (enabled) Modifier else Modifier.alpha(.45f))   // 14.0: без слоя alpha и clip у каждой отметки (углы прямые, clip не нужен)
             .background(if (on) cs.primary else if (partial) cs.primary.copy(alpha = .45f) else Color.Transparent)
             .border(2.dp, if (on || partial) cs.primary else cs.onSurface.copy(alpha = .7f), shape),
         contentAlignment = Alignment.Center,

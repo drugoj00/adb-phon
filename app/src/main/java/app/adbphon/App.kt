@@ -12,6 +12,7 @@ class App : Application() {
         // корневые сертификаты для старых Android (7.1 и ниже): без них запросы к GitHub, ntfy и облакам заканчиваются «Trust anchor for certification path not found»
         runCatching { TlsFix.install(this) }
         AppLog.init(this)
+        runCatching { Integrity.warm(this) }
         Feedback.init(this)
         Marq.init(this)
         UiPrefs.init(this)

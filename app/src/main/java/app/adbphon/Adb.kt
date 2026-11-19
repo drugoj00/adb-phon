@@ -59,7 +59,7 @@ object Adb {
     /** Идёт подключение или отключение: библиотека держит блокировку, и опрос состояния из интерфейса вешал его на десятки секунд (приставка, 08.11.2026). */
     @Volatile private var busyConn = 0
     @Volatile private var lastConn = false
-    val isConnected: Boolean get() = rootOn || (::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected.also { lastConn = it })) || (currentHost.isEmpty() && AdbServer.up)
+    val isConnected: Boolean get() = Integrity.ok() && (rootOn || (::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected.also { lastConn = it })) || (currentHost.isEmpty() && AdbServer.up))
 
     /** Команды этого телефона идут через «ADB-phon Server»: ни root, ни ADB нет, зато сервер жив (7.0). */
     private fun useServer(): Boolean = !rootOn && currentHost.isEmpty() && AdbServer.up && !(::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected))
@@ -236,6 +236,7 @@ object Adb {
      * библиотека ADB иногда держит его до тайм-аута, и пакетные действия тогда шли по 30 секунд на приложение).
      */
     suspend fun shell(cmd: String, timeoutMs: Long = 25_000, fast: Boolean = false): String = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext ""
         AppLog.i("ADBphon", "shell> ${cmd.take(300)}")
         val t0 = System.currentTimeMillis()
         val res = runCatching { if (rootOn) rootRun(cmd, null, timeoutMs) else if (useServer()) AdbServer.run(cmd, null, 0, timeoutMs) else if (fast) readAll(mgr.openStream(AdbText.safe("shell:$cmd; echo $END_MARK")), timeoutMs, cmd, END_MARK) else readAll(mgr.openStream(AdbText.safe("shell:$cmd")), timeoutMs, cmd) }
@@ -306,6 +307,7 @@ object Adb {
 
     /** Установить APK потоком (cmd package install -S). flags: например "-r" или "-r -d" (понижение версии). */
     suspend fun installApk(input0: InputStream, size: Long, flags: String = "-r"): String = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext "Failure [integrity]"
         val input = counted(input0, java.util.concurrent.atomic.AtomicLong())
         if (rootOn) {
             val tmp = java.io.File(appCtx.cacheDir, "root-install-" + System.nanoTime() + ".apk")
@@ -327,6 +329,7 @@ object Adb {
 
     /** Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает). */
     suspend fun pull(path: String, dest: java.io.File) = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext
         if (rootOn) {
             val p = ProcessBuilder(suArgs("cat " + q(path))).start()
             runCatching { p.outputStream.close() }
@@ -344,6 +347,7 @@ object Adb {
 
     /** Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb). */
     suspend fun pushStream(input: InputStream, size: Long, dest: String) = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext
         shell("mkdir -p " + q(dest.substringBeforeLast('/')))
         if (rootOn) {
             rootRun("head -c $size > " + q(dest), input, 1_800_000)
@@ -363,6 +367,7 @@ object Adb {
     /** Установка одного APK или набора частей одного приложения (сессия установки). flags: например "-r" или "-r -d". */
     suspend fun installFiles(files: List<java.io.File>, flags: String = "-r"): String {
         if (files.isEmpty()) return "no files"
+        if (!Integrity.safe()) return "Failure [integrity]"
         if (files.size == 1) return files[0].inputStream().use { installApk(it, files[0].length(), flags) }
         val made = shell("cmd package install-create ${withUser(flags)} -S ${files.sumOf { it.length() }}")
         val id = Regex("\\[(\\d+)\\]").find(made)?.groupValues?.get(1) ?: return made

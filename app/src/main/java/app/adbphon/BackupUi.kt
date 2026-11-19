@@ -41,8 +41,7 @@ fun BackupSectionV2(vm: MainViewModel) {
     val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f)
 
     // 10.0 (set): строки-действия; одна пара «Создать копию…» и «Восстановить…» (bk3)
-    SetAction(SetIcons.backup, stringResource(R.string.bk2_make), stringResource(R.string.set_h_bk_make)) { create = true }
-    SetAction(SetIcons.restore, stringResource(R.string.bk2_restore), stringResource(R.string.set_h_bk_restore)) { restore = true }
+    // 19.11.2026 (слово владелицы: «обычный бекап»): «Создать копию» и «Восстановить из копии» теперь заметные строки в самом верху «Опций» (BkSimple.kt, SetBackupQuick); здесь только автокопия и откат
 
     // ---- автокопия: место и пароль из последней копии, сделанной окном «Создать копию…»
     Text(stringResource(R.string.bk2_auto), fontWeight = FontWeight.Medium, fontSize = if (Marq.tv) 16.sp else 13.sp)
@@ -90,8 +89,8 @@ fun BackupSectionV2(vm: MainViewModel) {
         LAlertDialog(
             onDismissRequest = { info = null }, title = { Text(stringResource(R.string.bk2_title)) },
             text = { Text(text, fontSize = bkMainSp(), color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) },
-            confirmButton = { if (!error) androidx.compose.material3.TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.bk2_restart)) } else androidx.compose.material3.TextButton({ info = null }) { Text(stringResource(R.string.btn_close)) } },
-            dismissButton = if (!error) ({ androidx.compose.material3.TextButton({ info = null }) { Text(stringResource(R.string.btn_close)) } }) else null,
+            confirmButton = { if (!error) TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.bk2_restart)) } else TextButton({ info = null }) { Text(stringResource(R.string.btn_close)) } },
+            dismissButton = if (!error) ({ TextButton({ info = null }) { Text(stringResource(R.string.btn_close)) } }) else null,
         )
     }
 }

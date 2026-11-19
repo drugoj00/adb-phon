@@ -4,12 +4,17 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -130,6 +135,8 @@ fun BkCreateDialog(vm: MainViewModel, pre: Set<String>, onClose: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<BkResult?>(null) }
+    var est by remember { mutableStateOf<AppBackup.Estimate?>(null) }
+    LaunchedEffect(what.settings) { if (what.settings) est = withContext(Dispatchers.IO) { runCatching { AppBackup.estimate(ctx) }.getOrNull() } }
     // кэш сведений PackageManager (не состояние Compose: заполняется при показе строк)
     val facts = remember { HashMap<String, BkAppFacts?>() }
 
@@ -181,8 +188,8 @@ fun BkCreateDialog(vm: MainViewModel, pre: Set<String>, onClose: () -> Unit) {
             // папка недоступна (нет сети, нет доступа ко всем файлам): сразу понятная ошибка, без долгого сбора
             val preErr = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (BkFlow.needsAccess(p)) throw IOException(ctx.getString(R.string.bkp_err_all_files, p.path))
-                    BkStore.open(ctx, p).close()
+                    if (BkFlow.needsAccess(p, ctx)) throw IOException(ctx.getString(R.string.bkp_err_all_files, p.path))
+                    if (!(p.local && BkStore.needAllFiles())) BkStore.open(ctx, p).close()
                 }
             }.exceptionOrNull()
             if (preErr != null) { busy = false; status = ""; result = BkResult(p, emptyList(), BkFlow.errText(ctx, p, preErr), true); return@launch }
@@ -221,6 +228,8 @@ fun BkCreateDialog(vm: MainViewModel, pre: Set<String>, onClose: () -> Unit) {
             Column(Modifier.fillMaxWidth().heightIn(max = if (Marq.tv) 520.dp else 560.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Dim(stringResource(R.string.bk3_what))
                 ChoiceRow(what.settings, stringResource(R.string.bk3_inc_settings), stringResource(R.string.bk3_inc_settings_sub), !busy) { what = what.copy(settings = !what.settings); err = null }
+                if (what.settings) est?.let { e -> Dim(stringResource(R.string.bk4_est, BkStore.size(ctx, e.total), BkStore.size(ctx, e.prefs), BkStore.size(ctx, e.icons), BkStore.size(ctx, e.net + e.files)) +
+                    (if (e.skipped.isNotEmpty()) "\n" + stringResource(R.string.bk4_skipped, e.skipped.joinToString(", ")) else ""), if (e.total > 8L * 1024 * 1024) Color(0xFFB26A00) else Color.Unspecified) }
                 ChoiceRow(what.apk, stringResource(R.string.bk3_inc_apk), stringResource(R.string.bk3_inc_apk_sub), !busy) { what = what.copy(apk = !what.apk); err = null }
                 ChoiceRow(what.data, stringResource(R.string.bk3_inc_data), stringResource(R.string.bk3_inc_data_sub), !busy) { what = what.copy(data = !what.data); err = null }
                 if (what.data) when {
@@ -287,7 +296,7 @@ private sealed class RsSt {
     class SetConfirm(val json: JSONObject, val name: String) : RsSt()
     class AppPass(val file: File, val temp: Boolean, val place: BkPlace, val name: String, val wrong: Boolean) : RsSt()
     class AppCheck(val l: BkData.Loaded) : RsSt()
-    class Info(val text: String, val error: Boolean, val restart: Boolean = false) : RsSt()
+    class Info(val text: String, val error: Boolean, val restart: Boolean = false, val module: Boolean = false) : RsSt()
 }
 
 /** Что внутри строки списка, коротко. */
@@ -395,7 +404,8 @@ fun BkRestoreDialog(onClose: () -> Unit) {
 
     /** Копия настроек: расшифровка и проверка без изменений; дальше подтверждение, пароль или понятная ошибка. */
     suspend fun prepareSettings(data: ByteArray, name: String, pw: CharArray?, savedTried: Boolean) {
-        val r = withContext(Dispatchers.Default) { runCatching { AppBackup.parse(data, pw) } }
+        busy = true
+        val r = try { withContext(Dispatchers.Default) { runCatching { AppBackup.parse(data, pw) } } } finally { busy = false }
         r.onSuccess { st = RsSt.SetConfirm(it, name) }.onFailure { e ->
             st = when (e) {
                 is AppBackup.NeedPass -> RsSt.SetPass(data, name, false)
@@ -501,15 +511,19 @@ fun BkRestoreDialog(onClose: () -> Unit) {
             val wrong = if (s is RsSt.SetPass) s.wrong else (s as RsSt.AppPass).wrong
             fun back() { if (s is RsSt.AppPass && s.temp) s.file.delete(); st = RsSt.List }
             LAlertDialog(
-                onDismissRequest = { back() },
+                onDismissRequest = { if (!busy) back() },
                 title = { Text(stringResource(R.string.bkp_enter_pass)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Dim(name)
                         val pw = rememberPw()
-                        OutlinedTextField(p, { p = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.bkp_pass), maxLines = 1) }, visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } })
-                        if (wrong) Text(stringResource(R.string.bkp_wrong_pass), fontSize = bkDimSp(), color = MaterialTheme.colorScheme.error)
-                        if (busy) Dim(stringResource(R.string.bkp_working))
+                        OutlinedTextField(p, { p = it }, Modifier.fillMaxWidth(), singleLine = true, enabled = !busy, label = { Text(stringResource(R.string.bkp_pass), maxLines = 1) }, visualTransformation = pw.transform, trailingIcon = { PwEyeIcon(pw.shown) { pw.shown = !pw.shown } })
+                        // красная ошибка только когда проверка завершилась неверным паролем; пока идёт проверка (3-5 с на слабой приставке) её нет
+                        if (busy) Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Dim(stringResource(R.string.bkp_pass_checking))
+                        } else if (wrong) Text(stringResource(R.string.bkp_wrong_pass), fontSize = bkDimSp(), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 confirmButton = {
@@ -519,7 +533,7 @@ fun BkRestoreDialog(onClose: () -> Unit) {
                         else if (s is RsSt.AppPass) openApp(s.file, s.temp, s.place, s.name, p.toCharArray())
                     }, enabled = !busy && p.isNotEmpty()) { Text(stringResource(R.string.btn_yes)) }
                 },
-                dismissButton = { TextButton({ back() }) { Text(stringResource(R.string.btn_cancel)) } },
+                dismissButton = { TextButton({ if (!busy) back() }, enabled = !busy) { Text(stringResource(R.string.btn_cancel)) } },
             )
         }
         is RsSt.SetConfirm -> LAlertDialog(
@@ -541,7 +555,11 @@ fun BkRestoreDialog(onClose: () -> Unit) {
                         val r = withContext(Dispatchers.IO) { runCatching { AppBackup.restore(ctx, j) } }
                         busy = false
                         st = r.fold(
-                            { sm -> RsSt.Info(ctx.getString(R.string.bk2_restored, sm.settings, sm.links, sm.clouds, sm.devices) + "\n" + ctx.getString(R.string.bk2_restart_hint), false, restart = true) },
+                            { sm ->
+                                val needMod = sm.clouds > 0 && CloudModule.state(ctx) != CloudModule.State.OK
+                                RsSt.Info(ctx.getString(R.string.bk2_restored, sm.settings, sm.links, sm.clouds, sm.devices) + "\n" + ctx.getString(R.string.bk2_restart_hint) +
+                                    (if (needMod) "\n" + ctx.getString(R.string.bk4_mod_hint) else ""), false, restart = true, module = needMod)
+                            },
                             { e -> AppLog.e("ADBphon", "bk3 restore settings", e); RsSt.Info(ctx.getString(R.string.bk2_bad_file, bkErrText(ctx, e)), true) },
                         )
                     }
@@ -553,7 +571,17 @@ fun BkRestoreDialog(onClose: () -> Unit) {
         is RsSt.Info -> LAlertDialog(
             onDismissRequest = onClose,
             title = { Text(stringResource(R.string.bk3_restore_title)) },
-            text = { Column(Modifier.heightIn(max = 420.dp).barScroll()) { Text(s.text, fontSize = bkMainSp(), color = if (s.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) } },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).barScroll()) {
+                    Text(s.text, fontSize = bkMainSp(), color = if (s.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                    if (s.module) {
+                        val ph = CloudModule.phase
+                        if (ph in 1..3) Dim(stringResource(R.string.bk4_mod_progress, CloudModule.progress))
+                        else if (ph == 4 && CloudModule.error.isNotEmpty()) Text(CloudModule.error, fontSize = bkMainSp(), color = MaterialTheme.colorScheme.error)
+                        TextButton({ scope.launch { CloudModule.fetchAndInstall(ctx.applicationContext) } }, enabled = ph !in 1..3) { Text(stringResource(R.string.bk4_mod_get), fontSize = bkMainSp()) }
+                    }
+                }
+            },
             confirmButton = {
                 if (s.restart) TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.bk2_restart)) }
                 else TextButton(onClose) { Text(stringResource(R.string.btn_close)) }

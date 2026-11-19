@@ -25,6 +25,14 @@ object BkFlow {
         AppBackup.unseal(data, pass)
         val free = BkStore.freeSpace(place)
         if (free >= 0 && free < data.size + 256 * 1024L) throw IOException(ctx.getString(R.string.bk2_err_space, BkStore.size(ctx, data.size.toLong()), BkStore.size(ctx, free)))
+        if (place.local && BkStore.needAllFiles() && safCovers(ctx, place)) {
+            // запись через системное окно выбора (SAF): право на папку выдано пользователем, «все файлы» не нужны
+            val n = BkNames.settings(BkNames.stamp(System.currentTimeMillis()))
+            val (shown, _) = AppBackup.saveAnywhere(ctx, data, n)
+            val encS = if (pass != null && pass.isNotEmpty()) "\n" + ctx.getString(R.string.bkp_enc_settings_yes) else ""
+            return@withContext BkResult(place, listOf(n), ctx.getString(R.string.bkp_saved, shown, BkStore.size(ctx, data.size.toLong())) + "\n" +
+                ctx.getString(R.string.bkp_sum, sum.settings, sum.links, sum.clouds, sum.devices) + encS + sum.skippedNote(ctx), false)
+        }
         if (!place.local) step(ctx.getString(R.string.bkp_step_upload, BkStore.display(ctx, place)))
         val o = BkStore.open(ctx, place)
         try {
@@ -35,7 +43,7 @@ object BkFlow {
             BkStore.localFile(o, n)?.let { AppBackup.unseal(it.readBytes(), pass) }
             val enc = if (pass != null && pass.isNotEmpty()) "\n" + ctx.getString(R.string.bkp_enc_settings_yes) else ""
             BkResult(place, listOf(n), ctx.getString(R.string.bkp_saved, BkStore.display(ctx, place, n), BkStore.size(ctx, size)) + "\n" +
-                ctx.getString(R.string.bkp_sum, sum.settings, sum.links, sum.clouds, sum.devices) + enc, false)
+                ctx.getString(R.string.bkp_sum, sum.settings, sum.links, sum.clouds, sum.devices) + enc + sum.skippedNote(ctx), false)
         } finally { o.close() }
     }
 
@@ -51,7 +59,10 @@ object BkFlow {
     }
 
     /** Ошибка из-за доступа ко всем файлам: в окне ошибки есть кнопка «Дать доступ». */
-    fun needsAccess(place: BkPlace) = place.local && BkStore.needAllFiles()
+    fun needsAccess(place: BkPlace, ctx: Context? = null) = place.local && BkStore.needAllFiles() && !(ctx != null && safCovers(ctx, place))
+
+    /** Папка выбрана обычным системным окном (SAF): запись идёт через него, доступ ко всем файлам не нужен. */
+    fun safCovers(ctx: Context, place: BkPlace): Boolean = place.local && runCatching { SettingsBackup.folder(ctx)?.let { bkSafTreePath(it) } }.getOrNull()?.trimEnd('/') == place.path.trimEnd('/')
 
     /** «Что внутри» для строки списка: копия настроек читается целиком (она маленькая), у копии с данными только начало со сведениями. */
     suspend fun inside(ctx: Context, o: BkStore.Open, e: FsEntry): BkInside = withContext(Dispatchers.IO) {

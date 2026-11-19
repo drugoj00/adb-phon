@@ -33,7 +33,9 @@ class AutoPairService : AccessibilityService() {
             if (Pairing.autoWanted) evaluate() else { wasWanted = false; connectTryAt = 0L }
             if (TsLogin.wanted) TsLogin.step(rootInActiveWindow)
             if (CloudOverlay.shown) CloudOverlay.scan(rootInActiveWindow)   // 10.0: стрелка подсказки по найденному на экране элементу
-            SysVpn.step(this@AutoPairService, rootInActiveWindow)
+            // 14.0: окно читается, только когда настройка VPN действительно ждёт службу. Раньше rootInActiveWindow брался раз в секунду и на КАЖДОЕ событие, даже когда SysVpn.step сразу выходил:
+            // система собирала дерево всего окна программы (сотни узлов Compose) на главном потоке, 300-800 мс на приставке, и нажатия, раскрытия и галочки ждали
+            if (SysVpn.waiting()) SysVpn.step(this@AutoPairService, rootInActiveWindow)
             handler.postDelayed(this, 1000)
         }
     }
@@ -61,7 +63,7 @@ class AutoPairService : AccessibilityService() {
         return false
     }
 
-    override fun onAccessibilityEvent(e: AccessibilityEvent) { ScreenTouch.onEvent(this, e); if (Pairing.autoWanted) evaluate(); if (TsLogin.wanted) TsLogin.step(rootInActiveWindow); SysVpn.step(this, rootInActiveWindow) }
+    override fun onAccessibilityEvent(e: AccessibilityEvent) { ScreenTouch.onEvent(this, e); if (Pairing.autoWanted) evaluate(); if (TsLogin.wanted) TsLogin.step(rootInActiveWindow); if (SysVpn.waiting()) SysVpn.step(this, rootInActiveWindow) }
 
     private fun evaluateOff() {
         val root = rootInActiveWindow ?: return

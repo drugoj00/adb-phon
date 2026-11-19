@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -106,7 +105,7 @@ fun BkResultDialog(r: BkResult, onPickOther: () -> Unit, onClose: () -> Unit) {
                 if (r.failed) {
                     val fix = ArrayList<EqBtn>()
                     fix += EqBtn(stringResource(R.string.bk2_pick_other), !busy) { onPickOther() }
-                    if (BkFlow.needsAccess(r.place)) fix += EqBtn(stringResource(R.string.bk2_give_access), !busy) { Fm.askAccess(ctx) }
+                    if (BkFlow.needsAccess(r.place, ctx)) fix += EqBtn(stringResource(R.string.bk2_give_access), !busy) { Fm.askAccess(ctx) }
                     EqButtons(fix)
                 }
             }

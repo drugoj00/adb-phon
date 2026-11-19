@@ -101,6 +101,51 @@ class BackupTestActivity : Activity() {
                         val r = kotlinx.coroutines.runBlocking { AppBackups.installFiles(this@BackupTestActivity, p, listOf(ff), code, intent.getStringExtra("wipe") == "1") }
                         log("verdown result=" + r + " installed=" + AppBackups.installedVersion(this, p))
                     }
+                    "integ" -> {
+                        // проверка подлинности: свои итоги, свежая проверка по всем пунктам и (extra "f") проверка чужого файла APK по подписи и суммам
+                        log("integ own: ok=" + Integrity.ok(this) + " safe=" + Integrity.safe(this) + " foreign=" + Integrity.foreign() + " why=" + Integrity.why + " emu=" + Integrity.emulator + " hooked=" + Integrity.hooked)
+                        log("integ round: " + Integrity.report(this))
+                        log("integ cloudmod state=" + CloudModule.state(this) + " installed=" + CloudModule.installedVersion(this))
+                        val ff = intent.getStringExtra("f").orEmpty()
+                        if (ff.isNotEmpty()) log("integ file " + ff + " -> " + Integrity.fileOk(this, ff))
+                    }
+                    "integdiag" -> {
+                        // диагностика: n раз свежая проверка по всем пунктам; extra n, pause (мс)
+                        val n = (intent.getStringExtra("n") ?: "20").toIntOrNull() ?: 20
+                        val pause = (intent.getStringExtra("pause") ?: "300").toLongOrNull() ?: 300L
+                        var bad = 0
+                        repeat(n) { i -> val r = Integrity.report(this); if (r.contains("negative=true") || r.contains("=нет") || r.contains("среда:")) { bad++; log("integdiag#$i " + r) }; if (pause > 0) Thread.sleep(pause) }
+                        log("integdiag готово n=$n отклонений=$bad")
+                    }
+                    "integapps" -> {
+                        // воспроизведение ложной тревоги 13.0: как MainViewModel.loadApps, читаем названия и ресурсы всех установленных приложений и держим ссылки;
+                        // пока APK чужих приложений (в том числе менеджера LSPosed) отображены в карту памяти процесса, итоги проверок не должны меняться
+                        val pm = packageManager
+                        fun mapsHits() = File("/proc/self/maps").readText().lineSequence().count { it.contains("lsp" + "osed") }
+                        fun st() = "ok=" + Integrity.ok(this) + " safe=" + Integrity.safe(this) + " foreign=" + Integrity.foreign() + " why=" + Integrity.why + " maps_lsposed=" + mapsHits() + " раунд: " + Integrity.report(this)
+                        log("integapps до: " + st())
+                        val keep = ArrayList<Any>()
+                        pm.getInstalledPackages(android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES or android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS).forEach { pi ->
+                            pi.applicationInfo?.let { ai -> runCatching { keep.add(pm.getResourcesForApplication(ai)); pm.getApplicationLabel(ai).toString() } }
+                        }
+                        Thread.sleep(5300)
+                        log("integapps ресурсы ${keep.size} приложений удержаны: " + st())
+                        keep.clear(); System.gc(); System.runFinalization(); System.gc()
+                        Thread.sleep(5300)
+                        log("integapps после отпускания: " + st())
+                    }
+                    "integbench" -> {
+                        // измерение накладных расходов Adb.isConnected (через него проходит Integrity.ok()) на главном потоке: N вызовов подряд
+                        val n = (intent.getStringExtra("n") ?: "2000").toIntOrNull() ?: 2000
+                        runOnUiThread {
+                            val t0 = android.os.SystemClock.elapsedRealtimeNanos()
+                            var x = 0
+                            repeat(n) { if (Adb.isConnected) x++ }
+                            val t1 = android.os.SystemClock.elapsedRealtimeNanos()
+                            val totalMs = (t1 - t0) / 1_000_000.0
+                            log("integbench n=$n total=${"%.2f".format(totalMs)}мс avg=${"%.4f".format(totalMs / n)}мс/вызов x=$x")
+                        }
+                    }
                     "fakeupd" -> {
                         val v = intent.getStringExtra("v").orEmpty()
                         getSharedPreferences("adbphon", MODE_PRIVATE).edit().apply { if (v.isEmpty()) remove("test_fake_release") else putString("test_fake_release", v); putString("test_fake_body", intent.getStringExtra("b").orEmpty().replace("||", "\n")); if (intent.getStringExtra("k") != "1") remove("upd_dismissed"); remove("upd_last") }.commit()

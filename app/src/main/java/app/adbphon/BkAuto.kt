@@ -74,13 +74,10 @@ object BkAuto {
         val lines = ArrayList<String>()
         var ok = true
         var settingsOk = false
-        // шифрование включено, а пароль не задан: без пароля копия не пишется (иначе пароли подключений легли бы в файл открыто)
-        val pw = try { BkStore.passForCopy(app) } catch (e: BkStore.NeedPass) {
-            val t = lc.getString(R.string.bkp_auto_failed, lc.getString(R.string.bk2_need_pass_auto))
-            prefs(app).edit().putString("bkp_auto_result", java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()) + ": " + t).apply()
-            notify(app, lc, false, t)
-            return@withLock t
-        }
+        // шифрование включено, а пароль не задан: копия настроек пишется без паролей (секреты кладутся только под паролем), с пометкой
+        var noSecrets = false
+        val pw = try { BkStore.passForCopy(app) } catch (e: BkStore.NeedPass) { noSecrets = true; null }
+        if (noSecrets) lines += lc.getString(R.string.bk4_auto_nosecrets)
         val stamp = BkNames.stamp(System.currentTimeMillis())
         // 1) настройки
         val place = BkStore.last(app, BkStore.KEY_SETTINGS)

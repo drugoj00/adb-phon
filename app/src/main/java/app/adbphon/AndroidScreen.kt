@@ -25,11 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Canvas
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import app.adbphon.FloorText as Text
 import androidx.compose.runtime.Composable
@@ -473,8 +471,10 @@ fun AndroidScreenDialog(d: AdbDev, close: () -> Unit) {
     val c = remember { AndroidScreenClient(d.addrs) }
     DisposableEffect(Unit) { c.start(); onDispose { c.stop() } }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
+        LangScopePublic {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             AndroidScreenLive(c, d.title, close)
+        }
         }
     }
 }
@@ -496,7 +496,7 @@ internal fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () 
             OutlinedButton({ c.key(187) }) { Text(stringResource(R.string.asc_recent), fontSize = 12.sp) }
             Box {
                 OutlinedButton({ qMenu = true }) { Text(stringResource(R.string.spc_quality), fontSize = 12.sp) }
-                DropdownMenu(qMenu, { qMenu = false }) {
+                LDropdownMenu(qMenu, { qMenu = false }) {
                     DropdownMenuItem({ Text((if (c.quality == "auto") "✓ " else "") + stringResource(R.string.spc_q_auto)) }, { c.quality = "auto"; qMenu = false; c.start() })
                     DropdownMenuItem({ Text((if (c.quality == "fast") "✓ " else "") + stringResource(R.string.spc_q_fast)) }, { c.quality = "fast"; qMenu = false; c.start() })
                     DropdownMenuItem({ Text((if (c.quality == "sharp") "✓ " else "") + stringResource(R.string.spc_q_sharp)) }, { c.quality = "sharp"; qMenu = false; c.start() })
