@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sb_more_hint">Удержи кнопку и перетащи на другое место: порядок сохранится.</string>
+    <string name="sb_on_panel">На панели</string>
+    <string name="sb_more_below">Под «Ещё»</string>
+    <string name="sb_reset_order">Сбросить порядок кнопок</string>
+</resources>

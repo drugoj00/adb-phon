@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="anim_title">Анимация переходов</string>
+    <string name="anim_hint">Плавный переезд при переключении панели «Файлов» и смене главных вкладок. Выключено: переход мгновенный, без анимации.</string>
+</resources>

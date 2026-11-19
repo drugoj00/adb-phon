@@ -13,6 +13,7 @@
     <string name="bkp_wrong_pass">Неверный пароль. Файл не изменён, попробуй ещё раз.</string>
     <string name="bkp_create">Создать</string>
     <string name="bkp_working">Идёт работа…</string>
+    <string name="bkp_pass_checking">Проверка…</string>
     <string name="bkp_saved">Сохранено: %1$s, %2$s</string>
     <string name="bkp_sum">В копии: %1$d настроек, %2$d подключений, %3$d облаков, %4$d устройств</string>
     <string name="bkp_enc_settings_yes">Файл зашифрован паролем (AES-256)</string>

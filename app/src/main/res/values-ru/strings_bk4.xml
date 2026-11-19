@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bk4_est">Размер копии: около %1$s (настройки %2$s, значки %3$s, подключения и ключи облаков %4$s)</string>
+    <string name="bk4_skipped">Не вошло как слишком большое: %s</string>
+    <string name="bkp_sys_pick">Выбрать обычным окном Android…</string>
+    <string name="bkp_sys_pick_file">Выбрать файл обычным окном Android…</string>
+    <string name="bkp_sys_pick_sub">Привычное системное окно: память, SD-карта, USB</string>
+    <string name="bkp_saf_unsupported">Окно Android не отдало обычную папку для этого места. Выбери память, SD-карту или USB, либо список ниже.</string>
+    <string name="bk4_mod_hint">Облачные диски подключатся сами после установки модуля облаков: нажми «Скачать модуль облаков».</string>
+    <string name="bk4_mod_progress">Модуль облаков: загрузка %1$d%%</string>
+    <string name="bk4_mod_get">Скачать модуль облаков</string>
+    <string name="bk4_auto_nosecrets">Пароли и токены не сохранены: пароль копии не задан. Задай его в Настройки, Резервная копия.</string>
+</resources>

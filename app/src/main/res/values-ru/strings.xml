@@ -547,6 +547,8 @@
     <string name="fm_extract_other">Распаковать в другую панель</string>
     <string name="fm_extracting">Распаковка</string>
     <string name="fm_found">Найдено: %1$d</string>
+    <string name="fm_search_busy">Ищу в: %1$s…</string>
+    <string name="fm_search_in">Искали в: %1$s (с вложенными папками)</string>
     <string name="fm_free_of">свободно %1$s из %2$s</string>
     <string name="fm_hidden">Скрытые</string>
     <string name="fm_hist_empty">История пуста</string>
@@ -569,6 +571,7 @@
     <string name="fm_packing">Упаковка</string>
     <string name="fm_pane_left">Левая</string>
     <string name="fm_pane_right">Правая</string>
+    <string name="fm_switch_pane">Переключить панель</string>
     <string name="fm_path">Путь</string>
     <string name="fm_props">Свойства</string>
     <string name="fm_props_title">Свойства</string>
@@ -626,6 +629,7 @@
     <string name="fm_smb_pass">Пароль</string>
     <string name="fm_connect">Подключить</string>
     <string name="fm_priv_opt">Использовать root/ADB для ограниченных папок</string>
+    <string name="fm_tree_one">Держать раскрытой только одну папку</string>
     <string name="fm_connecting">Подключаюсь…</string>
     <string name="fm_fix_wifi_text">Беспроводная отладка выключена.</string>
     <string name="fm_fix_wifi_btn">Включить отладку по Wi-Fi</string>
@@ -953,7 +957,7 @@
     <string name="rt_group_storage">Память</string>
     <string name="rt_group_net">Сеть</string>
     <string name="rt_free">Свободно %1$s из %2$s</string>
-    <string name="rt_counts">%1$d папок, %2$d файлов</string>
+    <string name="rt_counts">%1$d папок, %2$d файлов</string>
     <string name="rt_ro">только чтение</string>
     <string name="rt_showhide">Показать/Скрыть</string>
     <string name="rt_add_net">Добавить подключение…</string>
@@ -1344,6 +1348,13 @@
     <string name="cm_need">Нужен модуль облаков</string>
     <string name="cm_need_update">Модуль облаков нужно обновить</string>
     <string name="cm_tap_install">Нажми, чтобы скачать и установить</string>
+    <string name="cm_tap_update">Нажми, чтобы скачать и обновить</string>
+    <string name="cm_recheck_title">Модуль облаков готов</string>
+    <string name="cm_tap_recheck">Нажми, чтобы обновить список</string>
+    <string name="cm_reason">Установлен %1$s (код %2$d, протокол %3$d); нужен протокол %4$d</string>
+    <string name="cm_progress">%1$s из %2$s МБ · %3$d %% · %4$s МБ/с · осталось %5$s</string>
+    <string name="cm_wifi_hint">Около %1$d МБ: лучше по Wi-Fi</string>
+    <string name="cm_resuming">Связь прервалась, докачиваю…</string>
     <string name="okw_progress">Шаг %1$d из %2$d</string>
     <string name="okw_g1">Создай проект: название ADB-phon скопировано.</string>
     <string name="okw_g2">Нажми «Включить» у Google Drive API.</string>

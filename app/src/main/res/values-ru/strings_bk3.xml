@@ -22,7 +22,7 @@
     <string name="bk3_priv_none">Для данных приложений нужен root или ADB (беспроводная отладка): подключи во вкладке «Связь». Настройки и APK копируются и без них.</string>
     <string name="bk3_enc">Шифровать паролем</string>
     <string name="bk3_enc_sub">AES-256. Пароль запоминается для следующих копий и автокопии</string>
-    <string name="bk3_plain_warn">Без пароля пароли подключений и ключ ADB лежат в файле открыто</string>
+    <string name="bk3_plain_warn">Без пароля пароли, токены облаков и ключ ADB в файл НЕ кладутся. Задай пароль, чтобы они сохранились</string>
     <string name="bk3_folder">Папка для копий</string>
     <string name="bk3_err_nothing">Отметь, что включить в копию</string>
     <string name="bk3_err_no_apps">Выбери приложения в списке</string>
