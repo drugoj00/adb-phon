@@ -6,6 +6,20 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// 11.0 (код 61): отпечаток ключа выпуска для проверки подлинности (Integrity.kt) вшивается двумя долями, открытой строкой его в программе нет
+fun xorHexDsl(a: String, m: String): String {
+    val sb = StringBuilder()
+    var i = 0
+    while (i + 1 < a.length) {
+        val k = ((i % m.length) / 2) * 2
+        sb.append("%02X".format(a.substring(i, i + 2).toInt(16) xor m.substring(k, k + 2).toInt(16))); i += 2
+    }
+    return sb.toString()
+}
+val relFp = "47164558D82446C5D1AC92C90EAA1D233993EA65CB00EB00E52F140ADF1E4DFA"
+val relMaskA = "9B3E71C4A20D58F6E1470B93D5AC2768"
+val relMaskB = "2F84D61B0C97E35A48B1F07269CD5E13"
+
 android {
     namespace = "app.adbphon"
     compileSdk = 34
@@ -14,10 +28,14 @@ android {
         applicationId = "app.adbphon"
         minSdk = 26
         targetSdk = 34
-        versionCode = 60
-        versionName = "11.0"
+        versionCode = 66
+        versionName = "14.0"
         // РѕСЃС‚Р°РІР»СЏРµРј С‚РѕР»СЊРєРѕ СЏР·С‹РєРё РїСЂРѕРіСЂР°РјРјС‹ (ru, uk, en): СЃС‚СЂРѕРєРё Р±РёР±Р»РёРѕС‚РµРє РЅР° РґСЂСѓРіРёС… СЏР·С‹РєР°С… РЅРµ РЅСѓР¶РЅС‹
         resourceConfigurations += listOf("ru", "uk", "en")
+        buildConfigField("String", "G1", "\"\"")
+        buildConfigField("String", "G2", "\"\"")
+        buildConfigField("String", "H1", "\"\"")
+        buildConfigField("String", "H2", "\"\"")
     }
 
     // РєР»СЋС‡ РїРѕРґРїРёСЃРё Р»РµР¶РёС‚ РІ keystore/ (РЅРµ РїСѓР±Р»РёРєСѓРµС‚СЃСЏ); Р±РµР· РЅРµРіРѕ release СЃРѕР±РёСЂР°РµС‚СЃСЏ РЅРµРїРѕРґРїРёСЃР°РЅРЅС‹Рј
@@ -35,6 +53,10 @@ android {
         release {
             // R8: СЃР¶Р°С‚РёРµ РєРѕРґР° Рё СЂРµСЃСѓСЂСЃРѕРІ (РїСЂР°РІРёР»Р° РІ proguard-rules.pro); mapping.txt Рё usage.txt Р»РµР¶Р°С‚ РІ app/build/outputs/mapping/release
             isMinifyEnabled = true
+            buildConfigField("String", "G1", "\"" + xorHexDsl(relFp, relMaskA) + "\"")
+            buildConfigField("String", "G2", "\"" + relMaskA + "\"")
+            buildConfigField("String", "H1", "\"" + xorHexDsl(relFp.reversed(), relMaskB) + "\"")
+            buildConfigField("String", "H2", "\"" + relMaskB + "\"")
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (ksFile.exists()) signingConfig = signingConfigs.getByName("release")
@@ -46,7 +68,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     packaging {
         resources.excludes += setOf("META-INF/*", "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**", "**/*.kotlin_builtins", "kotlin/**", "DebugProbesKt.bin")
         jniLibs { useLegacyPackaging = true }
