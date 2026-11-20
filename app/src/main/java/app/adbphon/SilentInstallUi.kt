@@ -2,6 +2,7 @@ package app.adbphon
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -163,5 +164,56 @@ object InstallWindow {
         poll.cancel()
         set(if (r.first) 2 else 3, 100, r.second)
         return r.first
+    }
+}
+
+/**
+ * 16.0 код 77: обновление самой программы по ADB идёт отдельным процессом, а наш процесс при замене файла завершается. Поэтому перед началом показывается окно ADB-phon
+ * (что ставится, способ, ход неизвестен), а цель записывается в настройки: после перезапуска окно сообщает «Установлено» (или что обновление не состоялось).
+ */
+object SelfInstallNotice {
+    private const val KEY = "self_install_target"
+
+    fun begin(ctx: Context, f: File) {
+        val app = ctx.applicationContext
+        val af = ApkFile(f.name, Uri.fromFile(f), f.length(), f)
+        val meta = runCatching { ApkInfo.readFor(app, af) }.getOrNull() ?: return
+        val mb = "%.1f".format(java.util.Locale.US, f.length() / 1048576.0)
+        val info = if (meta.curName != null) app.getString(R.string.silent_win_info_upd, meta.label, meta.curName, meta.curCode.toInt(), meta.verName, meta.verCode.toInt(), mb)
+            else app.getString(R.string.silent_win_info_new, meta.label, meta.verName, meta.verCode.toInt(), mb)
+        val method = app.getString(R.string.silent_m_adb)
+        SilentInstallState.cur = SilentInstallState.Data(1, "ADB-phon", meta.label, meta.pkg, info, method, -1, "", meta.icon, meta.verName, meta.verCode)
+        app.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit()
+            .putString(KEY, listOf(meta.label, meta.verName, meta.verCode, meta.pkg, System.currentTimeMillis(), info.replace("|", "/"), method).joinToString("|")).commit()
+        runCatching { app.startActivity(Intent(app, SilentInstallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
+    }
+
+    /** Обновление отклонено системой: окно сообщает причину, цель обновления снимается. */
+    fun failed(ctx: Context, why: String) {
+        val app = ctx.applicationContext
+        val d = SilentInstallState.cur
+        app.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().remove(KEY).apply()
+        if (d != null) SilentInstallState.cur = SilentInstallState.Data(3, d.caller, d.label, d.pkg, d.info, d.method, 100, why, d.icon, d.newName, d.newCode)
+        runCatching { app.startActivity(Intent(app, SilentInstallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
+    }
+
+    /** При запуске: если обновление было начато, показать итог в окне. */
+    fun showResult(ctx: Context) {
+        val app = ctx.applicationContext
+        val sp = app.getSharedPreferences("adbphon", Context.MODE_PRIVATE)
+        val raw = sp.getString(KEY, null)
+        android.util.Log.i("SelfInstall", "showResult: цель=" + (raw?.take(60) ?: "нет"))
+        val p = (raw ?: return).split("|")
+        if (p.size < 7) { sp.edit().remove(KEY).apply(); return }
+        val code = p[2].toLongOrNull() ?: 0L
+        val at = p[4].toLongOrNull() ?: 0L
+        val inst = runCatching { app.packageManager.getPackageInfo(app.packageName, 0) }.getOrNull() ?: return
+        val icode = if (Build.VERSION.SDK_INT >= 28) inst.longVersionCode else @Suppress("DEPRECATION") inst.versionCode.toLong()
+        val ok = icode >= code
+        android.util.Log.i("SelfInstall", "установлено=$icode цель=$code ok=$ok")
+        if (!ok && System.currentTimeMillis() - at < 10 * 60_000L) return   // обновление ещё могло не дойти до замены файла
+        sp.edit().remove(KEY).apply()
+        SilentInstallState.cur = SilentInstallState.Data(if (ok) 2 else 3, "ADB-phon", p[0], p[3], p[5], p[6], 100, if (ok) "" else app.getString(R.string.silent_win_selfnot), null, inst.versionName.orEmpty(), icode)
+        runCatching { app.startActivity(Intent(app, SilentInstallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
     }
 }
