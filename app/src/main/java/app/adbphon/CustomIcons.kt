@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,6 +89,14 @@ object CustomIcons {
             return b?.let { Spec(null, it) }
         }
         return null
+    }
+
+    /** 20.11.2026 (4PDA, wad72: «назначенных самим иконок не видно»): расширения, для которых назначен свой значок. */
+    @Composable
+    fun assignedExts(): List<String> {
+        ver.let { }
+        val c = LocalContext.current
+        return sp(c).all.keys.filter { it.startsWith("e:") && sp(c).getString(it, null) != null }.map { it.removePrefix("e:") }.sorted()
     }
 
     @Composable
@@ -217,7 +226,19 @@ fun FileTypeIconsDialog(onClose: () -> Unit) {
                         Text(label, fontSize = 15.sp)
                     }
                 }
-                androidx.compose.material3.OutlinedTextField(ext, { ext = it.trim().lowercase().removePrefix(".") }, singleLine = true, label = { Text(stringResource(R.string.ic_ext)) }, modifier = Modifier.fillMaxWidth())
+                // 20.11.2026: назначенные значки расширений видны в этом же списке (раньше показывались только готовые типы)
+                val assigned = CustomIcons.assignedExts()
+                if (assigned.isNotEmpty()) {
+                    Text(stringResource(R.string.ic_assigned), fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
+                    assigned.forEach { e ->
+                        Row(Modifier.fillMaxWidth().clickable { pickKey = "e:$e"; pickTitle = ".$e" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val sp = CustomIcons.spec("e:$e")
+                            if (sp != null) CustomIconView(sp, 32.dp) else FileGlyph(fileCat(e), e, 32.dp)
+                            Text("." + e, fontSize = 15.sp)
+                        }
+                    }
+                }
+                androidx.compose.material3.OutlinedTextField(ext, { ext = it.trim().lowercase().removePrefix(".") }, singleLine = true, label = { Text(stringResource(R.string.ic_ext_short), maxLines = 1) }, placeholder = { Text(stringResource(R.string.ic_ext_hint), maxLines = 1, fontSize = 12.sp) }, modifier = Modifier.fillMaxWidth())
                 TextButton({ if (ext.isNotBlank()) { pickKey = "e:$ext"; pickTitle = "." + ext } }, enabled = ext.isNotBlank()) { Text(stringResource(R.string.ic_pick_ext)) }
             }
         },

@@ -84,6 +84,7 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
     val ctx = LocalContext.current
     // 10.2 (правило 25): запрос, выбранная группа (две половины) и раскрытая (одна колонка; пусто: все свёрнуты) живут в SettingsMemory:
     // они переживают смену нижних вкладок и пересоздание окна; сбрасываются только новым запуском программы
+    // 20.11.2026 (правило владелицы): при ЗАПУСКЕ программы все группы свёрнуты; раскрытое и фокус помнятся до закрытия программы (SettingsMemory, только в памяти процесса)
     var query by SettingsMemory::query
     var group by SettingsMemory::group
     val restore = remember { booleanArrayOf(true) }   // при возврате фокус пульта возвращается туда, где он был (один раз)
@@ -120,7 +121,6 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
                     Column(Modifier.weight(1f).fillMaxHeight().onFocusChanged { inContent = it.hasFocus; if (it.hasFocus) SettingsMemory.zone = 1 }) {
                         SetSearchField(query, Modifier.align(Alignment.CenterHorizontally).widthIn(max = SET_MAX_W + 24.dp).fillMaxWidth()
                             .padding(start = 12.dp, end = 12.dp + 10.dp, top = 8.dp)) { query = it }
-                        if (query.isBlank()) Column(Modifier.align(Alignment.CenterHorizontally).widthIn(max = SET_MAX_W + 24.dp).fillMaxWidth().padding(start = 12.dp, end = 12.dp + 10.dp, top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { SetBackupQuick() }
                         if (query.isNotBlank()) {
                             TabColumn("tab.settings.search", Modifier.weight(1f).fillMaxWidth(), 12.dp) { SetCentered { SetResults(results, titles, query, jump) } }
                         } else key(sel) {
@@ -146,7 +146,8 @@ private fun SettingsGroupedBody(vm: MainViewModel) {
             TabColumn("tab.settings", Modifier.fillMaxSize(), 12.dp) {
                 SetCentered(8.dp) {
                     SetSearchField(query, Modifier.fillMaxWidth()) { query = it }
-                    if (query.isBlank()) SetBackupQuick()   // 19.11.2026: «Создать копию» и «Восстановить из копии» всегда на виду
+                    // 20.11.2026: в корне настроек только поиск и заголовки групп; «Создать копию» и «Восстановить из копии» в группе «Копии и обновления»
+                    //   // 19.11.2026: «Создать копию» и «Восстановить из копии» всегда на виду
                     if (query.isNotBlank()) SetResults(results, titles, query, jump)
                     else SetGroups.ORDER.forEach { g ->
                         SetGroupHead(g, open = g == group, Modifier.bringIntoViewRequester(bring.getValue(g))) { group = if (group == g) "" else g }

@@ -443,7 +443,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }
             }
-            val exitClick: () -> Unit = { if (Fm.jobs.isNotEmpty()) exitAsk = true else exitNow() }
+            val exitClick: () -> Unit = { if (Fm.jobs.any { !it.finished }) exitAsk = true else exitNow() }
             if (exitAsk) LAlertDialog(
                 onDismissRequest = { exitAsk = false },
                 title = { Text(stringResource(R.string.exit_busy)) },
@@ -597,7 +597,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             ) { pad ->
                 Column(Modifier.padding(pad).fillMaxSize()) {
                     Spacer(Modifier.height(4.dp))
-                    if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (vm.busy) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }   // 20.11.2026: без бегущей полоски
                     // 18.11.2026 (владелица, тот же «переезд», что понравился у панелей «Файлов»): переключение главных вкладок
                     // раньше было мгновенной подменой без всякой анимации — теперь тот же сильный слайд. На приставке короче и
                     // легче (меньше длительность, меньше сдвиг), чтобы не грузить слабое железо: экран там и так тяжелее телефонного.

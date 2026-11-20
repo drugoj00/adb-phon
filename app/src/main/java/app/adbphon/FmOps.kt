@@ -178,6 +178,9 @@ class FmJob(val title: String, val total: Int, val bytesMode: Boolean = true) : 
     var filesDone by mutableIntStateOf(0)
     var speed by mutableFloatStateOf(0f)             // единиц в секунду (сглаженная)
     @Volatile override var cancelled = false
+    /** 20.11.2026 (правило владелицы по полоскам): задание закончилось: полоска остаётся заполненной тем же цветом, подпись «Готово»; при ошибке текст ошибки рядом, цвет не меняется. */
+    var finished by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
 
     private val acc = AtomicLong(0)
     private val accFiles = AtomicLong(0)
@@ -187,6 +190,7 @@ class FmJob(val title: String, val total: Int, val bytesMode: Boolean = true) : 
 
     /** 11.0: полоса всегда определённая, если хоть что-то известно: байты, иначе файлы, иначе число элементов списка; бегущая только когда нет ничего. */
     val fraction: Float? get() = when {
+        finished && error == null && !cancelled -> 1f
         totalUnits > 0 -> (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f)
         filesTotal > 0 -> (filesDone.toFloat() / filesTotal).coerceIn(0f, 1f)
         total > 1 -> (done.toFloat() / total).coerceIn(0f, 1f)
@@ -218,24 +222,14 @@ object FmOpsUi {
     fun fmtTime(sec: Int): String = if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec % 3600 / 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60)
 }
 
-/** Горизонтальная скруглённая полоска хода работы, бирюзовый градиент. [fraction] null: бегущая полоска (объём ещё считается). */
+/** Горизонтальная скруглённая полоска хода работы цвета темы. 20.11.2026: никаких бегущих анимаций: [fraction] null (объём ещё считается): пустая полоска с минимальной отметкой, дальше заполняется слева направо. */
 @Composable
 fun FmProgressBar(fraction: Float?, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 10.dp) {
     val shape = RoundedCornerShape(height / 2)
     val prim = BarStyle.used()
     val brush = Brush.horizontalGradient(listOf(prim, prim))
     Box(modifier.fillMaxWidth().height(height).clip(shape).background(BarStyle.freeProgress()).barFrame(prim, shape)) {
-        if (fraction != null) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0.02f, 1f)).clip(shape).background(brush))
-        } else {
-            val tr = rememberInfiniteTransition(label = "fmbar")
-            val ph by tr.animateFloat(0f, 1f, infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart), label = "x")
-            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                val w = size.width; val seg = w * 0.4f; val start = (-0.4f + 1.4f * ph) * w
-                drawRoundRect(Brush.horizontalGradient(listOf(prim, prim), startX = start, endX = start + seg), Offset(start, 0f),
-                    androidx.compose.ui.geometry.Size(seg, size.height), androidx.compose.ui.geometry.CornerRadius(size.height / 2))
-            }
-        }
+        Box(Modifier.fillMaxHeight().fillMaxWidth((fraction ?: 0f).coerceIn(0.02f, 1f)).clip(shape).background(brush))
     }
 }
 
@@ -266,23 +260,26 @@ private fun FmJobCard(j: FmJob, big: Float) {
     // вся информация над полоской хода: в альбоме одной строкой (название, осталось, скорость, время, отмена), в портрете двумя
     val land = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val parts = ArrayList<String>()
-    if (j.totalUnits > 0) {
+    if (j.finished) {
+        // 20.11.2026: конец задания: «Готово» (или текст ошибки / «Отменено») рядом с полоской, цвет полоски прежний
+        parts += j.error ?: stringResource(if (j.cancelled) R.string.fm_cancelled else R.string.fm_done)
+    } else if (j.totalUnits > 0) {
         val left = (j.totalUnits - j.doneUnits).coerceAtLeast(0L)
         parts += if (j.bytesMode) stringResource(R.string.fm_op_left, fmSize(left), fmSize(j.totalUnits)) else stringResource(R.string.fm_op_left, left.toString(), j.totalUnits.toString())
     } else parts += stringResource(R.string.fm_op_calculating)
-    if (j.bytesMode) parts += if (j.speed > 1f) stringResource(R.string.fm_op_speed, fmSize(j.speed.toLong())) else stringResource(R.string.fm_op_speed_wait)
-    j.etaSec?.let { parts += stringResource(R.string.fm_op_eta, FmOpsUi.fmtTime(it)) }
+    if (!j.finished && j.bytesMode) parts += if (j.speed > 1f) stringResource(R.string.fm_op_speed, fmSize(j.speed.toLong())) else stringResource(R.string.fm_op_speed_wait)
+    if (!j.finished) j.etaSec?.let { parts += stringResource(R.string.fm_op_eta, FmOpsUi.fmtTime(it)) }
     val info = parts.joinToString("  ·  ") { it.replace(' ', ' ') }
     val title = j.title + if (j.queued) "  ·  " + stringResource(R.string.fm_queued) else ""
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (land) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(title, fontSize = (13 * big).sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(info, Modifier.weight(1f, fill = true), fontSize = (12 * big).sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .85f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            TextButton({ j.cancelled = true }) { Text(stringResource(R.string.fm_cancel_job), fontSize = (13 * big).sp, maxLines = 1) }
+            if (!j.finished) TextButton({ j.cancelled = true }) { Text(stringResource(R.string.fm_cancel_job), fontSize = (13 * big).sp, maxLines = 1) }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), fontSize = (14 * big).sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                TextButton({ j.cancelled = true }) { Text(stringResource(R.string.fm_cancel_job), fontSize = (13 * big).sp) }
+                if (!j.finished) TextButton({ j.cancelled = true }) { Text(stringResource(R.string.fm_cancel_job), fontSize = (13 * big).sp) }
             }
             Text(info, fontSize = (13 * big).sp, lineHeight = (17 * big).sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .85f))
         }
@@ -326,10 +323,10 @@ class FmOpService : Service() {
         b.setContentIntent(open)
         val cancel = PendingIntent.getService(this, 1, Intent(this, FmOpService::class.java).setAction("cancel"), PendingIntent.FLAG_IMMUTABLE)
         b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), getString(R.string.fm_cancel_job), cancel).build())
-        if (j == null) { b.setContentTitle(getString(R.string.fm_ops_title, 1)); b.setProgress(0, 0, true); return b.build() }
+        if (j == null) { b.setContentTitle(getString(R.string.fm_ops_title, 1)); b.setProgress(100, 0, false); return b.build() }
         b.setContentTitle(j.title).setContentText(listOfNotNull(j.fraction?.let { "${(it * 100).toInt()} %" }, j.current.ifEmpty { null }).joinToString("  ·  "))
         val f = j.fraction
-        if (f == null) b.setProgress(0, 0, true) else b.setProgress(100, (f * 100).toInt(), false)
+        b.setProgress(100, ((f ?: 0f) * 100).toInt(), false)   // 20.11.2026: без бегущей полоски и в уведомлении
         return b.build()
     }
 

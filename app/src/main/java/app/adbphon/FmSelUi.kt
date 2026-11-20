@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 
 /** Крупная кнопка-значок без слов; название читается вслух и показывается по долгому нажатию, у фокуса пульта рамка. */
 @Composable
-internal fun DropIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, name: String, color: Color, h: androidx.compose.ui.unit.Dp, modifier: Modifier, shortLabel: String? = null, onClick: () -> Unit) {
+internal fun DropIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, name: String, color: Color, h: androidx.compose.ui.unit.Dp, modifier: Modifier, shortLabel: String? = null, labelColor: Color? = null, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val sh = RoundedCornerShape(16.dp)
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -61,13 +61,56 @@ internal fun DropIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, null, Modifier.size(if (Marq.tv) 40.dp else 30.dp), tint = color)
-            if (shortLabel != null) Text(shortLabel, fontSize = if (Marq.tv) 13.sp else 11.sp, lineHeight = if (Marq.tv) 16.sp else 13.sp, maxLines = 1, softWrap = false, fontFamily = UiPrefs.listFont, fontWeight = FontWeight.Medium, color = color)
+            if (shortLabel != null) Text(shortLabel, fontSize = if (Marq.tv) 13.sp else 11.sp, lineHeight = if (Marq.tv) 16.sp else 13.sp, maxLines = 1, softWrap = false, fontFamily = UiPrefs.listFont, fontWeight = FontWeight.Medium, color = labelColor ?: color)
             else if (Marq.tv && focused) Text(name, fontSize = 13.sp, color = color)
         }
     }
 }
 
 /** Длинный путь сокращается серединой: начало и конец видны. */
+/**
+ * 20.11.2026 (владелица: «сделай нормальный перенос — папок и файлов»): имя переносится ПОСЛЕ разделителей («_», «.», скобки, смена регистра в CamelCase), а не посреди слова;
+ * точка перед расширением не даёт разрыва, поэтому расширение остаётся на последней строке вместе с последним фрагментом; слишком длинное имя сокращается
+ * многоточием в середине (начало и расширение сохраняются). Невидимые пробелы нулевой ширины только для показа; сами имена не меняются.
+ */
+/**
+ * 20.11.2026 (владелица: «папок вверху, а файлов внизу, где логика?»): блок второй строки (дата и время, «N пап., N файл.», размер) неделим:
+ * пробелы внутри блока неразрывные, строка переносится только МЕЖДУ блоками; разделитель «·» остаётся в конце предыдущей строки.
+ */
+fun nbBlock(s: String): String = s.replace(' ', '\u00A0')
+const val SUB_SEP = "\u00A0\u00B7 "
+
+/** 20.11.2026 (владелица): красный цвет линий значка и подписи «Удалить»: приглушённо-чёткий, виден на светлой и тёмной теме; фон кнопок не меняется. */
+@androidx.compose.runtime.Composable
+fun deleteRed(): androidx.compose.ui.graphics.Color {
+    val bg = androidx.compose.material3.MaterialTheme.colorScheme.background
+    val dark = (0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue) < 0.5f
+    return if (dark) androidx.compose.ui.graphics.Color(0xFFFF6B6B) else androidx.compose.ui.graphics.Color(0xFFD32F2F)
+}
+
+object NameWrap {
+    const val MAX = 72
+    fun fmt(name: String): String {
+        val s = if (name.length > MAX) shortMiddle(name, MAX) else name
+        val dot = s.lastIndexOf('.')
+        val sb = StringBuilder(s.length + 8)
+        for (i in s.indices) {
+            val c = s[i]
+            sb.append(c)
+            if (i == s.lastIndex) break
+            val n = s[i + 1]
+            val brk = when {
+                c == '_' || c == '(' || c == '[' || c == ')' || c == ']' || c == '+' || c == ',' -> true
+                c == '.' -> i != dot && !(i > 0 && s[i - 1].isDigit() && n.isDigit())
+                c.isLowerCase() && n.isUpperCase() -> true
+                else -> false
+            }
+            if (brk && i + 1 != dot) sb.append('\u200B')
+        }
+        return sb.toString()
+    }
+}
+
 fun shortMiddle(s: String, max: Int): String = if (s.length <= max) s else s.take(max / 3) + "…" + s.takeLast(max - max / 3 - 1)
 
 /** «N элементов» с правильным окончанием на языке приложения. */

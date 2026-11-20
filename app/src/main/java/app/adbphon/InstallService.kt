@@ -145,7 +145,7 @@ class InstallService : Service() {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.silent_notif_channel), NotificationManager.IMPORTANCE_LOW))
         val b = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this))
             .setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle(title).setContentText(text).setOngoing(true)
-        if (max > 0) b.setProgress(max, progress, false) else b.setProgress(0, 0, true)
+        if (max > 0) b.setProgress(max, progress, false) else b.setProgress(100, 0, false)   // 20.11.2026: без бегущей полоски
         val n = b.build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }

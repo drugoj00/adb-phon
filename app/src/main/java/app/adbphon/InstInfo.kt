@@ -129,6 +129,13 @@ class InstRun {
     var name by mutableStateOf("")
     /** 0 подготовка, 1 передача файла, 2 установка, 3 копирование OBB. */
     var phase by mutableIntStateOf(0)
+    /** 20.11.2026 (правило владелицы по полоскам): общий ход 0..1 без бегущей анимации: по файлам, внутри файла передача по байтам (до 90%), установка системой держит 90% до конца файла. */
+    val overall: Float get() {
+        if (finished) return 1f
+        val n = total.coerceAtLeast(1)
+        val stage = if (phase == 2) 0.9f else if (all > 0) (done.toFloat() / all).coerceIn(0f, 1f) * 0.9f else 0f
+        return ((index.coerceAtLeast(1) - 1 + stage) / n).coerceIn(0f, 1f)
+    }
     var done by mutableLongStateOf(0L)
     var all by mutableLongStateOf(0L)
     var ok by mutableIntStateOf(0)
@@ -253,9 +260,10 @@ fun InstProgressView(run: InstRun) {
         if (run.finished) {
             Text(
                 if (run.bad == 0) stringResource(R.string.ii_done_all) else stringResource(R.string.install_result_n, run.ok, run.bad),
-                color = if (run.bad == 0) okCol(t.dark) else t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
             )
-            ThemedProgress({ 1f }, Modifier.fillMaxWidth().height(6.dp), if (run.bad == 0) okCol(t.dark) else t.accent)
+            // 20.11.2026: конец: полоска просто заполнена цветом темы (не зелёная и не красная), итог и ошибки текстом
+            ThemedProgress({ 1f }, Modifier.fillMaxWidth().height(6.dp), t.accent)
             if (run.fails.isNotEmpty()) {
                 Text(stringResource(R.string.ii_failed_list), color = t.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                 run.fails.forEach { Text("− $it", color = badCol(t.dark), fontSize = 11.sp, maxLines = 12, overflow = TextOverflow.Ellipsis) }
@@ -263,9 +271,8 @@ fun InstProgressView(run: InstRun) {
         } else {
             Text(stringResource(R.string.ii_prog_title) + if (run.total > 1) "  ·  " + stringResource(R.string.ii_prog_count, run.index.coerceAtLeast(1), run.total) else "", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             val frac = (run.done.toFloat() / run.all.coerceAtLeast(1L)).coerceIn(0f, 1f)
-            // передача файла: полоска по байтам; установка системой (проверка и запись пакета): бегущая полоска, объём заранее неизвестен
-            if (run.phase == 2) (BarStyle.used(t.accent).let { bc -> androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(6.dp).barFrame(bc, androidx.compose.foundation.shape.RoundedCornerShape(50)), color = bc, trackColor = BarStyle.freeProgress()) })
-            else ThemedProgress({ frac }, Modifier.fillMaxWidth().height(6.dp), t.accent)
+            // передача файла: полоска по байтам; установка системой (проверка и запись пакета, объём неизвестен): этапы, полоска стоит на 90% файла и без бегущей анимации
+            ThemedProgress({ run.overall }, Modifier.fillMaxWidth().height(6.dp), t.accent)
             if (run.name.isNotEmpty()) Text(run.name, color = t.text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 stringResource(when (run.phase) { 1 -> R.string.ii_ph_upload; 2 -> R.string.ii_ph_install; 3 -> R.string.ii_ph_obb; else -> R.string.ii_ph_prepare }) +

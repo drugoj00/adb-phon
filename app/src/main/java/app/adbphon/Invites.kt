@@ -577,11 +577,12 @@ fun InvitesSection() {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             HintTitle(stringResource(R.string.inv_title), stringResource(R.string.inv_hint), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(stringResource(R.string.inv_code, Invites.myCode(ctx)), Modifier.weight(1f), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+            // 20.11.2026 (крупный шрифт): код на своей строке целиком, «Копировать» под ним: раньше код рвался по буквам рядом с кнопкой
+            Column(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.inv_code, Invites.myCode(ctx)), Modifier.fillMaxWidth(), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                 TextButton({
                     (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", Invites.myCode(ctx)))
-                }) { Text(stringResource(R.string.inv_copy)) }
+                }, Modifier.align(androidx.compose.ui.Alignment.End)) { Text(stringResource(R.string.inv_copy)) }
             }
             // 10.0: рядом с приёмом приглашения отправка своего (Tailscale API, MiscUi.kt)
             // 14.0: кнопки одной высоты, даже если подпись одной из них переносится (EqBtnRow, Btn.kt)

@@ -69,11 +69,11 @@ class InstBgService : Service() {
     private fun progress(run: InstRun?): Notification {
         val b = Notification.Builder(this).setSmallIcon(R.drawable.ic_stat_files).setOngoing(true).setOnlyAlertOnce(true).setContentIntent(open())
         if (android.os.Build.VERSION.SDK_INT >= 26) b.setChannelId(CH)
-        if (run == null) { b.setContentTitle(getString(R.string.ii_prog_title)).setProgress(0, 0, true); return b.build() }
+        if (run == null) { b.setContentTitle(getString(R.string.ii_prog_title)).setProgress(1000, 0, false); return b.build() }
         b.setContentTitle(getString(R.string.ii_prog_title) + if (run.total > 1) "  ·  " + getString(R.string.ii_prog_count, run.index.coerceAtLeast(1), run.total) else "")
         val mb = { v: Long -> String.format(java.util.Locale.US, "%.1f", v / 1048576.0) }
         b.setContentText(listOfNotNull(run.name.ifEmpty { null }, if (run.all > 1) getString(R.string.ii_mb, mb(run.done) + " " + getString(R.string.unit_mb), mb(run.all) + " " + getString(R.string.unit_mb)) else null).joinToString("  ·  "))
-        if (run.phase == 2 || run.all <= 1) b.setProgress(0, 0, true) else b.setProgress(1000, ((run.done.toDouble() / run.all.coerceAtLeast(1L)) * 1000).toInt().coerceIn(0, 1000), false)
+        b.setProgress(1000, (run.overall * 1000).toInt().coerceIn(0, 1000), false)   // 20.11.2026: без бегущей полоски в уведомлении
         val stop = PendingIntent.getService(this, 4109, Intent(this, InstBgService::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
         if (run.total > 1) b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), getString(R.string.ii_stop), stop).build())
         return b.build()

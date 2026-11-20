@@ -321,6 +321,15 @@ object FmRootCfg {
     /** Ключи и уровни видимых строк дерева по панелям (обновляются при каждой отрисовке): нужны, чтобы после удаления передать фокус соседней строке. */
     private val rowsByPane = java.util.concurrent.ConcurrentHashMap<Int, Pair<List<String>, List<Int>>>()
     fun setRows(paneId: Int, keys: List<String>, levels: List<Int>) { rowsByPane[paneId] = keys to levels }
+    /** 20.11.2026: строка [key] лежит внутри раскрытого узла [owner] (по видимому списку панели: следующие строки глубже владельца). */
+    fun rowInside(paneId: Int, key: String, owner: String): Boolean {
+        val (keys, lv) = rowsByPane[paneId] ?: return false
+        if (keys.size != lv.size) return false
+        val oi = keys.indexOf(owner); val ki = keys.indexOf(key)
+        if (oi < 0 || ki <= oi) return false
+        for (j in oi + 1..ki) if (lv[j] <= lv[oi]) return false
+        return true
+    }
     /**
      * Ключ строки, которой отдать фокус после удаления строк [deleted]: следующий сосед того же уровня, иначе предыдущий сосед или родитель.
      * Считается ДО удаления, пока строки ещё в списке; ищется в той панели, где эти строки есть.
@@ -517,7 +526,7 @@ object FmRootCfg {
         // T3 (слова владелицы 19.11.2026: «в каждом окне запоминалось, и когда запускаю прогу, было развёрнуто в обоих окнах то, что разворачивал»): помнятся ВСЕ раскрытые узлы
         // обеих панелей. Группы и локальные папки раскрываются сразу (чтение с телефона быстрое); сетевые, облачные и ADB-узлы только запоминаются (rootPending) и раскрываются лениво,
         // когда строка видна и есть связь (без обхода сети на старте); исчезнувшая локальная папка или том пропускаются тихо
-        raw.split('\n').filter { it.isNotBlank() }.takeLast(MAX_OPEN).forEach { id ->
+        TreeOpen.withAncestors(raw.split('\n').filter { it.isNotBlank() }.takeLast(MAX_OPEN)).forEach { id ->
             val net = id.startsWith("N|") || id.startsWith("D|") || id.startsWith("T|")
             if (net) p.rootPending.add(id)
             else if (id !in p.rootOpen && (!id.startsWith("L|") || localNodeAlive(id))) p.rootOpen.add(id)
@@ -775,7 +784,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 val dirTxt = ti?.let { "/" + it.origPath.trim('/').substringBeforeLast('/', "") }
                 val whenTxt = ti?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
                 rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, tnet = c, titem = ti, gname = if (k.isDir) null else k.name,
-                    side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(dirTxt, whenTxt).joinToString("  ·  "),
+                    side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(dirTxt, whenTxt?.let { nbBlock(it) }).joinToString(SUB_SEP),
                     selE = ti?.let { FmRootCfg.SelE(k.id, c, id, "", k.name, k.path, k.isDir, it) })
                 return@forEach
             }
@@ -783,14 +792,14 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 val fi = FmTrash.tk[k.id]
                 val whenTxt = fi?.takeIf { it.deletedAt > 0 }?.let { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.deletedAt)) }
                 rows += RR("t:" + k.id, k.name, if (k.isDir) Icons.Filled.Folder else iconFor(FmItem(k.name, false, 0, "")), if (k.isDir) Color(0xFFFFB74D) else Color(0xFF90A4AE), level = level, fitem = fi, gname = if (k.isDir) null else k.name,
-                    side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(fi?.folder?.let { shortMiddle(it, 24) }, whenTxt, fi?.volLabel).joinToString("  ·  "),
+                    side = if (k.size >= 0) fmSize(k.size) else null, subText = listOfNotNull(fi?.folder?.let { shortMiddle(it, 24) }, whenTxt?.let { nbBlock(it) }, fi?.volLabel).joinToString(SUB_SEP),
                     selE = fi?.let { FmRootCfg.SelE(k.id, null, id, "", k.name, k.path, k.isDir, null, it) })
                 return@forEach
             }
             if (k.id.startsWith("Te|")) { rows += RR("t:" + k.id, k.name, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level); return@forEach }
             if (!k.isDir) {
                 val item = FmItem(k.name, false, k.size, "")
-                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext == "apk") k.path else null,
+                rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext in setOf("apk", "apks", "xapk", "apkm")) k.path else null,
                     // 11.0: значок APK и на телефоне по ADB, и в сети: временная копия (до 150 МБ), облако только из кэша значков
                     remoteApk = if (!id.startsWith("L|") && k.size > 0 && item.ext in setOf("apk", "apks", "xapk", "apkm") && (c != null || id.startsWith("D|")))
                         RemoteApk((if (c != null) "N|" + c.kind + "|" + c.host + "|" + c.user else "D") + "|" + k.path + "|" + k.size + "|" + k.date, k.size, c == null || c.kind != "cloud") { dest ->
@@ -1031,7 +1040,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             var j = i - 1
             while (j >= 0 && !(rows[j].level == k - 1 && rows[j].header == 0)) j--
             val groupParent = j >= 0 && rows[j].expandKey != null
-            (8 + TREE_IND * (k - 1) + (if (groupParent) 9 else if (tv) 15 else 10)).toFloat()
+            (TreeDim.pad + TreeDim.ind * (k - 1) + (if (groupParent) 9 else if (tv) 15 else TreeDim.arrow(false) / 2)).toFloat()
         }
     }
     // 10.0 (fm1): видимые отмечаемые строки: элемент → его содержимое (строки уровнем ниже под раскрытой папкой) и верхний уровень (родитель без своей отметки)
@@ -1172,22 +1181,32 @@ internal object RootSelOps {
         parents.distinct().forEach { FmRootCfg.kidErr.remove(it); FmRootCfg.stale.add(it) }
         CloudTrash.ver++
     }
-    fun transfer(p: FmPane, move: Boolean) {
+    /** 20.11.2026: подпись источника для окна подтверждения: первая папка (и сколько ещё). */
+    private fun groupsFrom(groups: Collection<List<FmRootCfg.SelE>>): String {
+        val g0 = groups.firstOrNull()?.firstOrNull() ?: return ""
+        val l = Fm.pathLabel(pseudo(g0, g0.parentPath), if (g0.net != null) "smb" else "local", g0.parentPath)
+        return if (groups.size > 1) l + " (+" + (groups.size - 1) + ")" else l
+    }
+    fun transfer(p: FmPane, move0: Boolean) {
         val o = Fm.panes[1 - p.id]
-        val groups = files.groupBy { (it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L") + "#" + it.parentPath }
-        val par = files.map { it.parentId }
+        val fl = files
+        val groups = fl.groupBy { (it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L") + "#" + it.parentPath }
+        val par = fl.map { it.parentId }
         // 9.3: папка-приёмник: последняя раскрытая папка другой панели (дерево) или её текущая папка (список); 10.0: папки нет, окно выбора папки
         val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run {
-            Fm.dlg = FmDlg.PickTarget(move, groups.values.map { g -> pseudo(g[0], g[0].parentPath) to g.map { it.name } }) { afterJobs(par) }
+            Fm.dlg = FmDlg.PickTarget(move0, groups.values.map { g -> pseudo(g[0], g[0].parentPath) to g.map { it.name } }) { afterJobs(par) }
             FmRootCfg.sel.clear(); return
         }) else null
-        dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
-        val seq0 = Fm.jobSeq
-        Fm.scope.launch {
-            for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
-            afterJobs(par + listOfNotNull(dst?.node), seq0)
+        val toLabel = dst?.label() ?: Fm.pathLabel(o, o.src, o.path)
+        Fm.askTransfer(move0, groupsFrom(groups.values), toLabel, fl.map { it.name }, 0L, dst?.pane() ?: o, null) { move, pol ->
+            dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
+            val seq0 = Fm.jobSeq
+            Fm.scope.launch {
+                for ((_, g) in groups) { Fm.copyMove(move, pseudo(g[0], g[0].parentPath), dst?.pane() ?: o, g.map { it.name }, policy = pol); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+                afterJobs(par + listOfNotNull(dst?.node), seq0)
+            }
+            FmRootCfg.sel.clear()
         }
-        FmRootCfg.sel.clear()
     }
     /** Копирование и перенос из обычного списка панели [p] (не дерево): в раскрытую папку дерева другой панели или в её текущую папку. */
     fun fromList(p: FmPane, move: Boolean) = toOther(p, Fm.targets(p), move)
@@ -1195,12 +1214,17 @@ internal object RootSelOps {
     fun toOther(p: FmPane, names: List<String>, move: Boolean) {
         val o = Fm.panes[1 - p.id]
         if (names.isEmpty()) return
-        if (!o.root) { Fm.copyMove(move, p, o, names); return }
+        // 20.11.2026: перед копированием и переносом окно подтверждения (настройка «Подтверждать копирование и перенос», по умолчанию включена)
+        val bytes = names.sumOf { n -> p.items.firstOrNull { it.name == n }?.takeIf { !it.isDir }?.size ?: 0L }
+        val from = Fm.pathLabel(p, p.src, p.path)
+        if (!o.root) { Fm.askTransfer(move, from, Fm.pathLabel(o, o.src, o.path), names, bytes, o, p) { mv, pol -> Fm.copyMove(mv, p, o, names, policy = pol) }; return }
         val dst = FmRootCfg.destFor(o) ?: run { Fm.dlg = FmDlg.PickTarget(move, listOf(p to names)); return }
-        Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, dst.label()))
-        val seq0 = Fm.jobSeq
-        Fm.copyMove(move, p, dst.pane(), names)
-        Fm.scope.launch { afterJobs(listOf(dst.node), seq0) }
+        Fm.askTransfer(move, from, dst.label(), names, bytes, dst.pane(), p) { mv, pol ->
+            Fm.say(Fm.str(if (mv) R.string.pk_moving_to else R.string.pk_copying_to, dst.label()))
+            val seq0 = Fm.jobSeq
+            Fm.copyMove(mv, p, dst.pane(), names, policy = pol)
+            Fm.scope.launch { afterJobs(listOf(dst.node), seq0) }
+        }
     }
     fun deleteFiles() {
         val srcs = files.map { it.net?.let { n -> n.kind + "|" + n.host + "|" + n.user } ?: "L" }.distinct()
@@ -1395,11 +1419,58 @@ private fun collapseInside(p: FmPane, id: String) {
     if (inside.isNotEmpty()) { p.rootOpen.removeAll(inside.toSet()); p.rootPending.removeAll(inside.toSet()) }
 }
 
+/**
+ * 20.11.2026 (слова владелицы: «свернул источник, нажал на него: раскрывается источник, а не устройства в нём, как в LAN»): при сворачивании группы или узла
+ * всё раскрытое внутри забывается (в том числе запомненные «ожидающие» узлы); фокус и выбор, оставшиеся на скрытой строке, переходят на сам свёрнутый узел.
+ */
+internal fun collapseGroup(p: FmPane, key: String) {
+    p.rootOpen.remove(key)
+    p.rootPending.remove(key)
+    val inside = (p.rootOpen + p.rootPending).filter { id ->
+        when (key) {
+            "lan", "cloud", "wifi", "apps" -> (id.startsWith("N|") || id.startsWith("T|") || id.startsWith("A|")) && netGroupOf(id) == key
+            "pc" -> id.startsWith("dev:")
+            else -> false
+        }
+    }
+    p.rootOpen.removeAll(inside.toSet()); p.rootPending.removeAll(inside.toSet())
+    refocusCollapsed(p, key, key)
+}
+
+/** После сворачивания узла [rowKey] (ключ строки) фокус и выбор, оставшиеся на скрытой строке внутри него ([hidden]: узнаётся по ключу), переходят на сам узел. */
+internal fun refocusCollapsed(p: FmPane, rowKey: String, hiddenOwner: String) {
+    val inside = { k: String? -> k != null && k != rowKey && FmRootCfg.rowInside(p.id, k, rowKey) }
+    if (inside(p.rootSel)) p.rootSel = rowKey
+    if (inside(FmRootCfg.focusKey[p.id])) FmRootCfg.focusKey[p.id] = rowKey
+    FocusRestore.startKey = null
+    FmRootCfg.focusRowLater(rowKey)
+}
+
 /** 9.4: верхние группы корня (LAN, Облака, Wi-Fi проводник, Устройства, Приложения): раскрыта только одна, остальные сворачиваются. */
 private val ROOT_GROUPS = setOf("lan", "cloud", "wifi", "pc", "apps")
 private fun openGroup(p: FmPane, key: String) {
     if (key in ROOT_GROUPS) p.rootOpen.removeAll { it in ROOT_GROUPS && it != key }
     if (key !in p.rootOpen) p.rootOpen.add(key)
+}
+
+/** 20.11.2026: группа корня (lan, cloud, wifi, apps), в которой лежит узел [id]; null: узел вне групп (память, том, ADB). */
+private fun netGroupOf(id: String): String? = when {
+        id.startsWith("A|") -> "apps"
+        id.startsWith("T|") -> "cloud"
+        id.startsWith("N|") -> {
+            val a = id.split('|', limit = 5)
+            when (a.getOrNull(1)) {
+                "cloud" -> "cloud"
+                "dav" -> {
+                    val c = (NetStore.list(Fm.sctx) + WifiExplorer.found.toList()).firstOrNull { it.kind == "dav" && it.host == a.getOrNull(2) && it.user == a.getOrNull(3) }
+                    // найденное по LAN устройство с WebDAV лежит в группе «LAN», а не «Облачные диски» (10.11.2026: из-за этого нажатие сворачивало всю группу LAN)
+                    val inLan = c == null && FmRootCfg.lanFound.any { h -> FmRootCfg.lanConn(h).let { lc -> lc.kind == "dav" && lc.host == a.getOrNull(2) && lc.user == a.getOrNull(3) } }
+                    if (inLan) "lan" else if (c != null && WifiExplorer.isWifi(c)) "wifi" else "cloud"
+                }
+                else -> "lan"
+            }
+        }
+        else -> null
 }
 
 private fun rootAccordion(p: FmPane, id: String) {
@@ -1420,24 +1491,7 @@ private fun rootAccordion(p: FmPane, id: String) {
         return path(id).trimEnd('/').startsWith("$po/")
     }
     // 10.11.2026 (владелица: на S9 при раскрытии диска всё дерево «Облачные диски» схлопывалось): группа, в которой лежит открываемый узел («lan», «cloud», «wifi», «apps»), остаётся раскрытой
-    val keepGroup: String? = when {
-        id.startsWith("A|") -> "apps"
-        id.startsWith("T|") -> "cloud"
-        id.startsWith("N|") -> {
-            val a = id.split('|', limit = 5)
-            when (a.getOrNull(1)) {
-                "cloud" -> "cloud"
-                "dav" -> {
-                    val c = (NetStore.list(Fm.sctx) + WifiExplorer.found.toList()).firstOrNull { it.kind == "dav" && it.host == a.getOrNull(2) && it.user == a.getOrNull(3) }
-                    // найденное по LAN устройство с WebDAV лежит в группе «LAN», а не «Облачные диски» (10.11.2026: из-за этого нажатие сворачивало всю группу LAN)
-                    val inLan = c == null && FmRootCfg.lanFound.any { h -> FmRootCfg.lanConn(h).let { lc -> lc.kind == "dav" && lc.host == a.getOrNull(2) && lc.user == a.getOrNull(3) } }
-                    if (inLan) "lan" else if (c != null && WifiExplorer.isWifi(c)) "wifi" else "cloud"
-                }
-                else -> "lan"
-            }
-        }
-        else -> null
-    }
+    val keepGroup: String? = netGroupOf(id)
     // 10.11.2026 (владелица: «нажимаю на корзину, и диск сворачивается»; затем «везде одинаково: раскрыл одно, другое свернулось»): «Корзина» и «Облачный диск» — соседи и сворачивают друг друга, как всё остальное;
     // аккаунт облака (их родитель) при раскрытии корзины остаётся раскрытым
     fun acct(o: String): String? = when {
@@ -1541,7 +1595,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
     if (cKey != null && cLoader != null && cntNow == null) LaunchedEffect(cKey, cVis) { if (!FolderCounts.has(cKey)) FolderCounts.load(ctx, cKey, r.cntCls ?: FolderCounts.NET, cVis, cLoader) }
     val bigFont = if (tv) 1.15f else 1f
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .22f)
-    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id); if (Fm.treeOne) FmRootCfg.purgeClosedCloud() } else { if (Fm.treeOne || !id.startsWith("N|cloud|")) rootAccordion(p, id); p.rootOpen.add(id); if (Fm.treeOne) FmRootCfg.purgeClosedCloud(); FmRootCfg.refresh(p, id, NetStore.list(ctx)); FmRootCfg.scrollTarget[p.id] = id } }
+    val treeToggle = { id: String -> p.rootPending.remove(id); if (id in p.rootOpen) { p.rootOpen.remove(id); collapseInside(p, id); refocusCollapsed(p, r.key, r.key); if (Fm.treeOne) FmRootCfg.purgeClosedCloud() } else { FocusRestore.startKey = null; if (Fm.treeOne || !id.startsWith("N|cloud|")) rootAccordion(p, id); p.rootOpen.add(id); if (Fm.treeOne) FmRootCfg.purgeClosedCloud(); FmRootCfg.refresh(p, id, NetStore.list(ctx)); FmRootCfg.scrollTarget[p.id] = id } }
     // устройство LAN (найденное или сохранённое): раскрытие дерева с автоматическим раскрытием общего ресурса из подключения
     val rowToggle = { id: String ->
         val isLan = r.level == 1 && !r.drive && r.net != null && id == r.treeId && (r.key.startsWith("lanf:") || (r.key.startsWith("net:") && r.net.kind != "dav" && r.net.kind != "cloud"))
@@ -1553,7 +1607,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
             Fm.scope.launch { FmRootCfg.lanAutoOpen(p, id, nc, h) }
         }
     }
-    val rowClickR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (e0 != null && r.titem == null && r.fitem == null && FmRootCfg.sel.values.any { it.ti == null && it.fi == null }) FmRootCfg.toggleTree(p.id, e0) else if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) p.rootOpen.remove(r.expandKey) else openGroup(p, r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() }
+    val rowClickR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; FmRootCfg.noteRow(p.id, r.key, nodeForTarget); if (e0 != null && r.titem == null && r.fitem == null && FmRootCfg.sel.values.any { it.ti == null && it.fi == null }) FmRootCfg.toggleTree(p.id, e0) else if (r.titem != null || r.fitem != null) menu = true else if (r.expandKey != null) { if (r.expandKey in p.rootOpen) collapseGroup(p, r.expandKey) else openGroup(p, r.expandKey) } else if (r.treeId != null && FmRootCfg.treeOn && r.file == null) rowToggle(r.treeId) else r.act() }
     val rowLongR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; menu = true }
     // 12.0 (владелица: «рывок, а надо вообще без рывка» — одного animateItem() на сдвиг соседних строк мало, новая строка выскакивала
     // сразу в полный рост, только прозрачность менялась): своя строка по-настоящему вырастает (fadeIn+expandVertically) при первом
@@ -1588,7 +1642,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                             if (r.more[k - 1]) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height + ext), w)
                             else if (r.half) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height / 2), w)
                             val hasChev = r.treeId != null && FmRootCfg.treeOn
-                            if (r.tick) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, size.height / 2), androidx.compose.ui.geometry.Offset((8 + TREE_IND * lv + (if (hasChev) (if (tv) 4 else 1) else 0) - 1).dp.toPx(), size.height / 2), w)
+                            if (r.tick) drawLine(lineColor, androidx.compose.ui.geometry.Offset(x, size.height / 2), androidx.compose.ui.geometry.Offset((TreeDim.pad + TreeDim.ind * lv + (if (hasChev) (if (tv) 4 else 1) else 0) - 1).dp.toPx(), size.height / 2), w)
                         }
                     }
                 }
@@ -1606,7 +1660,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                 val b = c.boundsInWindow(); val v = c.isAttached && b.bottom > 0f && b.top < cView.rootView.height
                 if (v != cVis) cVis = v
             } else Modifier)
-            .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = 8.dp + (r.level * TREE_IND).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
+            .heightIn(min = if (tv) 52.dp else if (r.level > 0) 34.dp else 38.dp).padding(start = (TreeDim.pad + r.level * TreeDim.ind).dp, end = 3.dp, top = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp, bottom = if (tv) 3.dp else if (r.level > 0) 1.dp else 2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (r.level > 0) 5.dp else 8.dp)) {
             if (r.expandKey != null) Icon(if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
@@ -1614,10 +1668,11 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                 // 10.2 (58, как в X-plore): синий треугольник только у папок, в которых что-то есть
                 val open = r.treeId in p.rootOpen
                 val empty = !open && cntNow != null && cntNow.first + cntNow.second == 0
-                if (empty) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))
-                else Box(Modifier.size(if (tv) 30.dp else 20.dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
+                val arrowCol = treeArrowColor()   // 20.11.2026: цвет стрелок по настройке (по умолчанию в цвет текста)
+                if (empty) Spacer(Modifier.size(TreeDim.arrow(tv).dp))
+                else Box(Modifier.size(TreeDim.arrow(tv).dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
                     androidx.compose.foundation.Canvas(Modifier.size(if (tv) 16.dp else 12.dp)) {
-                        val c = Color(0xFF1E88E5)
+                        val c = arrowCol
                         val path = androidx.compose.ui.graphics.Path().apply {
                             if (open) { moveTo(0f, size.height * .2f); lineTo(size.width, size.height * .2f); lineTo(size.width / 2, size.height * .9f) }
                             else { moveTo(size.width * .15f, 0f); lineTo(size.width * .15f, size.height); lineTo(size.width, size.height / 2) }
@@ -1627,7 +1682,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                     }
                 }
             }
-            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(if (tv) 30.dp else 20.dp))      // место под шеврон: значок и подпись встают правее значка родителя
+            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(TreeDim.arrow(tv).dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
             if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderOrAppIcon(r.treeId.removePrefix("L|"), UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp, remote = r.remoteApk) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
@@ -1642,17 +1697,17 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                 val offlinePending = r.treeId != null && (r.net != null || r.tnet != null) && r.treeId in p.rootPending && r.treeId !in p.rootOpen && !remember { FmRootCfg.hasNetwork(ctx) }
                 // 10.2: вторая строка как в X-plore: «дата и время · размер» у файла, «дата и время · N папок, N файлов» у папки
                 val narrowRow = !tv && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420
-                val subDate = r.dateRaw?.takeIf { FmSub.mode != FmSub.NONE }?.let { FmSub.date(ctx, it, narrowRow) }
-                val subCounts = cntNow?.let { stringResource(if (narrowRow) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second) }
+                val subDate = r.dateRaw?.takeIf { FmSub.mode != FmSub.NONE }?.let { nbBlock(FmSub.date(ctx, it, narrowRow)) }
+                val subCounts = cntNow?.let { nbBlock(stringResource(if (narrowRow) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second)) }
                 val sub = listOfNotNull(
                     svc, if (offlinePending) stringResource(R.string.rt_parked) else null,
                     if (r.total > 0) stringResource(R.string.rt_free, fmGb(r.free), fmGb(r.total)) else null,
                     r.fs.takeIf { it.isNotBlank() }, if (r.ro) stringResource(R.string.rt_ro) else null, if (r.warn) stringResource(R.string.fm_vol_unsupported_short) else null,
                     subDate, subCounts,
-                    r.file?.takeIf { FmSub.mode != FmSub.NONE }?.let { fmSize(it.size) }, r.subText?.takeIf { it.isNotEmpty() }, r.path?.takeIf { r.net == null && r.file == null && r.treeId == null },
-                    cnt?.let { stringResource(R.string.rt_counts, it.first, it.second) },
+                    r.file?.takeIf { FmSub.mode != FmSub.NONE }?.let { nbBlock(fmSize(it.size)) }, r.subText?.takeIf { it.isNotEmpty() }, r.path?.takeIf { r.net == null && r.file == null && r.treeId == null },
+                    cnt?.let { nbBlock(stringResource(R.string.rt_counts, it.first, it.second)) },
                     if (r.level > 0) r.side?.takeIf { it.isNotBlank() } else null,   // 10.11.2026: число и размер корзины облака во вложенной строке идут второй строкой (справа они выдавливали название в столбик из букв)
-                ).joinToString(if (narrowRow) " · " else "  ·  ")
+                ).joinToString(SUB_SEP)
                 if (sub.isNotEmpty()) MqText(sub, active = rowActive, modifier = Modifier.fillMaxWidth(), fontSize = ((if (narrowRow && r.dateRaw != null) 10 else 11) * bigFont).sp, lineHeight = (13 * bigFont).sp, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
                 if (r.total > 0) FmSpaceBar(1f - r.free.toFloat() / r.total, Modifier.fillMaxWidth().padding(top = 1.dp))
             }
@@ -1663,14 +1718,14 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
         }
         // 10.2 (58, как в X-plore): у папок и файлов телефона слева незаметная точка: нажатие открывает свойства, строка не выделяется
         if (e0 != null && e0.net == null && e0.path.startsWith("/") && r.header == 0) Box(
-            Modifier.align(Alignment.CenterStart).offset(x = (-(8 + r.level * TREE_IND)).dp).size(16.dp, 32.dp)
+            Modifier.align(Alignment.CenterStart).offset(x = (-(TreeDim.pad + r.level * TreeDim.ind)).dp).size(TreeDim.dotW.dp, 32.dp)
                 .tapOnly { Fm.active = p.id; Fm.propsPath(e0.path) },   // 14.0: служебная точка без узла семантики (tapOnly)
             contentAlignment = Alignment.Center,
         ) { Box(Modifier.size(5.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
         if (chkClick != null) SelZone(tv, chkFr, rowFr, stringResource(if (chkOn) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.rootSel = r.key; menu = true }) { chkClick() }
         if (iconPick) CustomIconPicker(r.title, "d:" + r.key) { iconPick = false }
         if (menu) LDropdownMenu(true, { menu = false }) {   // 14.0: меню строки создаётся только когда открыто (раньше у каждой строки)
-            @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp) }, { menu = false; run() })
+            @Composable fun item(l: Int, run: () -> Unit) = DropdownMenuItem({ Text(stringResource(l), fontSize = 14.sp, color = if (l == R.string.fm_delete) deleteRed() else androidx.compose.ui.graphics.Color.Unspecified) }, { menu = false; run() })
             // 9.0: найденные и сохранённые устройства (сеть, LAN, Wi-Fi, ПК, Android): копирование названия и адреса
             if (r.pc != null || r.adev != null || (r.net != null && !r.drive)) {
                 val devName = r.pc?.name?.ifBlank { r.pc.ip } ?: r.adev?.title ?: r.net?.title ?: r.title
@@ -1725,11 +1780,15 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                 fun transfer(move: Boolean) {
                     val o = Fm.panes[1 - p.id]
                     val dst: FmRootCfg.Dst? = if (o.root) (FmRootCfg.destFor(o) ?: run { Fm.dlg = FmDlg.PickTarget(move, tg.groupBy { it.parentPath }.map { (pp, g) -> pane(pp) to g.map { it.name } }) { refresh() }; return }) else null
-                    dst?.let { Fm.say(Fm.str(if (move) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
-                    Fm.scope.launch {
-                        for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(move, pane(pp), dst?.pane() ?: o, g.map { it.name }); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
-                        RootSelOps.afterJobs(tg.map { it.parentId } + listOfNotNull(dst?.node))
-                        refresh()
+                    val toLbl = dst?.label() ?: Fm.pathLabel(o, o.src, o.path)
+                    val fromLbl = Fm.pathLabel(pane(tg[0].parentPath), "local", tg[0].parentPath)
+                    Fm.askTransfer(move, fromLbl, toLbl, tg.map { it.name }, 0L, dst?.pane() ?: o, null) { mv, pol ->
+                        dst?.let { Fm.say(Fm.str(if (mv) R.string.pk_moving_to else R.string.pk_copying_to, it.label())) }
+                        Fm.scope.launch {
+                            for ((pp, g) in tg.groupBy { it.parentPath }) { Fm.copyMove(mv, pane(pp), dst?.pane() ?: o, g.map { it.name }, policy = pol); kotlinx.coroutines.delay(700); while (Fm.dlg is FmDlg.Conflict) kotlinx.coroutines.delay(300) }
+                            RootSelOps.afterJobs(tg.map { it.parentId } + listOfNotNull(dst?.node))
+                            refresh()
+                        }
                     }
                 }
                 item(if (inSel) R.string.fm_unselect else R.string.fm_select) { FmRootCfg.toggleTree(p.id, e) }

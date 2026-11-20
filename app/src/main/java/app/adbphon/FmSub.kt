@@ -84,7 +84,7 @@ object FmSub {
     /** Вторая строка файла: «дата · размер»; пусто, если выбрано «ничего». */
     fun fileLine(ctx: Context, date: String, size: String?, narrow: Boolean): String? {
         if (mode == NONE) return null
-        return listOfNotNull(date.takeIf { it.isNotBlank() }?.let { date(ctx, it, narrow) }, size).joinToString(if (narrow) " · " else "  ·  ").ifEmpty { null }
+        return listOfNotNull(date.takeIf { it.isNotBlank() }?.let { nbBlock(date(ctx, it, narrow)) }, size?.let { nbBlock(it) }).joinToString(SUB_SEP).ifEmpty { null }
     }
 }
 

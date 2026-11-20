@@ -218,6 +218,7 @@ fun FmGroupHeader(g: SGroup, count: Int, closed: Boolean, onClick: () -> Unit) {
 
 // ----------------------------------------------------------------- окно «Сортировка»
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun SortDialog(p: FmPane, close: () -> Unit) {
     val tick = Fm.sortTick
@@ -237,13 +238,13 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 // область действия настройки
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(!folderOn, { SortStore.clearFolder(p, p.path) }, { FloorText(stringResource(R.string.sort_scope_all), fontSize = 12.sp) })
                     FilterChip(folderOn, { if (!folderOn) SortStore.setFolder(p, p.path, cfg) }, { FloorText(stringResource(R.string.sort_scope_dir), fontSize = 12.sp) })
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 // выбор группы
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     cfg.order.forEach { g ->
                         FilterChip(tab == g, { tab = g }, { FloorText(sgName(g) + (counts[g]?.let { " $it" } ?: ""), fontSize = 12.sp) }, leadingIcon = { SortGroupIcon(g, 18.dp) })
                     }
@@ -255,7 +256,7 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
                         FloorText(skName(k), fontSize = t)
                     }
                 }
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), true) } }, { FloorText("↑ " + stringResource(R.string.fm_sort_asc), fontSize = 12.sp) })
                     FilterChip(!cfg.ascOf(tab), { edit { it.withKey(tab, it.keyOf(tab), false) } }, { FloorText("↓ " + stringResource(R.string.fm_sort_desc), fontSize = 12.sp) })
                 }

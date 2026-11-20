@@ -44,6 +44,41 @@ object CloudAccounts {
 /** 9.4: что сворачивается вместе с узлом дерева «Устройства» (все уровни вложенности). Без Android: проверяется юнит-тестом. */
 object TreeOpen {
     private const val ROOT_MARK = "\u0001root"
+
+    /** Корень тома телефона для пути: «/sdcard», «/storage/emulated/N», «/storage/self/primary», «/storage/<том>»; null: путь вне томов. */
+    fun volumeRoot(path: String): String? {
+        val t = path.trimEnd('/')
+        if (t == "/sdcard" || t.startsWith("/sdcard/")) return "/sdcard"
+        val m = Regex("^(/storage/emulated/\\d+|/storage/self/primary|/storage/[^/]+)(/.*)?$").find(t) ?: return null
+        return m.groupValues[1].takeIf { it != "/storage/emulated" && it != "/storage/self" }
+    }
+
+    /**
+     * 20.11.2026 (владелица: после перезапуска под «Карта памяти» стояла одна раскрытая «Download» без остальных папок): при восстановлении раскрытых узлов
+     * у каждой раскрытой локальной папки («L|путь») раскрыты и ВСЕ её предки до корня тома, иначе цепочка рвётся и дерево строится не от корня. Порядок: предки раньше потомков;
+     * повторов нет; узлы других видов (N|, D|, группы) остаются как есть.
+     */
+    fun withAncestors(open: Collection<String>): List<String> {
+        val out = LinkedHashSet<String>()
+        for (id in open) {
+            if (id.startsWith("L|")) {
+                val path = id.removePrefix("L|").trimEnd('/')
+                val root = volumeRoot(path)
+                if (root != null && path != root) {
+                    val chain = ArrayList<String>()
+                    var cur = path.substringBeforeLast('/', "")
+                    while (cur.length >= root.length && cur.isNotEmpty()) {
+                        chain += "L|$cur"
+                        if (cur == root) break
+                        cur = cur.substringBeforeLast('/', "")
+                    }
+                    chain.reversed().forEach { out += it }
+                }
+            }
+            out += id
+        }
+        return out.toList()
+    }
     private fun kind(o: String) = o.take(2)
     private fun src(o: String) = when (kind(o)) { "N|" -> o.split('|').take(4).joinToString("|"); "L|", "D|" -> kind(o); else -> o }
     private fun path(o: String) = when (kind(o)) { "N|" -> o.split('|', limit = 5).getOrNull(4).orEmpty(); "L|", "D|" -> o.drop(2); else -> "" }

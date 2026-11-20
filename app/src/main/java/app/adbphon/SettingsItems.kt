@@ -230,6 +230,9 @@ private fun SetHeroButtons(vm: MainViewModel) {
     var about by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SetAction(Icons.Filled.SystemUpdate, stringResource(R.string.set2_hero_upd), stringResource(R.string.set_h_upd, vm.appVersion), big = true) { vm.checkUpdate(true) }
+        // 20.11.2026 (слово владелицы): «Создать копию» и «Восстановить из копии» лежат в группе «Копии и обновления» (раньше стояли в корне настроек, вне групп)
+        SetAction(SetIcons.backup, stringResource(R.string.bk2_make_now), stringResource(R.string.set2_hero_bk_h), big = true) { BkSimple.create = true }
+        SetAction(SetIcons.restore, stringResource(R.string.set2_hero_restore), stringResource(R.string.set2_hero_restore_h), big = true) { BkSimple.restore = true }
         SetAction(Icons.Filled.Info, stringResource(R.string.set2_hero_about), stringResource(R.string.set2_hero_about_h), big = true) { about = true }
     }
     if (about) LAlertDialog(
@@ -269,7 +272,7 @@ fun setGroupMeta(g: String): SetGroupMeta = when (g) {
 
 /** Названия пунктов для поиска (заголовок и подпункты); ключи как в [SetGroups.ITEMS]. */
 private val SET_TITLES: Map<String, List<Int>> = mapOf(
-    SetGroups.HERO to listOf(R.string.set2_hero_upd, R.string.upd_check, R.string.set2_hero_bk, R.string.set2_hero_restore, R.string.set2_hero_about, R.string.set_about,
+    SetGroups.HERO to listOf(R.string.set2_hero_upd, R.string.upd_check, R.string.bk2_make_now, R.string.set2_hero_bk, R.string.set2_hero_restore, R.string.set2_hero_about, R.string.set_about,
         R.string.about_github, R.string.about_licenses),
     "upd_auto" to listOf(R.string.upd_auto),
     "versions" to listOf(R.string.ver_btn, R.string.set_h_versions),
@@ -289,6 +292,9 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "folder_color" to listOf(R.string.set_folder_color),
     "type_icons" to listOf(R.string.ic_types),
     "thumbs" to listOf(R.string.set_thumbs),
+    "apk_icon" to listOf(R.string.set_apk_icon),
+    "arrow_color" to listOf(R.string.set_arrow_color),
+    "compact_tree" to listOf(R.string.set_compact_tree),
     "fm_sub" to listOf(R.string.set_fm_sub),
     "delete" to listOf(R.string.ds_confirm, R.string.ft_switch, R.string.ft_keep, R.string.ft_max),
     "open_files" to listOf(R.string.set_open_files),
@@ -307,7 +313,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "cmod" to listOf(R.string.set_cmod_title, R.string.set_cmod_remove),
     "cmod_auto" to listOf(R.string.set_cmod_auto),
     "hand" to listOf(R.string.set_hand),
-    "side_btns" to listOf(R.string.sb_title),
+    "side_mode" to listOf(R.string.set_side_mode, R.string.set_side_scale),
     "call_pics" to listOf(R.string.cp_avatar, R.string.cp_pic_mode),
     "startup" to listOf(R.string.start_tab, R.string.start_folder),
     "keep_on" to listOf(R.string.set_keep_on),
@@ -412,6 +418,9 @@ fun SetItem(key: String, vm: MainViewModel) {
         "folder_color" -> FilesFolderColorSetting()
         "type_icons" -> FilesTypeIconsSetting()
         "thumbs" -> FilesThumbsSetting()
+        "apk_icon" -> FilesApkIconSetting()
+        "arrow_color" -> FilesArrowColorSetting()
+        "compact_tree" -> FilesCompactTreeSetting()
         "fm_sub" -> FilesSubLineSetting()
         "delete" -> FilesDeleteSection()
         "open_files" -> FilesOpenAsSetting()
@@ -442,12 +451,7 @@ fun SetItem(key: String, vm: MainViewModel) {
 
         // ---- Панели и звонки
         "hand" -> HandednessSection()
-        "side_btns" -> {
-            var btnDlg by remember { mutableStateOf(false) }
-            SetAction(Icons.Filled.Tune, stringResource(R.string.sb_title)) { btnDlg = true }
-            SetAction(Icons.Filled.Restore, stringResource(R.string.sb_reset_order)) { FmButtons.load(ctx); FmButtons.resetOrder(ctx) }   // 13.0: порядок кнопок меняется перетаскиванием в самой панели; здесь только сброс
-            if (btnDlg) FmButtonsDialog { btnDlg = false }
-        }
+        "side_mode" -> SideModeSetting()
         "call_pics" -> CallPicSettings()
 
         // ---- Система

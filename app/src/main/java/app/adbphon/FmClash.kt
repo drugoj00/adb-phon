@@ -219,8 +219,9 @@ fun ConflictDialog(d: FmDlg.Conflict, close: () -> Unit) {
     FmDialogFrame(close) {
         val bs = if (tv) 76.dp else 64.dp
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // ровно три действия: «Переименовать» (безопасное, в фокусе), «Заменить», «Отменить» (всю операцию; ничего ещё не скопировано)
-            DropIconButton(Icons.Filled.DriveFileRenameOutline, stringResource(R.string.fm_rename), Color(0xFF0F766E), bs, Modifier.weight(1f).focusRequester(skipFocus), shortLabel = stringResource(R.string.cf_b_rename)) { decide(CAct.RENAME) }
+            // 20.11.2026 (владелица): по каждому совпадению четыре действия: «Пропустить», «Заменить», «Оставить оба» (переименовать копию, безопасное, в фокусе), «Отменить» (всю операцию) и галочка «Применить ко всем»
+            DropIconButton(Icons.Filled.SkipNext, stringResource(R.string.fm_skip), cfGrey, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.cf_b_skip)) { decide(CAct.SKIP) }
+            DropIconButton(Icons.Filled.DriveFileRenameOutline, stringResource(R.string.tc_c_both), Color(0xFF0F766E), bs, Modifier.weight(1f).focusRequester(skipFocus), shortLabel = stringResource(R.string.tc_c_both)) { decide(CAct.RENAME) }
             DropIconButton(Icons.Filled.SwapHoriz, stringResource(R.string.fm_replace), cfOrange, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.cf_b_replace)) { decide(CAct.REPLACE) }
             DropIconButton(Icons.Filled.Close, stringResource(R.string.cf_b_cancel), cfGrey, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.cf_b_cancel), onClick = close)
         }
@@ -327,7 +328,7 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
     FmDialogFrame(close) {
         val bs = if (tv) 76.dp else 64.dp
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            DropIconButton(Icons.Filled.DeleteOutline, stringResource(R.string.fm_delete), if (permanent) red else MaterialTheme.colorScheme.primary, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.fm_delete)) {
+            DropIconButton(Icons.Filled.DeleteOutline, stringResource(R.string.fm_delete), deleteRed(), bs, Modifier.weight(1f), shortLabel = stringResource(R.string.fm_delete), labelColor = MaterialTheme.colorScheme.onSurface) {
                 close()
                 if (never && !permanent) FmDel.setConfirm(cctx, FmDel.PERM)
                 Fm.deletePermanent = permanent   // 9.3: было «perm» (только галочка): у источника без корзины удаление шло в несуществующую корзину и тихо не выполнялось
@@ -348,7 +349,7 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
                     Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
                         if (it?.isDir == true) FolderIcon(UiPrefs.folderDefault, false, 24.dp) else FileTypeIcon(n, n.substringAfterLast('.', "").lowercase(), null, 24.dp)
                     }
-                    T(shortMiddle(n, 34), 15f * k, Modifier.weight(1f).padding(start = 8.dp), list = true)
+                    T(NameWrap.fmt(n.substringAfterLast('/')), 15f * k, Modifier.weight(1f).padding(start = 8.dp), list = true, maxLines = 2)
                     if (it != null && !it.isDir && it.size > 0) T(fmSize(it.size), 13f * k, align = TextAlign.End, list = true, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
                 }
             }
@@ -371,6 +372,71 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
         if (!permanent) Row(Modifier.fillMaxWidth().clickable { never = !never }, verticalAlignment = Alignment.CenterVertically) {
             BigCheckbox(never, { never = it })
             T(stringResource(R.string.dd_never), 14f * k, maxLines = 2)
+        }
+    }
+}
+
+/**
+ * 20.11.2026 (владелица: «когда нажимаю «Копировать», копируется сразу без вопросов; где окно с подтверждением и галочкой «копировать или переместить»?»):
+ * окно перед копированием и переносом: откуда и куда, сколько объектов, галочка «Переместить (вместо копирования)», что делать с совпадающими именами,
+ * «Больше не спрашивать» (включить обратно: Настройки → Файлы → «Подтверждать копирование и перенос»). Кнопка «Выполнить» в фокусе, «Отмена» рядом.
+ */
+@Composable
+fun TransferConfirmDialog(d: FmDlg.TransferConfirm, close: () -> Unit) {
+    val tv = Marq.tv
+    val k = if (tv) 1.2f else 1f
+    val cctx = androidx.compose.ui.platform.LocalContext.current
+    val okFocus = remember { FocusRequester() }
+    var move by remember { mutableStateOf(d.move) }
+    var pol by remember { mutableStateOf(0) }   // 0 спросить, 1 пропустить, 2 заменить, 3 оставить оба
+    var allOn by remember { mutableStateOf(true) }
+    // 20.11.2026 (владелица: «блок с кнопками появляется только если есть такое имя»): имена, которые уже лежат в папке назначения; null: проверка идёт
+    val sameDir = d.src != null && d.dst != null && d.src.src == d.dst.src && d.src.path.trimEnd('/') == d.dst.path.trimEnd('/')
+    val clash by produceState<List<String>?>(if (d.dst == null || sameDir) emptyList() else null, d) {
+        if (d.dst != null && !sameDir) value = withContext(Dispatchers.IO) {
+            d.names.map { it.substringAfterLast('/') }.distinct().filter { n -> runCatching { FmIo.exists(d.dst, FmIo.join(d.dst.path, n)) }.getOrDefault(false) }
+        }
+    }
+    FmDialogFrame(close) {
+        val bs = if (tv) 76.dp else 64.dp
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DropIconButton(if (move) Icons.Filled.DriveFileMove else Icons.Filled.ContentCopy, stringResource(R.string.tc_do), MaterialTheme.colorScheme.primary, bs, Modifier.weight(1f).focusRequester(okFocus), shortLabel = stringResource(R.string.tc_do)) {
+                close()
+                val many = (clash?.size ?: 0) >= 2
+                val eff = if (clash.isNullOrEmpty() || (many && !allOn)) 0 else pol
+                d.go(move, when (eff) { 1 -> CAct.SKIP; 2 -> CAct.REPLACE; 3 -> CAct.RENAME; else -> null })
+            }
+            DropIconButton(Icons.Filled.Close, stringResource(R.string.btn_cancel), cfGrey, bs, Modifier.weight(1f), shortLabel = stringResource(R.string.btn_cancel), onClick = close)
+        }
+        LaunchedEffect(Unit) { focusSafely(okFocus) }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            T(stringResource(if (move) R.string.tc_t_move else R.string.tc_t_copy), 19f * k, weight = FontWeight.SemiBold, maxLines = 2)
+            T(stringResource(R.string.tc_from, d.from), 14f * k, maxLines = 3, list = true, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+            T(stringResource(R.string.tc_to, d.to), 14f * k, maxLines = 3, list = true, weight = FontWeight.SemiBold)
+            T(if (d.sizeBytes > 0) stringResource(R.string.tc_count_size, d.count, fmSize(d.sizeBytes)) else stringResource(R.string.tc_count, d.count), 13f * k, maxLines = 2, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (n in d.names.take(4)) T(NameWrap.fmt(n.substringAfterLast('/')), 14f * k, list = true, maxLines = 2)
+            if (d.names.size > 4) T(stringResource(R.string.fm_drop_and_more, d.names.size - 4), 13f * k, color = MaterialTheme.colorScheme.primary)
+        }
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { move = !move }, verticalAlignment = Alignment.CenterVertically) {
+            BigCheckbox(move, { move = it })
+            T(stringResource(R.string.tc_move_check), 15f * k, maxLines = 3, weight = FontWeight.SemiBold)
+        }
+        if (clash == null) T(stringResource(R.string.tc_checking), 13f * k, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+        else if (clash!!.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            T(stringResource(R.string.tc_exists, clash!!.take(4).joinToString(", ") { shortMiddle(it, 28) } + (if (clash!!.size > 4) " +" + (clash!!.size - 4) else "")), 14f * k, maxLines = 4, weight = FontWeight.SemiBold, color = cfOrange)
+            T(stringResource(R.string.tc_conflict), 13f * k, maxLines = 2, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+            EqChoices(listOf(
+                EqChoice(stringResource(R.string.tc_c_ask), pol == 0) { pol = 0 },
+                EqChoice(stringResource(R.string.cf_b_skip), pol == 1) { pol = 1 },
+                EqChoice(stringResource(R.string.cf_b_replace), pol == 2) { pol = 2 },
+                EqChoice(stringResource(R.string.tc_c_both), pol == 3) { pol = 3 },
+            ), perRow = 2)
+            if (clash!!.size >= 2 && pol != 0) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { allOn = !allOn }, verticalAlignment = Alignment.CenterVertically) {
+                BigCheckbox(allOn, { allOn = it })
+                T(stringResource(R.string.cf_all), 15f * k, maxLines = 2)
+            }
         }
     }
 }

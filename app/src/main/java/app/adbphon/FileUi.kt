@@ -77,6 +77,17 @@ object UiPrefs {
     var narrow by mutableStateOf(true)
     /** Миниатюры фото и видео вместо значков (по умолчанию включены). */
     var thumbs by mutableStateOf(true)
+    /** 20.11.2026 (4PDA, wad72): значок самого приложения у .apk (из файла), как в Total Commander; по умолчанию включён. */
+    var apkIcons by mutableStateOf(true)
+    /** 20.11.2026: цвет стрелок раскрытия у папок: 0 авто (в цвет текста), 1 акцент темы, 2 синий (как раньше), 3 свой цвет [arrowCustom]. */
+    var arrowMode by mutableStateOf(0)
+    var arrowCustom by mutableStateOf(0xFF1E88E5.toInt())
+    /** 20.11.2026: компактные отступы дерева (точка слева, шаг уровня, стрелка): строки шире, место освобождается; по умолчанию включено. */
+    var compactTree by mutableStateOf(true)
+    /** 20.11.2026: боковая панель кнопок «Файлов»: false = первые кнопки и «Ещё» (как раньше), true = все кнопки в прокручиваемой колонке без «Ещё». */
+    var sideScroll by mutableStateOf(false)
+    /** 20.11.2026: масштаб кнопок боковой панели: 0 авто, 1 крупнее (+15%), 2 ещё крупнее (+30%). */
+    var sideScale by mutableStateOf(0)
     /** 7.6: спрашивать, чем устанавливать (окно «Установить через…» во всех точках установки); по умолчанию включено. */
     var askInstaller by mutableStateOf(true)
     var folderDefault by mutableStateOf(0)
@@ -92,6 +103,12 @@ object UiPrefs {
         val p = sp(ctx)
         narrow = true   // узкий шрифт в списках всегда (настройка убрана по слову владелицы 08.11.2026)
         thumbs = p.getBoolean("thumbs", true)
+        apkIcons = p.getBoolean("apk_icons", true)
+        arrowMode = p.getInt("arrow_mode", 0).coerceIn(0, 3)
+        arrowCustom = p.getInt("arrow_custom", 0xFF1E88E5.toInt())
+        compactTree = p.getBoolean("compact_tree", true)
+        sideScroll = p.getBoolean("side_scroll", false)
+        sideScale = p.getInt("side_scale", 0).coerceIn(0, 2)
         askInstaller = p.getBoolean("ask_installer", true)
         folderDefault = p.getInt("folder_default", 0).coerceIn(0, FOLDER_COLORS.size - 1)
         folderColors.clear()
@@ -111,6 +128,12 @@ object UiPrefs {
 
     fun setAskInstaller(ctx: Context, v: Boolean) { askInstaller = v; sp(ctx).edit().putBoolean("ask_installer", v).apply() }
     fun setThumbs(ctx: Context, v: Boolean) { thumbs = v; sp(ctx).edit().putBoolean("thumbs", v).apply() }
+    fun setApkIcons(ctx: Context, v: Boolean) { apkIcons = v; sp(ctx).edit().putBoolean("apk_icons", v).apply() }
+    fun setArrowMode(ctx: Context, m: Int) { arrowMode = m; sp(ctx).edit().putInt("arrow_mode", m).apply() }
+    fun setArrowCustom(ctx: Context, c: Int) { arrowCustom = c; arrowMode = 3; sp(ctx).edit().putInt("arrow_custom", c).putInt("arrow_mode", 3).apply() }
+    fun setCompactTree(ctx: Context, v: Boolean) { compactTree = v; sp(ctx).edit().putBoolean("compact_tree", v).apply() }
+    fun setSideScroll(ctx: Context, v: Boolean) { sideScroll = v; sp(ctx).edit().putBoolean("side_scroll", v).apply() }
+    fun setSideScale(ctx: Context, v: Int) { sideScale = v; sp(ctx).edit().putInt("side_scale", v).apply() }
     fun setNarrow(ctx: Context, v: Boolean) { narrow = v; sp(ctx).edit().putBoolean("narrow_font", v).apply() }
     fun setFolderDefault(ctx: Context, i: Int) { folderDefault = i; sp(ctx).edit().putInt("folder_default", i).apply() }
     fun setFolderColor(ctx: Context, key: String, i: Int?) {
@@ -123,6 +146,24 @@ object UiPrefs {
     val listFont: FontFamily? get() = if (narrow) CondFont else null
     /** 10.5: жирное начертание узкого шрифта (семейство из готового шрифта не меняет толщину само). */
     val listFontBold: FontFamily? get() = if (narrow) CondFontBold else null
+}
+
+/** Цвет стрелок раскрытия папок по настройке «Цвет стрелок у папок». */
+@Composable
+fun treeArrowColor(): Color = when (UiPrefs.arrowMode) {
+    1 -> MaterialTheme.colorScheme.primary
+    2 -> Color(0xFF1E88E5)
+    3 -> Color(UiPrefs.arrowCustom)
+    else -> MaterialTheme.colorScheme.onSurface
+}
+
+/** Размеры дерева (dp): при «Компактных отступах» точка слева, шаг уровня и стрелка уже. */
+object TreeDim {
+    val ind: Int get() = if (UiPrefs.compactTree) 8 else 11
+    val pad: Int get() = if (UiPrefs.compactTree) 4 else 8
+    val dotW: Int get() = if (UiPrefs.compactTree) 11 else 16
+    fun arrow(tv: Boolean): Int = if (tv) 30 else if (UiPrefs.compactTree) 16 else 20
+    val fmArrow: Int get() = if (UiPrefs.compactTree) 18 else 22
 }
 
 val CondFont: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
@@ -383,7 +424,10 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
         badge = Thumbs.peek(ref) ?: Thumbs.refIcon(ctx, ref)
         if (badge == null) ApkInstall.forget(ctx, ext)       // программу удалили: запоминание снимается, значок возвращается
     }
-    LaunchedEffect(localPath, other, remote?.key) {
+    val apkOn = UiPrefs.apkIcons
+    LaunchedEffect(localPath, other, remote?.key, apkOn) {
+        // 20.11.2026 (wad72): настройка «Значок приложения у .apk» выключена: у APK обычный значок типа
+        if (cat == FCat.APK && !apkOn) { bmp = null; return@LaunchedEffect }
         if (localPath == null && remote != null && other == null && cat == FCat.APK) {
             bmp = Thumbs.peek("ar:" + remote.key) ?: run { delay(150); Thumbs.apkIconRemote(ctx, remote.key, remote.size, ext, remote.allowFetch, remote.fetch) }
             return@LaunchedEffect

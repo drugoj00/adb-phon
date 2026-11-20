@@ -211,8 +211,7 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
                 }
                 if (stage == 2) {
                     Text(stringResource(when (run.phase) { 1 -> R.string.ii_ph_upload; 3 -> R.string.ii_ph_obb; else -> R.string.ii_ph_install }), fontSize = 14.sp)
-                    if (run.phase == 1 && run.all > 0) LinearProgressIndicator(progress = { (run.done.toFloat() / run.all).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
-                    else LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ThemedProgress({ run.overall }, Modifier.fillMaxWidth())   // 20.11.2026: без бегущей полоски (этапы установки)
                 }
                 if (stage == 3) {
                     if (resultOk) {
