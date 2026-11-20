@@ -798,8 +798,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val cr = ctx.contentResolver
         val tmp = java.io.File(ctx.cacheDir, "install.apk")
         cr.openInputStream(uri)!!.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
+        // 15.0 код 75: установка в видимом окне ADB-phon (сведения, способ, ход, итог)
+        var raw = ""
         val result = runCatching {
-            tmp.inputStream().use { Adb.installApk(it, tmp.length()) }
+            InstallWindow.run(ctx, "ADB-phon", tmp) { _ ->
+                raw = tmp.inputStream().use { Adb.installApk(it, tmp.length()) }
+                raw.contains("Success", true) to (if (raw.contains("Success", true)) "" else raw.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(160))
+            }
+            raw
         }
         tmp.delete()
         message = t(R.string.install_result, result.getOrElse { it.message ?: "error" })
