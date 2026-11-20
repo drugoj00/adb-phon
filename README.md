@@ -23,7 +23,7 @@ SHA-256: `8c8dfa3d7575f2ba3dc2e3cb1f1096a859481fdcf281bfa336559468986acd3d`
 ## What's new in 15.0
 
 - Fixed: Files rebuild the tree from the volume root after a restart; an expanded folder shows all folders of its level
-- Files: side button panel at your choice (scroll or More) and button size; app icon for .apk; folder arrow color; compact tree indents; assigned extension icons are shown in the list
+- Files: side panel button size; app icon for .apk; folder arrow color; compact tree indents; assigned extension icons are shown in the list
 - Delete button: the icon is red on the panel, in the dots window, in menus and in the confirmation window
 - Settings: all groups are collapsed at launch, what you expanded and the focus are remembered until the app is closed; Create backup and Restore from backup are in the Backups and updates group, the root has only search and groups
 - Side button panel: the dots button opens a window with all buttons (check = on the panel, tap a name to run the action, arrows change the order); a long press removes a button too; with more buttons than fit, the panel scrolls
