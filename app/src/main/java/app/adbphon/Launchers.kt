@@ -89,7 +89,12 @@ object Launchers {
         val pkg = ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.packageName
         if (pkg != MENU_PKG) { tmp.delete(); return ctx.getString(R.string.lg_bad_file) }
         if (via != null && via.id != "adb") return ctx.getString(if (ViaAsk.launchExternal(ctx, tmp, via)) R.string.via_started else R.string.fm_no_app)
-        val r = tmp.inputStream().use { Adb.installApk(it, tmp.length(), "-r") }
+        // 15.0 код 75: установка идёт в видимом окне ADB-phon (сведения, способ, ход, итог)
+        var r = ""
+        InstallWindow.run(ctx, "ADB-phon", tmp) { _ ->
+            r = tmp.inputStream().use { Adb.installApk(it, tmp.length(), "-r") }
+            r.contains("Success", true) to (if (r.contains("Success", true)) "" else r.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(160))
+        }
         tmp.delete()
         return if (r.contains("Success", true)) ctx.getString(R.string.lg_done) else ctx.getString(R.string.lg_failed, r.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(120))
     }
