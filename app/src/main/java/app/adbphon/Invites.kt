@@ -389,7 +389,11 @@ object TsInstall {
             if (sha(f) != want) { f.delete(); return@runCatching "sha256" }
             say(c.getString(R.string.inv_step_inst))
             if (Adb.isConnected) {
-                f.inputStream().use { Adb.installApk(it, f.length(), "-r") }
+                // 15.0 код 75: установка в видимом окне ADB-phon (сведения, способ, ход, итог)
+                InstallWindow.run(c, "ADB-phon", f) { _ ->
+                    val r = f.inputStream().use { Adb.installApk(it, f.length(), "-r") }
+                    r.contains("Success", true) to (if (r.contains("Success", true)) "" else r.lines().lastOrNull { it.isNotBlank() }.orEmpty().take(160))
+                }
             } else {
                 val uri = androidx.core.content.FileProvider.getUriForFile(c, c.packageName + ".files", f)
                 withContext(Dispatchers.Main) {
