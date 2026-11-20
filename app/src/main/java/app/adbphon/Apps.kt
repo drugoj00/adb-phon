@@ -238,7 +238,12 @@ object AppActions {
         if (via.id == "session") { InstallGate.sessionWithInfo(ctx(), files); return Fm.str(R.string.inst_installing) }
         if (via.id != "adb") return Fm.str(if (ViaAsk.launchExternal(ctx(), files.first(), via)) R.string.via_started else R.string.fm_no_app)
         if (Adb.isConnected) {
-            val r = AppBackups.installFiles(ctx(), c.pkg, files, c.code)
+            // 15.0 код 75: установка из копии в видимом окне ADB-phon (сведения, способ, ход, итог)
+            var r = ""
+            InstallWindow.run(ctx(), "ADB-phon", files.first()) { _ ->
+                r = AppBackups.installFiles(ctx(), c.pkg, files, c.code)
+                (r == "ok" || r == "system") to (if (r == "ok" || r == "system") "" else r.removePrefix("fail:"))
+            }
             refresh()
             return if (r == "ok" || r == "system") Fm.str(R.string.ap_done) else Fm.str(R.string.ap_install_fail, r.removePrefix("fail:"))
         }
