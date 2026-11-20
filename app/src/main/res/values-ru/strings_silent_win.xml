@@ -14,4 +14,5 @@
     <string name="silent_win_badsig">Подпись файла не совпала с подписью программы, приславшей его, поэтому он не установлен.</string>
     <string name="silent_win_notif_done">Установлено: %1$s %2$s (%3$d). Нажмите, чтобы открыть окно.</string>
     <string name="silent_win_size">Размер: %1$s МБ</string>
+    <string name="silent_win_selfnot">Обновление не состоялось: версия программы не изменилась</string>
 </resources>
