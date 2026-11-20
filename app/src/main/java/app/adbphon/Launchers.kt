@@ -56,27 +56,33 @@ object Launchers {
         return c
     }
 
-    /** Ссылка на APK последнего выпуска Меню приложений. Блокирующий вызов. */
+    /**
+     * Ссылка на APK последнего выпуска Меню приложений. Блокирующий вызов. 16.0 код 77: если API GitHub не ответил (лимит, 403/429, сбой, непонятный ответ),
+     * берётся лента выпусков и страница файлов без API (GhFeed); совсем не вышло: старая прямая ссылка.
+     */
     private fun latestUrl(): String = runCatching {
-        val c = open(LATEST)
+        val c = open(GhFeed.map(LATEST))
         c.setRequestProperty("Accept", "application/vnd.github+json")
         try {
-            if (c.responseCode != 200) return@runCatching FALLBACK
-            val assets = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONArray("assets") ?: return@runCatching FALLBACK
+            if (c.responseCode != 200) error("HTTP ${c.responseCode}")
+            val assets = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONArray("assets") ?: error("нет списка файлов")
             for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
-                if (a.optString("name").endsWith(".apk", true)) return@runCatching a.optString("browser_download_url").ifBlank { FALLBACK }
+                if (a.optString("name").endsWith(".apk", true)) return@runCatching a.optString("browser_download_url").ifBlank { error("нет ссылки") }
             }
-            FALLBACK
+            error("в выпуске нет APK")
         } finally { c.disconnect() }
-    }.getOrDefault(FALLBACK)
+    }.recoverCatching { e ->
+        AppLog.w("Launchers", "API GitHub (Меню): ${e.message}; запасной путь через ленту выпусков")
+        GhFeed.latestApkUrls("drugoj00/app-menu").firstOrNull() ?: error("в ленте нет APK")
+    }.getOrElse { AppLog.w("Launchers", "последний выпуск Меню не найден: ${it.message}; прямая ссылка"); FALLBACK }
 
     /** Скачивает Меню приложений с GitHub и ставит на подключённое устройство. Возвращает итоговое сообщение. */
     suspend fun installMenu(ctx: Context, via: InstOpt? = null): String {
         val tmp = File(ctx.cacheDir, "appmenu.apk")
         val ok = withContext(Dispatchers.IO) {
             runCatching {
-                val c = open(latestUrl())
+                val c = open(GhFeed.map(latestUrl()))
                 try {
                     if (c.responseCode != 200) return@runCatching false
                     c.inputStream.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
