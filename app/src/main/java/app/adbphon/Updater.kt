@@ -15,9 +15,28 @@ object Updater {
         val code: Long get() = Regex("""(?im)^\W*versionCode\s*[:=]\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
     }
 
-    /** Список выпусков с APK. Блокирующий вызов — запускать не в главном потоке. */
+    /** Репозиторий программы («владелец/имя») из адреса списка выпусков API. */
+    private val REPO: String get() = Regex("""repos/([^/]+/[^/]+)/releases""").find(RELEASES)?.groupValues?.get(1) ?: "drugoj00/adb-phon"
+
+    /**
+     * Список выпусков с APK. Блокирующий вызов — запускать не в главном потоке.
+     * 16.0 код 77: если API GitHub не ответил (лимит 60 запросов в час: 403/429, сбой сети, непонятный ответ), выпуски читаются из ленты releases.atom и страницы файлов
+     * без API (GhFeed). Полный провал: ошибка называет обе причины.
+     */
     fun fetch(): List<Release> {
-        val c = URL(RELEASES).openConnection() as HttpURLConnection
+        val apiErr = try { return fetchApi() } catch (e: Exception) { e }
+        AppLog.w("Updater", "API GitHub: ${apiErr.javaClass.simpleName}: ${apiErr.message}; запасной путь через ленту выпусков")
+        try {
+            val out = parse(GhFeed.releases(REPO))
+            AppLog.w("Updater", "запасной путь: выпусков с файлами ${out.size}")
+            return out
+        } catch (e: Exception) {
+            throw IllegalStateException("API: ${apiErr.message ?: apiErr.javaClass.simpleName}; лента выпусков: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    private fun fetchApi(): List<Release> {
+        val c = URL(GhFeed.map(RELEASES)).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000
         c.readTimeout = 15_000
         c.setRequestProperty("Accept", "application/vnd.github+json")
@@ -25,7 +44,19 @@ object Updater {
         try {
             if (c.responseCode == 404) return emptyList() // репозиторий или выпусков ещё нет
             if (c.responseCode != 200) throw IllegalStateException("HTTP ${c.responseCode}")
-            val arr = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
+            return parse(JSONArray(c.inputStream.bufferedReader().use { it.readText() }))
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun parse(list: List<org.json.JSONObject>): List<Release> {
+        val arr = JSONArray(); list.forEach { arr.put(it) }
+        return parse(arr)
+    }
+
+    private fun parse(arr: JSONArray): List<Release> {
+        run {
             val out = ArrayList<Release>()
             for (i in 0 until arr.length()) {
                 val r = arr.getJSONObject(i)
@@ -50,8 +81,6 @@ object Updater {
                 }
             }
             return out
-        } finally {
-            c.disconnect()
         }
     }
 
@@ -104,7 +133,7 @@ object Updater {
         if (!Integrity.safe(ctx)) throw IllegalStateException("integrity")
         val dest = File(VersionKeeper.dir(ctx), "ADB-phon-github-${r.tag.replace(Regex("[^A-Za-z0-9._-]"), "_")}.apk")
         val part = File(dest.path + ".part")
-        val c = URL(r.url).openConnection() as HttpURLConnection
+        val c = URL(GhFeed.map(r.url)).openConnection() as HttpURLConnection
         c.connectTimeout = 15_000
         c.readTimeout = 30_000
         c.setRequestProperty("User-Agent", "ADB-phon")
