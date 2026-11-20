@@ -2,6 +2,7 @@ package app.adbphon
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.media.MediaMetadataRetriever
@@ -164,6 +165,11 @@ object TreeDim {
     val dotW: Int get() = if (UiPrefs.compactTree) 11 else 16
     fun arrow(tv: Boolean): Int = if (tv) 30 else if (UiPrefs.compactTree) 16 else 20
     val fmArrow: Int get() = if (UiPrefs.compactTree) 18 else 22
+    /**
+     * 15.0 код 75 (просьба wad72, 4PDA): дерево «Источников», обычный (не компактный) режим, строки вложенного уровня: промежуток точка–стрелка был 13,9 dp, стрелка–значок 9,2 dp (измерено на A14);
+     * добавка после поля стрелки уравнивает их. В компактном режиме промежутки уже равны (7,8 и 7,5 dp), добавка 0.
+     */
+    fun rootSp(level: Int): Int = if (!UiPrefs.compactTree && level > 0) 5 else 0
 }
 
 val CondFont: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
@@ -279,10 +285,37 @@ object Thumbs {
     /** Значок самого приложения из APK (в том числе адаптивный). null: файл не читается или это не APK. */
     private fun iconOfApk(ctx: Context, path: String): Bitmap? {
         val pm = ctx.packageManager
-        val info = pm.getPackageArchiveInfo(path, 0)?.applicationInfo ?: return null
+        // 15.0 код 75 (wad72, Android 15, Realme): причина «значка нет» пишется в журнал; если Android не разобрал манифест (getPackageArchiveInfo вернул null) или не нарисовал значок,
+        // берётся запасной путь: картинка значка прямо из zip файла APK
+        val info = try { pm.getPackageArchiveInfo(path, 0)?.applicationInfo } catch (e: Throwable) {
+            AppLog.w("ApkIcon", "getPackageArchiveInfo: ${e.javaClass.simpleName}: ${e.message} (Android ${Build.VERSION.SDK_INT}) $path"); null
+        }
+        if (info == null) {
+            AppLog.w("ApkIcon", "getPackageArchiveInfo вернул null (Android ${Build.VERSION.SDK_INT}), пробую значок из zip: $path")
+            return iconFromZip(path)
+        }
         info.sourceDir = path; info.publicSourceDir = path
-        return drawBmp(info.loadIcon(pm))
+        return try { drawBmp(info.loadIcon(pm)) } catch (e: Throwable) {
+            AppLog.w("ApkIcon", "loadIcon: ${e.javaClass.simpleName}: ${e.message} (Android ${Build.VERSION.SDK_INT}), пробую значок из zip: $path")
+            iconFromZip(path)
+        }
     }
+
+    /** Запасной значок: файл-картинка значка внутри APK (работает, даже если Android не разбирает манифест). Адаптивный значок без готовой картинки не поддерживается: тогда null и обычный значок типа. */
+    private fun iconFromZip(path: String): Bitmap? = try {
+        java.util.zip.ZipFile(path).use { z ->
+            val cand = z.entries().asSequence().filter { !it.isDirectory }.filter { e ->
+                val n = e.name.lowercase()
+                n.startsWith("res/") && (n.endsWith(".png") || n.endsWith(".webp")) &&
+                    (n.contains("/ic_launcher") || n.contains("/icon") || n.contains("/app_icon")) &&
+                    !n.contains("foreground") && !n.contains("background") && !n.contains("monochrome")
+            }.toList()
+            fun dens(n: String) = when { "xxxhdpi" in n -> 5; "xxhdpi" in n -> 4; "xhdpi" in n -> 3; "hdpi" in n -> 2; "mdpi" in n -> 1; else -> 0 }
+            val best = cand.maxWithOrNull(compareBy({ dens(it.name.lowercase()) }, { it.size }))
+            if (best == null) { AppLog.w("ApkIcon", "в zip нет готовой картинки значка: $path"); null }
+            else z.getInputStream(best).use { BitmapFactory.decodeStream(it) }?.let { Bitmap.createScaledBitmap(it, 96, 96, true) }
+        }
+    } catch (e: Throwable) { AppLog.w("ApkIcon", "значок из zip: ${e.javaClass.simpleName}: ${e.message}: $path"); null }
 
     /** APKS, XAPK, APKM: значок из «icon.png» набора или из основного APK внутри (его приходится вынуть во временный файл). */
     private fun iconOfBundle(ctx: Context, path: String, tmpDir: java.io.File): Bitmap? {
