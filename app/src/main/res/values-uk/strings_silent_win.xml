@@ -14,4 +14,5 @@
     <string name="silent_win_badsig">Підпис файлу не збігся з підписом програми, що його надіслала, тому його не встановлено.</string>
     <string name="silent_win_notif_done">Встановлено: %1$s %2$s (%3$d). Натисніть, щоб відкрити вікно.</string>
     <string name="silent_win_size">Розмір: %1$s МБ</string>
+    <string name="silent_win_selfnot">Оновлення не відбулося: версія програми не змінилася</string>
 </resources>
