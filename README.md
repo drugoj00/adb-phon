@@ -16,16 +16,18 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 13.0.** [ADB-phon-13.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 15.0.** [ADB-phon-15.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `8a7ff410fc577c9060cac011c6b2859a7564915b88268be3654ad2ea9cb2c67f`
+SHA-256: `8c8dfa3d7575f2ba3dc2e3cb1f1096a859481fdcf281bfa336559468986acd3d`
 
-## What's new in 13.0
+## What's new in 15.0
 
-- Plain backup: one file, optional password, system location picker
-- Clouds and sources collapse on leaving and when another one is expanded
-- File manager side panel: “More” is visible on any screen
-- Reorder side panel buttons by long press and drag
+- Fixed: Files rebuild the tree from the volume root after a restart; an expanded folder shows all folders of its level
+- Files: side button panel at your choice (scroll or More) and button size; app icon for .apk; folder arrow color; compact tree indents; assigned extension icons are shown in the list
+- Delete button: the icon is red on the panel, in the dots window, in menus and in the confirmation window
+- Settings: all groups are collapsed at launch, what you expanded and the focus are remembered until the app is closed; Create backup and Restore from backup are in the Backups and updates group, the root has only search and groups
+- Side button panel: the dots button opens a window with all buttons (check = on the panel, tap a name to run the action, arrows change the order); a long press removes a button too; with more buttons than fit, the panel scrolls
+- Interface fixes and additions
 
 **Requirements and limits**
 
@@ -34,7 +36,6 @@ SHA-256: `8a7ff410fc577c9060cac011c6b2859a7564915b88268be3654ad2ea9cb2c67f`
 - “On-screen buttons” work through the accessibility service
 - Moving a backup with data to another device needs the same app signature
 - Video and music from archives, ADB devices and root are still copied first
-- Not tested on 13.0: remote control on a TV box (long OK, arrows)
 
 ## Features
 
@@ -94,7 +95,7 @@ SHA-256: `8a7ff410fc577c9060cac011c6b2859a7564915b88268be3654ad2ea9cb2c67f`
 
 ## Quick start
 
-1. Download ADB-phon-13.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-15.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
