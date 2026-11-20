@@ -1582,7 +1582,6 @@
     <string name="sc_xlarge">Очень крупный</string>
     <string name="fs_title">Во весь экран</string>
     <string name="fs_hint">Скрывает строку состояния и кнопки навигации Android. Вернуть их можно свайпом от края экрана.</string>
-    <string name="sb_title">Кнопки боковой панели…</string>
     <string name="sb_reset">По умолчанию</string>
     <string name="ic_title">Иконка</string>
     <string name="ic_file">Из файла…</string>
