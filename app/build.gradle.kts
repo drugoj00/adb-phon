@@ -28,8 +28,8 @@ android {
         applicationId = "app.adbphon"
         minSdk = 26
         targetSdk = 34
-        versionCode = 75
-        versionName = "15.0"
+        versionCode = 77
+        versionName = "16.0"
         // РѕСЃС‚Р°РІР»СЏРµРј С‚РѕР»СЊРєРѕ СЏР·С‹РєРё РїСЂРѕРіСЂР°РјРјС‹ (ru, uk, en): СЃС‚СЂРѕРєРё Р±РёР±Р»РёРѕС‚РµРє РЅР° РґСЂСѓРіРёС… СЏР·С‹РєР°С… РЅРµ РЅСѓР¶РЅС‹
         resourceConfigurations += listOf("ru", "uk", "en")
         buildConfigField("String", "G1", "\"\"")
