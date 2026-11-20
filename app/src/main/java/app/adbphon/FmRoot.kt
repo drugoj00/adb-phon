@@ -1669,8 +1669,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                 val open = r.treeId in p.rootOpen
                 val empty = !open && cntNow != null && cntNow.first + cntNow.second == 0
                 val arrowCol = treeArrowColor()   // 20.11.2026: цвет стрелок по настройке (по умолчанию в цвет текста)
-                if (empty) Spacer(Modifier.size(TreeDim.arrow(tv).dp))
-                else Box(Modifier.size(TreeDim.arrow(tv).dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
+                if (empty) Spacer(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp))
+                else Box(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
                     androidx.compose.foundation.Canvas(Modifier.size(if (tv) 16.dp else 12.dp)) {
                         val c = arrowCol
                         val path = androidx.compose.ui.graphics.Path().apply {
@@ -1682,7 +1682,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                     }
                 }
             }
-            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.size(TreeDim.arrow(tv).dp))      // место под шеврон: значок и подпись встают правее значка родителя
+            else if (FmRootCfg.treeOn && r.level > 0 && r.header == 0) Spacer(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp))      // место под шеврон: значок и подпись встают правее значка родителя
             if (r.busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             val rowCustom = if (r.header == 0) CustomIcons.spec("d:" + r.key) else null
             if (rowCustom != null) CustomIconView(rowCustom, if (tv) 32.dp else 28.dp) else if (r.appName != null) AppsRowIcon(r.appName, if (tv) 32.dp else 28.dp) else if (r.drive) FolderIcon(UiPrefs.folderDefault, r.treeId != null && r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp) else if (r.icon == Icons.Filled.Folder && r.tint == Color(0xFFFFB74D) && r.treeId != null && r.treeId.startsWith("L|")) FolderOrAppIcon(r.treeId.removePrefix("L|"), UiPrefs.folderColors[folderKey(p, r.treeId.removePrefix("L|"))] ?: UiPrefs.folderDefault, r.treeId in p.rootOpen, if (tv) 32.dp else 28.dp, customKey = "f:" + folderKey(p, r.treeId.removePrefix("L|"))) else if (r.file != null) FileTypeIcon(r.file.name, r.file.ext, r.lpath, if (tv) 32.dp else 28.dp, remote = r.remoteApk) else if (r.gname != null) FileTypeIcon(r.gname, r.gname.substringAfterLast('.', "").lowercase(), null, if (tv) 32.dp else 28.dp) else if (r.net != null && !r.wifi) NetBrandIcon(r.net, if (CloudCatalog.bigRows && r.level == 0) (if (tv) 44.dp else 40.dp) else if (tv) 32.dp else 28.dp) else Icon(if (r.warn || r.err) Icons.Filled.Warning else r.icon, null, Modifier.size(if (tv) 32.dp else 28.dp), tint = if (r.warn || r.err) MaterialTheme.colorScheme.error else r.tint)
