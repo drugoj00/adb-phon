@@ -23,7 +23,7 @@ object NetSearch {
     private const val UA = "TVApps/1.0 (Android)"
 
     private fun get(url: String, accept: String = "application/json"): String {
-        val c = URL(url).openConnection() as HttpURLConnection
+        val c = URL(GhFeed.map(url)).openConnection() as HttpURLConnection
         c.connectTimeout = 15_000
         c.readTimeout = 25_000
         c.setRequestProperty("User-Agent", UA)
@@ -56,10 +56,16 @@ object NetSearch {
     /** Адреса APK для выбранного приложения: сначала самый подходящий, дальше запасные (для других процессоров). */
     suspend fun apkUrls(app: NetApp): List<String> = withContext(Dispatchers.IO) {
         if (app.source == "github") {
-            val assets = JSONObject(get("https://api.github.com/repos/${app.id}/releases/latest")).optJSONArray("assets") ?: JSONArray()
-            val urls = (0 until assets.length()).map { assets.getJSONObject(it) }
-                .filter { it.optString("name").lowercase().endsWith(".apk") }
-                .map { it.getString("browser_download_url") }
+            // 16.0 код 77: при отказе API GitHub (лимит, 403/429, сбой, непонятный ответ) файлы берутся из ленты выпусков и страницы файлов без API (GhFeed)
+            val urls = try {
+                val assets = JSONObject(get("https://api.github.com/repos/${app.id}/releases/latest")).optJSONArray("assets") ?: JSONArray()
+                (0 until assets.length()).map { assets.getJSONObject(it) }
+                    .filter { it.optString("name").lowercase().endsWith(".apk") }
+                    .map { it.getString("browser_download_url") }
+            } catch (e: Exception) {
+                AppLog.w("NetSearch", "API GitHub (${app.id}): ${e.message}; запасной путь через ленту выпусков")
+                try { GhFeed.latestApkUrls(app.id) } catch (e2: Exception) { throw IllegalStateException("API: ${e.message}; лента выпусков: ${e2.message}") }
+            }
             val abis = Build.SUPPORTED_ABIS.map { it.lowercase() }
             // сначала файлы под процессор устройства или универсальные, потом остальные
             urls.sortedBy { u ->
