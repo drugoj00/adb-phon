@@ -154,6 +154,15 @@ class PadKeeperService : Service() {
             }
             // служба звонков ещё не в переднем плане: остаёмся со своим уведомлением (ниже)
         }
+        // 15.0 код 75 (просьба владелицы): пока геймпад не подключён, своего уведомления НЕТ вовсе. Его значок был прозрачным, но Android 14 поднимает канал MIN службы переднего плана
+        // до LOW, и в строке состояния оставалась пустая ячейка (значок Wi-Fi уезжал вправо). Служба продолжает работать как обычная фоновая; уведомление с видимым значком Bluetooth
+        // появляется, когда геймпад подключился (ниже), и снова убирается при отключении.
+        if (!connected) {
+            if (fgOn) { runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }; fgOn = false }
+            runCatching { nmr.cancel(ID) }
+            shown = ""
+            return
+        }
         if (text == shown && fgOn) return
         shown = text
         val n = notification(text, connected)
