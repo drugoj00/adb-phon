@@ -1596,7 +1596,6 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="sc_xlarge">Extra large</string>
     <string name="fs_title">Full screen</string>
     <string name="fs_hint">Hides the Android status bar and navigation buttons. Swipe from the screen edge to bring them back.</string>
-    <string name="sb_title">Side panel buttons…</string>
     <string name="sb_reset">Default</string>
     <string name="ic_title">Icon</string>
     <string name="ic_file">From file…</string>
