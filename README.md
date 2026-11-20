@@ -16,18 +16,17 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 15.0.** [ADB-phon-15.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 16.0.** [ADB-phon-16.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `adbb82789d670d1ee05dedbeeff711a099bd92a81b4131a58ba4b3abfc4e9bd1`
+SHA-256: `de95c6fc1641a2334cb7d94d2468f1ff9c5e84a2475e6a342458068ddb6ca80b`
 
-## What's new in 15.0
+## What's new in 16.0
 
-- Fixed: Files rebuild the tree from the volume root after a restart; an expanded folder shows all folders of its level
-- Files: side panel button size; app icon for .apk; folder arrow color; compact tree indents; assigned extension icons are shown in the list
-- Delete button: the icon is red on the panel, in the dots window, in menus and in the confirmation window
-- Settings: all groups are collapsed at launch, what you expanded and the focus are remembered until the app is closed; Create backup and Restore from backup are in the Backups and updates group, the root has only search and groups
-- Side button panel: the dots button opens a window with all buttons (check = on the panel, tap a name to run the action, arrows change the order); a long press removes a button too; with more buttons than fit, the panel scrolls
-- Interface fixes and additions
+- Fixed: updating App Menu through ADB-phon (“apk signature differs from the caller” error)
+- A window for every installation: what is installed, the method, progress, and the result or the reason for refusal; no silent installs
+- The app icon of an .apk is read even when Android could not parse the file
+- No empty icon in the status bar while no gamepad is connected
+- Folder tree: equal spacing
 
 **Requirements and limits**
 
@@ -95,7 +94,7 @@ SHA-256: `adbb82789d670d1ee05dedbeeff711a099bd92a81b4131a58ba4b3abfc4e9bd1`
 
 ## Quick start
 
-1. Download ADB-phon-15.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-16.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
