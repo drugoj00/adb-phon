@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="silent_win_title">Install requested by %1$s</string>
+    <string name="silent_win_method">Method: %1$s</string>
+    <string name="silent_win_progress">Installing: %1$d%%</string>
+    <string name="silent_win_done">Installed: %1$s %2$s (%3$d).</string>
+    <string name="silent_win_cancelled">Installation cancelled</string>
+    <string name="silent_win_info_upd">%1$s: installed %2$s (%3$d) → new %4$s (%5$d), size %6$s MB</string>
+    <string name="silent_win_info_new">%1$s: new install %2$s (%3$d), size %4$s MB</string>
+    <string name="silent_m_adb">ADB (no system prompt)</string>
+    <string name="silent_m_root">root (no system prompt)</string>
+    <string name="silent_m_system">system installer (Android asks for confirmation)</string>
+    <string name="silent_win_denied">Request refused: %1$s</string>
+    <string name="silent_win_badsig">The signature of the file does not match the signature of the program that sent it, so it was not installed.</string>
+    <string name="silent_win_notif_done">Installed: %1$s %2$s (%3$d). Tap to open the window.</string>
+    <string name="silent_win_size">Size: %1$s MB</string>
+</resources>
