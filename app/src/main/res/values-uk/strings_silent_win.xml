@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="silent_win_title">Встановлення на прохання: %1$s</string>
+    <string name="silent_win_method">Спосіб: %1$s</string>
+    <string name="silent_win_progress">Встановлення: %1$d%%</string>
+    <string name="silent_win_done">Встановлено: %1$s %2$s (%3$d).</string>
+    <string name="silent_win_cancelled">Встановлення скасовано</string>
+    <string name="silent_win_info_upd">%1$s: встановлено %2$s (%3$d) → нова %4$s (%5$d), розмір %6$s МБ</string>
+    <string name="silent_win_info_new">%1$s: нове встановлення %2$s (%3$d), розмір %4$s МБ</string>
+    <string name="silent_m_adb">ADB (без системного запиту)</string>
+    <string name="silent_m_root">root (без системного запиту)</string>
+    <string name="silent_m_system">системний установник (Android запитає підтвердження)</string>
+    <string name="silent_win_denied">Запит відхилено: %1$s</string>
+    <string name="silent_win_badsig">Підпис файлу не збігся з підписом програми, що його надіслала, тому його не встановлено.</string>
+    <string name="silent_win_notif_done">Встановлено: %1$s %2$s (%3$d). Натисніть, щоб відкрити вікно.</string>
+    <string name="silent_win_size">Розмір: %1$s МБ</string>
+</resources>
