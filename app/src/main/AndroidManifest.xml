@@ -200,6 +200,8 @@
         </activity>
         <service android:name=".FmOpService" android:exported="false" android:foregroundServiceType="dataSync" />
         <!-- 11.0: тихая установка для программ с той же подписью (Меню приложений и др.): только с разрешением уровня signature -->
+        <!-- 15.0 код 75: окно установки по просьбе другой нашей программы (правило «никаких тихих установок») -->
+        <activity android:name=".SilentInstallActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="" android:excludeFromRecents="true" android:launchMode="singleTask" />
         <service android:name=".InstallService" android:exported="true" android:foregroundServiceType="dataSync">
             <intent-filter><action android:name="app.adbphon.action.INSTALL_SILENT" /></intent-filter>
         </service>
