@@ -97,6 +97,8 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
     var resultOk by remember { mutableStateOf(false) }
     var resultText by remember { mutableStateOf("") }
     val run = remember { InstRun() }
+    val viaAdb = Adb.isConnected && !FmIo.remote
+    val methodName = stringResource(if (Adb.isRoot && !FmIo.remote) R.string.silent_m_root else if (viaAdb) R.string.silent_m_adb else R.string.silent_m_system)
 
     LaunchedEffect(Unit) {
         val d = withContext(Dispatchers.IO) {
@@ -124,7 +126,8 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
 
     fun go(wipe: Boolean) {
         val d = data ?: return
-        val silent = Adb.isConnected && !FmIo.remote
+        // 15.0 код 75: это только СПОСОБ (через ADB без системного запроса или системным установщиком); окно с сведениями, способом, ходом и итогом показано всегда
+        val silent = viaAdb
         if (!silent && !app.packageManager.canRequestPackageInstalls()) { stage = 4; return }
         stage = 2
         scope.launch {
@@ -195,6 +198,9 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
                             fontSize = 14.sp,
                         )
                         val bad = MaterialTheme.colorScheme.error
+                        val mbSize = "%.1f".format(java.util.Locale.US, d.files.sumOf { it.size } / 1048576.0)
+                        Text(stringResource(R.string.silent_win_size, mbSize), fontSize = 13.sp)
+                        Text(stringResource(R.string.silent_win_method, methodName), fontSize = 13.sp)
                         if (m.sigDiffers) Text(stringResource(R.string.ii_sig_diff), fontSize = 13.sp, color = bad)
                         if (m.needsNewerAndroid) Text(stringResource(R.string.ii_minsdk_bad, m.minSdk, android.os.Build.VERSION.SDK_INT), fontSize = 13.sp, color = bad)
                         if (m.kind == ApkMeta.Kind.DOWNGRADE) Text(stringResource(if (m.downgradeNeedsWipe) R.string.ii_down_wipe_short else R.string.ii_down_title), fontSize = 13.sp, color = bad)
@@ -210,12 +216,14 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
                     }
                 }
                 if (stage == 2) {
+                    Text(stringResource(R.string.silent_win_method, methodName), fontSize = 13.sp)
                     Text(stringResource(when (run.phase) { 1 -> R.string.ii_ph_upload; 3 -> R.string.ii_ph_obb; else -> R.string.ii_ph_install }), fontSize = 14.sp)
                     ThemedProgress({ run.overall }, Modifier.fillMaxWidth())   // 20.11.2026: без бегущей полоски (этапы установки)
                 }
                 if (stage == 3) {
                     if (resultOk) {
                         Text(stringResource(R.string.ver_done), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        if (m != null) Text(stringResource(R.string.silent_win_done, m.label, m.verName, m.verCode.toInt()), fontSize = 14.sp)
                     } else {
                         Text(stringResource(R.string.ii_fail_generic), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         if (resultText.isNotBlank()) Text(resultText, fontSize = 13.sp)
