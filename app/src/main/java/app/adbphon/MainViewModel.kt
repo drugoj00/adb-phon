@@ -149,6 +149,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs get() = ctx.getSharedPreferences("adbphon", android.content.Context.MODE_PRIVATE)
 
     init {
+        viewModelScope.launch { kotlinx.coroutines.delay(1500); withContext(Dispatchers.IO) { runCatching { SelfInstallNotice.showResult(getApplication<Application>().applicationContext) } } }   // 16.0 код 77: итог самообновления по ADB в окне ADB-phon
         Hooks.refresh = { if (Adb.isConnected) { if (!connected && !busy) launchBusy { onConnected(Adb.currentHost) } } else connected = false }
         Hooks.reloadApps = { loadApps() }
         prefs.getString("last", null)?.split("|")?.takeIf { it.size == 4 }?.let {
@@ -713,7 +714,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val key = if (best == null) "" else if (sameNameNewer) best.tag + "#" + best.code else best.tag
                 if (best != null && (cmpVer(best.tag, appVersion) > 0 || sameNameNewer)) { if (manual || prefs.getString("upd_dismissed", "") != key) updateRelease = best }
                 else if (manual) message = t(R.string.upd_none)
-            }.onFailure { AppLog.e("ADBphon", "update check", it); if (manual) message = t(R.string.upd_failed) }
+            }.onFailure { AppLog.e("ADBphon", "update check", it); if (manual) message = t(R.string.upd_failed) + (it.message?.takeIf { m -> m.isNotBlank() }?.let { m -> ": " + m.take(220) } ?: "") }
         }
     }
 
@@ -1006,6 +1007,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     .getOrElse { AppLog.e("ADBphon", "download", it); message = t(R.string.ver_dl_failed, it.message ?: "error"); return@launchBusy }
                     .absolutePath
             }
+            // 16.0 код 77: перед заменой программы показывается окно ADB-phon (что ставится, способ), после перезапуска оно же сообщает итог
+            withContext(Dispatchers.IO) { runCatching { SelfInstallNotice.begin(ctx, java.io.File(path)) } }
+            kotlinx.coroutines.delay(1000)   // окно успевает показаться до замены файла
             val src = path.replace("/storage/emulated/0", "/sdcard")
             val f = "'" + src.replace("'", "'\''") + "'"
             // системный сервер не читает /sdcard, поэтому сначала копия в /data/local/tmp;
@@ -1014,7 +1018,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val lg = "/data/local/tmp/adbphon-rollback.log"
             // 11.0: приложение само себя больше не удаляет (раньше при отказе «понизить» шло «pm uninstall -k» своего пакета: значок пропадал, установка не выходила).
             // Только «pm install -r -d»; если система отказала, ничего не изменено, причина читается из журнала ниже.
-            val script = "cp $f $tmp && pm install -r -d --user 0 $tmp > $lg 2>&1; rm -f $tmp"
+            val script = "sleep 4; cp $f $tmp && pm install -r -d --user 0 $tmp > $lg 2>&1; rm -f $tmp; am start --user 0 -n app.adbphon/.MainActivity > /dev/null 2>&1"
             // сначала файл-сценарий, потом его запуск: так отдельный процесс надёжно переживает закрытие нашего потока
             val line = "setsid nohup sh -c \"$script\" > /dev/null 2>&1 < /dev/null &\nsleep 2\n"
             val b64 = android.util.Base64.encodeToString(line.toByteArray(), android.util.Base64.NO_WRAP)
@@ -1030,6 +1034,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (log.contains("Failure", true)) fail = log.lines().firstOrNull { it.contains("Failure", true) }.orEmpty().trim()
                 }
             }
+            if (fail.isNotEmpty()) SelfInstallNotice.failed(ctx, if (fail.contains("DOWNGRADE", true)) t(R.string.rb_blocked) else fail.take(160))
             message = if (fail.isEmpty()) t(R.string.rb_started)
                 else if (fail.contains("DOWNGRADE", true)) t(R.string.rb_blocked)
                 else t(R.string.ver_failed) + ": " + fail.take(120)
