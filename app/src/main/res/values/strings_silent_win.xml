@@ -14,4 +14,5 @@
     <string name="silent_win_badsig">The signature of the file does not match the signature of the program that sent it, so it was not installed.</string>
     <string name="silent_win_notif_done">Installed: %1$s %2$s (%3$d). Tap to open the window.</string>
     <string name="silent_win_size">Size: %1$s MB</string>
+    <string name="silent_win_selfnot">The update did not finish: the app version is unchanged</string>
 </resources>
