@@ -357,6 +357,7 @@ fun AppMenuItems(p: FmPane, f: FmItem, other: FmPane, copy: Boolean = true, clos
         }
     }
     item(R.string.ap_info) { AppActions.info(pkg) }
+    if (ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarketPkg(pkg) }
     if (copy) item(R.string.fm_copy) { Fm.copyMove(false, p, other, listOf(f.name)) }
     if (!removed) item(R.string.rp_menu_app) { Fm.repackApp(p, other, pkg, label) }
     if (!removed) item(R.string.ap_uninstall) {

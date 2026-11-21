@@ -46,6 +46,22 @@ object AppLog {
         ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("log_on", on).apply()
         enabled = on
         write("I", if (on) "журнал включён" else "журнал выключен", force = true)
+        if (on) header(ctx)
+    }
+
+    /**
+     * 16.2: шапка журнала (при включении и при каждом запуске с включённым журналом): версия и код программы, Android, устройство, настройки значков, доступ к файлам.
+     * Слово ApkIcon есть в строке, чтобы поиск по нему всегда что-то находил и было видно, какая сборка пишет журнал.
+     */
+    fun header(ctx: Context) {
+        if (!enabled) return
+        runCatching {
+            val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+            val allFiles = if (Build.VERSION.SDK_INT >= 30) (if (android.os.Environment.isExternalStorageManager()) "да" else "нет") else "н/д"
+            write("I", "ApkIcon: шапка: ADB-phon версия=${pi.versionName} код=${pi.longVersionCode} Android=${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) устройство=${Build.MANUFACTURER} ${Build.MODEL} " +
+                "| значки: у .apk=${if (UiPrefs.apkIcons) "вкл" else "выкл"} миниатюры=${if (UiPrefs.thumbs) "вкл" else "выкл"} дерево=${if (Fm.treeMode) "вкл" else "выкл"} " +
+                "| доступ ко всем файлам=$allFiles root=${if (Adb.isRoot) "да" else "нет"} канал оболочки=${Adb.bytesChannel() ?: "нет"}", force = true)
+        }
     }
 
     fun file(): File? = dir?.let { File(it, "adbphon.log") }

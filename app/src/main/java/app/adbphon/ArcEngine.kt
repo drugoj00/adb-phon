@@ -62,7 +62,7 @@ object Arc {
         val n = name.lowercase()
         return when {
             n.endsWith(".tar.gz") || n.endsWith(".tgz") || n.endsWith(".tar.bz2") || n.endsWith(".tbz2") || n.endsWith(".tbz") || n.endsWith(".tar.xz") || n.endsWith(".txz") || n.endsWith(".tar") -> Kind.TAR
-            n.endsWith(".zip") || n.endsWith(".jar") || n.endsWith(".aar") || n.endsWith(".apk") || n.endsWith(".apks") || n.endsWith(".xapk") || n.endsWith(".epub") || n.endsWith(".docx") || n.endsWith(".xlsx") || n.endsWith(".pptx") || n.endsWith(".odt") || n.endsWith(".ods") || n.endsWith(".odp") -> Kind.ZIP
+            n.endsWith(".zip") || n.endsWith(".jar") || n.endsWith(".aar") || n.endsWith(".apk") || n.endsWith(".apks") || n.endsWith(".xapk") || n.endsWith(".apkm") || n.endsWith(".epub") || n.endsWith(".docx") || n.endsWith(".xlsx") || n.endsWith(".pptx") || n.endsWith(".odt") || n.endsWith(".ods") || n.endsWith(".odp") -> Kind.ZIP
             n.endsWith(".7z") -> Kind.SEVENZ
             n.endsWith(".rar") -> Kind.RAR
             n.endsWith(".gz") -> Kind.GZ
@@ -77,7 +77,8 @@ object Arc {
         val n = name.lowercase()
         val k = kindOf(n) ?: return false
         return when (k) {
-            Kind.ZIP -> n.endsWith(".zip") || n.endsWith(".jar") || n.endsWith(".aar") || n.endsWith(".apks") || n.endsWith(".xapk")
+            // 17.0: .apks, .xapk и .apkm по нажатию устанавливаются (как .apk), как папка открываются пунктом меню «Открыть как папку»
+            Kind.ZIP -> n.endsWith(".zip") || n.endsWith(".jar") || n.endsWith(".aar")
             else -> true
         }
     }
