@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ds_always_note">Всегда включено: при любом удалении сначала запрос с названием файла или числом файлов.</string>
+    <string name="ii_err_split">Нужен весь набор частей: base.apk и split_*.apk из одной папки</string>
+    <string name="ii_lang_missing">В наборе нет языка устройства (%1$s)</string>
+    <string name="ii_set_note">Набор из %1$d файлов из одной папки</string>
+    <string name="cd_ver_copy">Удалить сохранённую копию %1$s?</string>
+    <string name="cd_wifi_clear">Удалить все принятые файлы (%1$d)?</string>
+    <string name="cd_delete_title">Удаление</string>
+    <string name="arc_open_as_folder">Открыть как папку</string>
+</resources>

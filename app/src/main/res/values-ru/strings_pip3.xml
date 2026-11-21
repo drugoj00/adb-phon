@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_pip_mic_off">Выключить микрофон</string>
+    <string name="call_pip_mic_on">Включить микрофон</string>
+    <string name="call_pip_spk_off">Выключить громкую связь</string>
+    <string name="call_pip_spk_on">Включить громкую связь</string>
+</resources>
