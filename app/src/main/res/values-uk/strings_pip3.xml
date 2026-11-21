@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_pip_mic_off">Вимкнути мікрофон</string>
+    <string name="call_pip_mic_on">Увімкнути мікрофон</string>
+    <string name="call_pip_spk_off">Вимкнути гучний зв’язок</string>
+    <string name="call_pip_spk_on">Увімкнути гучний зв’язок</string>
+</resources>

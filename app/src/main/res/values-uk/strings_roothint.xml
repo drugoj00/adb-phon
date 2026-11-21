@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="roothint_title">Немає root для цього застосунку</string>
+    <string name="roothint_text">Видай його в програмі керування root: вкладка «Суперкористувач», увімкни ADB-phon.</string>
+    <string name="roothint_open">Відкрити програму керування root</string>
+    <string name="roothint_retry">Повторити</string>
+    <string name="roothint_not_found">Програму керування root не знайдено</string>
+    <string name="roothint_still">Root досі не видано</string>
+</resources>
