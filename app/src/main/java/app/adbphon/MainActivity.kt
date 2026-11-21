@@ -177,18 +177,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        SettingsMemory.initOnce(this)
-        FmSub.init(applicationContext)
-        ApkIntake.cleanup(applicationContext, 15 * 60_000L)
-        TapGuard.init(applicationContext)
-        UiAnim.init(applicationContext)
-        PadKeeper.start(this)
-        AutoPairService.ensureEnabled(this)
-        AppBackup.autoIfDue(this)
+        PerfLog.mark("MainActivity.onCreate начало")
+        PerfLog.t("SettingsMemory") { SettingsMemory.initOnce(this) }
+        PerfLog.t("FmSub.init") { FmSub.init(applicationContext) }
+        PerfLog.t("ApkIntake.cleanup") { ApkIntake.cleanup(applicationContext, 15 * 60_000L) }
+        PerfLog.t("TapGuard") { TapGuard.init(applicationContext) }
+        PerfLog.t("UiAnim") { UiAnim.init(applicationContext) }
+        PerfLog.t("PadKeeper.start") { PadKeeper.start(this) }
+        PerfLog.t("AutoPairService.ensureEnabled") { AutoPairService.ensureEnabled(this) }
+        PerfLog.t("AppBackup.autoIfDue") { AppBackup.autoIfDue(this) }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
-        setContent { AdbPhonApp() }
+        PerfLog.t("setContent") { setContent { AdbPhonApp() } }
+        window.decorView.post { PerfLog.mark("первый кадр после setContent (пост)") }
         if (intent?.getBooleanExtra("inst_bg", false) == true) InstBg.openFromNotification()
     }
 
@@ -464,6 +466,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
             InviteDialogHost()
             ViaAskHost()
             InstallGateHost()
+            RootHintHost(vm)
             IntegrityHost()
             InstBgHost()
             ModuleHost()

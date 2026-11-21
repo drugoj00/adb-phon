@@ -83,7 +83,7 @@ fun InstallHub(onClose: () -> Unit) {
                 pending = null
                 when {
                     o == null -> {}
-                    o.id == "adb" -> files = list
+                    o.id == "adb" -> files = withContext(Dispatchers.IO) { runCatching { ApkSets.groupList(ctx, list) }.getOrDefault(list) }   // 17.0: части одного набора (base + split_*) идут одним пакетом
                     else -> {
                         val f = withContext(Dispatchers.IO) { runCatching { Batch.materialize(list.first()).file }.getOrNull() }
                         Toast.makeText(ctx, ctx.getString(if (f != null && ViaAsk.launchExternal(ctx, f, o)) R.string.via_started else R.string.fm_no_app), Toast.LENGTH_LONG).show()

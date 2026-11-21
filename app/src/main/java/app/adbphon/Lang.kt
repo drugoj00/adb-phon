@@ -1,5 +1,7 @@
 package app.adbphon
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.layout.imePadding
 
 import android.content.Context
@@ -77,6 +79,7 @@ private fun LangScope(content: @androidx.compose.runtime.Composable () -> Unit) 
 }
 
 /** AlertDialog, который показывает строки на языке, выбранном в настройках. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @androidx.compose.runtime.Composable
 fun LAlertDialog(
     onDismissRequest: () -> Unit,
@@ -86,9 +89,12 @@ fun LAlertDialog(
     text: (@androidx.compose.runtime.Composable () -> Unit)? = null,
     wide: Boolean = false,
     ime: Boolean = false,
+    /** 17.0: куда уходит фокус при входе в окно клавишей/пультом (окна удаления: «Отмена»). */
+    enterFocus: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     androidx.compose.material3.AlertDialog(
-        modifier = (if (wide) androidx.compose.ui.Modifier.fillMaxWidth(.94f) else androidx.compose.ui.Modifier).let { if (ime) it.imePadding() else it }.imeGateKeys(),
+        modifier = (if (wide) androidx.compose.ui.Modifier.fillMaxWidth(.94f) else androidx.compose.ui.Modifier).let { if (ime) it.imePadding() else it }.imeGateKeys()
+            .let { if (enterFocus != null) it.focusProperties { enter = { enterFocus } }.focusGroup() else it },
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !wide, decorFitsSystemWindows = !ime),
         onDismissRequest = onDismissRequest,
         confirmButton = { LangScope(confirmButton) },

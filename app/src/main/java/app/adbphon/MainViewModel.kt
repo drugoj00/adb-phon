@@ -90,7 +90,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun connectRoot() = launchBusy {
         Adb.autoOff = false
         manualPending = true
-        if (Adb.tryRoot(manual = true)) { forgetRemote(); onConnected("") } else message = t(R.string.root_fail)
+        if (Adb.tryRoot(manual = true)) { forgetRemote(); onConnected("") } else if (!RootHint.show) message = t(R.string.root_fail)
     }
 
     fun pair(host: String, port: Int, code: String) = launchBusy {
