@@ -52,6 +52,7 @@ object Adb {
             listOf("/system/bin", "/system/xbin", "/sbin", "/su/bin", "/system/sbin", "/vendor/bin", "/product/bin", "/odm/bin", "/apex/com.android.runtime/bin", "/debug_ramdisk")
         // файлы su могут быть скрыты, а root есть: root уже работал раньше, или su просто запускается (ошибка запуска = su нет)
         // 7.6: su здесь НЕ запускается (раньше запуск «su -c true» на экране подключения давал запрос и уведомление root без действия пользователя)
+        RootHint.forceSu() ||
         dirs.any { runCatching { java.io.File(it, "su").exists() }.getOrDefault(false) } ||
             (::appCtx.isInitialized && appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false))
     }
@@ -74,7 +75,9 @@ object Adb {
         if (rootSuppressed) return@withContext false
         val ok = runCatching { rootRun("id", null, 30_000).contains("uid=0") }
             .onFailure { AppLog.i("ADBphon", "root недоступен: ${it.message}") }.getOrDefault(false)
-        if (ok) { runCatching { guarded { mgr.disconnect() } }; lastConn = false; rootOn = true; currentHost = ""; if (::appCtx.isInitialized) appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("root_ok", true).apply() }
+        if (ok) { runCatching { guarded { mgr.disconnect() } }; lastConn = false; rootOn = true; currentHost = ""; RootHint.granted(); if (::appCtx.isInitialized) appCtx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).edit().putBoolean("root_ok", true).apply() }
+        // 17.0 (код 80): su есть, а root не выдан (в новых программах управления root выдаётся только из них): подсказка с кнопкой
+        else if (suPresent && (manual || (::appCtx.isInitialized && Cfg.useRoot(appCtx)))) RootHint.report(manual)
         AppLog.i("ADBphon", "root=$ok")
         ok
     }
@@ -343,6 +346,89 @@ object Adb {
         try {
             s.openInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
         } finally { runCatching { s.close() } }
+    }
+
+    /**
+     * 17.0 (код 81): канал, по которому можно прочитать кусок файла этого телефона без копирования целиком: root, помощник или связь ADB. null: канала нет.
+     * Нужен значкам APK: приложению файл на карте памяти может быть закрыт (Android 11+ / realme UI), а копия через ADB была ограничена 150 МБ.
+     * [anyHost]: допустима и связь ADB с другим устройством (файл лежит на подключённом устройстве, а не на этом телефоне).
+     */
+    /** Тест (Thumbs.TEST_HOOK): файл apkicon_chan.txt: server = только помощник (связь ADB не используется), root_off = как будто других каналов нет. */
+    private fun chanForce(): String = if (!Thumbs.TEST_HOOK || !::appCtx.isInitialized) "" else runCatching { java.io.File(appCtx.getExternalFilesDir(null), "apkicon_chan.txt").readText().trim() }.getOrDefault("")
+
+    fun bytesChannel(anyHost: Boolean = false): String? = when {
+        chanForce() == "server" -> if (AdbServer.up) "помощник" else null
+        chanForce() == "none" -> null
+        !::appCtx.isInitialized || !Integrity.safe() -> null
+        rootOn -> "root"
+        useServer() -> "помощник"
+        (anyHost || currentHost.isEmpty()) && ::mgr.isInitialized && (if (busyConn > 0) lastConn else mgr.isConnected) -> "ADB"
+        else -> null
+    }
+
+    /**
+     * Выполняет команду оболочки и возвращает её стандартный вывод как есть (байты), не больше [max] байт, не дольше [timeoutMs]. Блокирующий вызов (из потока IO).
+     * root: вывод кладётся во временный файл приложения (строка вывода root-оболочки не бинарно чистая), если файл приложению недоступен, то через base64;
+     * помощник: сокет; ADB: служба exec: (без терминала, байты без искажений).
+     */
+    fun execBytes(cmd: String, max: Int, timeoutMs: Long, anyHost: Boolean = false, expect: Int = -1): ShellApk.Out {
+        val ch = bytesChannel(anyHost) ?: return ShellApk.Out(null, "нет канала (ни root, ни ADB, ни помощника)")
+        return try {
+            when (ch) {
+                "root" -> rootBytes(cmd, max, timeoutMs)
+                "помощник" -> { val w = StringBuilder(); val d = AdbServer.readBytes(cmd, max, timeoutMs, w); ShellApk.Out(d, w.toString()) }
+                else -> streamBytes(cmd, max, timeoutMs, expect)
+            }
+        } catch (e: Throwable) { ShellApk.Out(null, "$ch: ${e.javaClass.simpleName}: ${e.message}") }
+    }
+
+    private fun streamBytes(cmd: String, max: Int, timeoutMs: Long, expect: Int): ShellApk.Out {
+        val s = mgr.openStream(AdbText.safe("exec:$cmd"))
+        val out = java.io.ByteArrayOutputStream()
+        var over = false
+        var error: Throwable? = null
+        val reader = Thread {
+            try {
+                val input = s.openInputStream()
+                val buf = ByteArray(65536)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    if (out.size() + n > max) { over = true; break }
+                    out.write(buf, 0, n)
+                    if (expect >= 0 && out.size() >= expect) break   // ровно ожидаемое число байт: закрытия потока не ждём (связь ADB иногда не закрывает его)
+                }
+            } catch (e: Throwable) { error = e }
+        }
+        reader.isDaemon = true
+        reader.start()
+        reader.join(timeoutMs)
+        val timedOut = reader.isAlive
+        runCatching { s.close() }
+        reader.join(1500)
+        if (over) return ShellApk.Out(null, "вывод больше $max Б")
+        if (timedOut) return ShellApk.Out(null, "тайм-аут ${timeoutMs} мс (получено ${out.size()} Б)")
+        val e = error
+        if (expect >= 0 && out.size() >= expect) return ShellApk.Out(out.toByteArray(), "")
+        // библиотека иногда бросает «Stream closed» вместо конца потока: прочитанное считаем ответом, но причину сохраняем (ShellApk проверяет полноту)
+        if (e != null && out.size() == 0 && e.message?.contains("closed", ignoreCase = true) != true) return ShellApk.Out(null, "${e.javaClass.simpleName}: ${e.message}")
+        return ShellApk.Out(out.toByteArray(), e?.let { "поток оборван: ${it.javaClass.simpleName}: ${it.message}" } ?: "")
+    }
+
+    private fun rootBytes(cmd: String, max: Int, timeoutMs: Long): ShellApk.Out {
+        val dir = java.io.File(appCtx.cacheDir, "shout").apply { mkdirs() }
+        val o = java.io.File(dir, "o" + System.nanoTime().toString(36))
+        try {
+            rootRun("{ $cmd ; } > " + q(o.path) + " 2>/dev/null; chmod 666 " + q(o.path), null, timeoutMs)
+            if (o.isFile && o.canRead()) {
+                if (o.length() > max) return ShellApk.Out(null, "вывод больше $max Б")
+                return ShellApk.Out(o.readBytes(), "")
+            }
+        } finally { o.delete() }
+        // файл приложению недоступен (метки SELinux): небольшой вывод через base64 по постоянной root-оболочке
+        if (max > 6 * 1024 * 1024) return ShellApk.Out(null, "root: файл вывода приложению недоступен, а вывод больше 6 МБ")
+        val txt = rootRun("{ $cmd ; } 2>/dev/null | base64 -w 0", null, timeoutMs)
+        return ShellApk.Out(runCatching { android.util.Base64.decode(txt.trim(), android.util.Base64.DEFAULT) }.getOrElse { return ShellApk.Out(null, "root: base64: ${it.message}") }, "")
     }
 
     /** Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb). */

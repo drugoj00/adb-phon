@@ -1,5 +1,6 @@
 package app.adbphon
 
+import kotlinx.coroutines.launch
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -213,7 +214,12 @@ object ApkInstall {
         val opts = Installers.rows(ctx, item.ext, Installers.canQuietFm(p), adbPane = p.src == "adb", withArchive = true)
         when (val d = InstallerChoice.decide(Installers.choiceOpts(opts), InstallerStore.get(ctx), force)) {
             is InstallerChoice.Decision.Auto -> run(p, item, opts.first { it.id == d.id })
-            is InstallerChoice.Decision.Show -> Fm.dlg = FmDlg.InstallPick(p, item, opts)
+            // 17.0: обычное нажатие на .apks, .xapk, .apkm сразу ведёт к окну «Установка» (части, язык, версии), без выбора установщика и без открытия как папки;
+            // выбор установщика остаётся в меню («Установить через…»), содержимое как папка: «Открыть как папку»
+            is InstallerChoice.Decision.Show -> {
+                val own = opts.firstOrNull { it.id == InstallerChoice.QUIET && it.enabled } ?: opts.firstOrNull { it.id == InstallerChoice.SESSION && it.enabled }
+                if (!force && isBundle(item.ext) && own != null) run(p, item, own) else Fm.dlg = FmDlg.InstallPick(p, item, opts)
+            }
         }
     }
 
@@ -260,11 +266,39 @@ object ApkInstall {
         return android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri)).setPackage(store).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
-    /** «Посмотреть в маркете»: пакет APK-файла ищется в установленных магазинах; магазин один: открывается сразу, иначе выбор. */
+    /** Пакет из файла: у .apk из манифеста, у .apks/.xapk/.apkm из архива (manifest.json, info.json или основной APK внутри). */
+    fun pkgOfFile(ctx: Context, path: String, ext: String): String? = runCatching {
+        if (ext != "apk") {
+            java.util.zip.ZipFile(path).use { z ->
+                fun json(name: String): org.json.JSONObject? = z.entries().toList().firstOrNull { !it.isDirectory && it.name.substringAfterLast('/').equals(name, true) }
+                    ?.let { e -> org.json.JSONObject(z.getInputStream(e).bufferedReader().use { it.readText() }) }
+                json("manifest.json")?.optString("package_name")?.takeIf { it.isNotBlank() }?.let { return@runCatching it }
+                json("info.json")?.optString("pname")?.takeIf { it.isNotBlank() }?.let { return@runCatching it }
+                val base = z.entries().toList().filter { !it.isDirectory && it.name.endsWith(".apk", true) }
+                    .let { l -> l.firstOrNull { it.name.substringAfterLast('/').lowercase().let { n -> n == "base.apk" || n == "base-master.apk" } } ?: l.maxByOrNull { it.size } } ?: return@runCatching null
+                val tmp = java.io.File(ctx.cacheDir, "market_" + System.nanoTime() + ".apk")
+                try {
+                    z.getInputStream(base).use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
+                    ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.packageName
+                } finally { tmp.delete() }
+            }
+        } else ctx.packageManager.getPackageArchiveInfo(path, 0)?.packageName
+    }.getOrNull()
+
+    /** «Посмотреть в магазине» для файла .apk, .apks, .xapk, .apkm: пакет читается из файла. */
     fun openMarket(p: FmPane, item: FmItem) {
         val ctx = Fm.sctx
-        val pkg = if (p.src == "local") runCatching { ctx.packageManager.getPackageArchiveInfo(FmIo.join(p.path, item.name), 0)?.packageName }.getOrNull() else null
-        if (pkg == null) { Fm.say(ctx.getString(R.string.inst_market_nopkg)); return }
+        val path = FmIo.join(p.path, item.name)
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        Fm.scope.launch {
+            val pkg = if (p.src == "local") kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { pkgOfFile(ctx, path, ext) } else null
+            if (pkg == null) Fm.say(ctx.getString(R.string.inst_market_nopkg)) else openMarketPkg(pkg)
+        }
+    }
+
+    /** «Посмотреть в магазине» по известному пакету: магазин один, он открывается сразу, несколько, выбор; ни одного, сообщение. */
+    fun openMarketPkg(pkg: String) {
+        val ctx = Fm.sctx
         val stores = installedStores(ctx)
         when (stores.size) {
             0 -> Fm.say(ctx.getString(R.string.inst_market_none))

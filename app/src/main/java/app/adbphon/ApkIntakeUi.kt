@@ -199,7 +199,10 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
                         )
                         val bad = MaterialTheme.colorScheme.error
                         val mbSize = "%.1f".format(java.util.Locale.US, d.files.sumOf { it.size } / 1048576.0)
-                        Text(stringResource(R.string.silent_win_size, mbSize), fontSize = 13.sp)
+                        // 17.0 (код 83): размер всего набора, число частей и предупреждение об отсутствии языка устройства
+                        val nParts = d.files.singleOrNull()?.parts?.size
+                        Text(stringResource(R.string.silent_win_size, mbSize) + (if (nParts != null) " · " + stringResource(R.string.ii_parts, nParts) else ""), fontSize = 13.sp)
+                        d.files.firstNotNullOfOrNull { it.missLang }?.let { ml -> Text(stringResource(R.string.ii_lang_missing, ml), fontSize = 13.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium) }
                         Text(stringResource(R.string.silent_win_method, methodName), fontSize = 13.sp)
                         if (m.sigDiffers) Text(stringResource(R.string.ii_sig_diff), fontSize = 13.sp, color = bad)
                         if (m.needsNewerAndroid) Text(stringResource(R.string.ii_minsdk_bad, m.minSdk, android.os.Build.VERSION.SDK_INT), fontSize = 13.sp, color = bad)

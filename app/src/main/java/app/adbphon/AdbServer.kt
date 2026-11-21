@@ -110,6 +110,28 @@ object AdbServer {
         } finally { runCatching { s.close() } }
     }
 
+    /** 17.0 (код 81): вывод команды (бинарный, без stderr) в память: не больше [max] байт и не дольше [timeoutMs]. null: больше [max] (причина в [why]). */
+    fun readBytes(cmd: String, max: Int, timeoutMs: Long, why: StringBuilder): ByteArray? {
+        val s = try { open(2000) } catch (e: Exception) { up = false; throw e }
+        try {
+            val end = System.currentTimeMillis() + timeoutMs
+            s.getOutputStream().apply { write(header("shb", cmd)); flush() }
+            val i = s.getInputStream()
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(65536)
+            while (true) {
+                val left = end - System.currentTimeMillis()
+                if (left <= 0) { why.append("тайм-аут ${timeoutMs} мс"); return null }
+                s.soTimeout = left.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
+                val n = try { i.read(buf) } catch (e: java.net.SocketTimeoutException) { why.append("тайм-аут ${timeoutMs} мс"); return null }
+                if (n < 0) break
+                if (out.size() + n > max) { why.append("вывод больше $max Б"); return null }
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
+        } finally { runCatching { s.close() } }
+    }
+
     /** Просит сервер завершиться. */
     fun stop() {
         runCatching {
