@@ -256,6 +256,7 @@ class CallActivity : Activity() {
         val c = call ?: return
         if (!pageReady || web == null || started.not()) return
         val rc = Ringtones.cfg(this)
+        pipSpkOn = !Calls.spkOff; pipMicOn = true
         val cfg = JSONObject().put("role", if (c.outgoing) "caller" else "callee").put("lang", langCode()).put("peer", c.peerName).put("test", false)
             .put("side", if (Cfg.rightHanded(this)) "right" else "left").put("avatar", CallPics.avatarB64(this)).put("picMode", CallPics.mode(this)).put("pic", if (CallPics.mode(this) == "own") CallPics.picDataUri(this) else "").put("pip", pipAvailable()).put("voice", c.voice).put("waitTone", rc.wait).put("ringVol", rc.vol).put("prefs", pagePrefs()).put("spkOff", Calls.spkOff).put("vcodec", Calls.vcodec).put("lowforce", Calls.lowForce).put("fw", Calls.fakeW).put("fh", Calls.fakeH)
         if (Calls.fakeMedia.isNotEmpty()) cfg.put("fake", Calls.fakeMedia)
@@ -371,6 +372,8 @@ class CallActivity : Activity() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 "app.adbphon.PIP_END" -> js("tvoHangup()")
+                "app.adbphon.PIP_MIC" -> js("document.getElementById('bMic').click()")
+                "app.adbphon.PIP_SPK" -> js("document.getElementById('bSpk').click()")
                 "app.adbphon.PIP_REC_V" -> js("document.getElementById('bRec').click()")
                 "app.adbphon.PIP_REC_A" -> js("document.getElementById('bRecA').click()")
                 "app.adbphon.PIP_SHOT" -> js("document.getElementById('bShot').click()")
@@ -378,6 +381,9 @@ class CallActivity : Activity() {
         }
     }
     private var pipReg = false
+    /** 21.11.2026 (слово владелицы: «в картинке-в-картинке при клике на окошко кнопки управления»): состояние микрофона и динамика страницы звонка, для значков кнопок окошка. */
+    private var pipMicOn = true
+    private var pipSpkOn = true
 
     private fun pipAvailable(): Boolean = Build.VERSION.SDK_INT >= 26 && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
@@ -396,6 +402,9 @@ class CallActivity : Activity() {
                 acts += RemoteAction(Icon.createWithResource(this, icon), getString(label), getString(label), PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), flags))
             }
             act(4502, "app.adbphon.PIP_END", R.drawable.ic_pip_end, R.string.call_pip_end)
+            // микрофон и громкая связь: кнопки управления звонком в окошке (значок и подпись показывают, что будет после нажатия)
+            act(4506, "app.adbphon.PIP_MIC", if (pipMicOn) R.drawable.ic_pip_mic else R.drawable.ic_pip_mic_off, if (pipMicOn) R.string.call_pip_mic_off else R.string.call_pip_mic_on)
+            act(4507, "app.adbphon.PIP_SPK", if (pipSpkOn) R.drawable.ic_pip_spk else R.drawable.ic_pip_spk_off, if (pipSpkOn) R.string.call_pip_spk_off else R.string.call_pip_spk_on)
             // система даёт не больше трёх кнопок (на A14 и x96-2 проверено/ожидается 3): вторая кнопка — запись видео, а в голосовом звонке и пока идёт запись звука — запись звука; остальное в полном окне
             val audioRec = (call?.voice == true && recKind != "av") || recKind == "a"
             if (audioRec) act(4505, "app.adbphon.PIP_REC_A", if (recKind == "a") R.drawable.ic_pip_audio_stop else R.drawable.ic_pip_audio, if (recKind == "a") R.string.call_pip_rec_a_stop else R.string.call_pip_rec_a)
@@ -412,7 +421,7 @@ class CallActivity : Activity() {
     /** Кнопки окошка шлют широковещательные сообщения: приёмник нужен и при автоматическом входе в окошко (Android 12+). */
     private fun ensurePipReceiver() {
         if (pipReg) return
-        runCatching { androidx.core.content.ContextCompat.registerReceiver(this, pipReceiver, IntentFilter().apply { addAction("app.adbphon.PIP_END"); addAction("app.adbphon.PIP_REC_V"); addAction("app.adbphon.PIP_REC_A"); addAction("app.adbphon.PIP_SHOT") }, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED); pipReg = true }
+        runCatching { androidx.core.content.ContextCompat.registerReceiver(this, pipReceiver, IntentFilter().apply { addAction("app.adbphon.PIP_END"); addAction("app.adbphon.PIP_MIC"); addAction("app.adbphon.PIP_SPK"); addAction("app.adbphon.PIP_REC_V"); addAction("app.adbphon.PIP_REC_A"); addAction("app.adbphon.PIP_SHOT") }, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED); pipReg = true }
     }
 
     private fun updatePipParams() { if (!pipAvailable() || web == null) return; ensurePipReceiver(); runCatching { setPictureInPictureParams(pipParams()!!) }.onFailure { android.util.Log.w("TvoCall", "pip params: $it") } }
@@ -490,6 +499,7 @@ class CallActivity : Activity() {
             "vsize" -> { vw = m.optInt("w"); vh = m.optInt("h"); vrot = m.optInt("rot"); updatePipParams() }
             "fitwin" -> fitScreen()
             "recstate" -> { recKind = m.optString("k"); updatePipParams() }
+            "ui" -> { if (m.has("mic")) pipMicOn = m.optBoolean("mic", true); if (m.has("spk")) pipSpkOn = m.optBoolean("spk", true); updatePipParams() }
             "full" -> { fullOn = m.optBoolean("on"); setCallFull(fullOn) }
             "pip" -> enterPip()
             "bg" -> moveTaskToBack(true)   // «В фоне»: окно уходит, звонок идёт (служба и уведомление «Видеозвонок» возвращают в окно)

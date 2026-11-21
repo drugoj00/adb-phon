@@ -138,6 +138,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -470,6 +471,7 @@ object Fm {
             if (list == null) { p.error = err; return@launch }
             if (remember && p.path != path) { p.back.add(p.path); if (p.back.size > 50) p.back.removeAt(0) }
             p.path = path; p.items = list; p.error = null; p.selected = emptySet(); p.lastName = pick
+            if (AppLog.enabled) Thumbs.logList("список(" + p.src + ")", path, list.count { !it.isDir && (it.ext == "apk" || it.ext == "apks" || it.ext == "xapk" || it.ext == "apkm") })
             if (remember) fmLeaveRoot(p)
             pick?.let { p.scrollToName = it }
             if (p.src != "smb") addHistory(path)
@@ -1016,7 +1018,7 @@ object Fm {
     fun openFromTree(c: NetConn?, path: String, item: FmItem) {
         val parent = path.substringBeforeLast('/').ifEmpty { "/" }
         // архив открывается как папка: это уже просмотр внутри панели, поэтому панель переходит к архиву (явное действие владельца)
-        if (Arc.kindOf(item.name) != null && Arc.opensAsFolder(item.name) && item.ext !in setOf("apk", "apks", "xapk")) {
+        if (Arc.kindOf(item.name) != null && Arc.opensAsFolder(item.name) && item.ext !in setOf("apk", "apks", "xapk", "apkm")) {
             val p = cur
             scope.launch {
                 if (c == null) fmOpenLocal(p, parent) else { fmLeaveRoot(p); connectNet(p, c, parent) }
@@ -1629,6 +1631,11 @@ object Fm {
     /** Наш способ установки APK: тихо через ADB/root, а без них сессией PackageInstaller с подтверждением системы. */
     fun installViaAdb(p: FmPane, it: FmItem, quiet: Boolean = true): kotlinx.coroutines.Job = scope.launch {
         val f = join(p.path, it.name)
+        // 17.0 (код 83): рядом лежат другие части того же пакета (base.apk и split_*.apk): ставится набор одной сессией, а не один файл
+        if (p.src == "local" && it.ext == "apk") {
+            val set = withContext(Dispatchers.IO) { runCatching { ApkSets.setAround(sctx, java.io.File(f)) }.getOrNull() }
+            if (set != null) { installSet(set, quiet); return@launch }
+        }
         if (quiet && Adb.isConnected && !FmIo.remote && p.src == "local") {
             val lf = java.io.File(f)
             val af = ApkFile(it.name, android.net.Uri.fromFile(lf), lf.length(), lf)
@@ -1654,6 +1661,21 @@ object Fm {
                     InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
                     installWithProgress(sctx, listOf(af), mapOf(af.name to meta), run, wipe)
                 } else installFilesViaSession(listOf(file))
+            }
+        }
+    }
+
+    /** Установка набора из частей APK одной папки: окно «Установка» с названием, версиями и числом частей, затем ход (ADB/root) или сессия системы. */
+    private suspend fun installSet(set: ApkFile, quiet: Boolean) {
+        val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(sctx, set) }.getOrNull() }
+        val metas = mapOf(set.name to meta)
+        dlg = FmDlg.InstallConfirm(listOf(set), metas) { wipe ->
+            scope.launch {
+                if (quiet && Adb.isConnected && !FmIo.remote) {
+                    val run = InstRun()
+                    InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
+                    installWithProgress(sctx, listOf(set), metas, run, wipe)
+                } else installFilesViaSession(set.parts.orEmpty())
             }
         }
     }
@@ -1746,7 +1768,7 @@ object Fm {
         val f = join(p.path, it.name)
         if (p.src == "adb" && (it.ext == "apk" || ApkInstall.isBundle(it.ext))) { ApkInstall.start(p, it); return@launch }
         if (p.src != "adb" && Arc.kindOf(it.name) != null) {
-            if (it.ext == "apk" || it.ext == "apks" || it.ext == "xapk") { ApkInstall.start(p, it); return@launch }
+            if (it.ext == "apk" || ApkInstall.isBundle(it.ext)) { ApkInstall.start(p, it); return@launch }
             if (Arc.opensAsFolder(it.name)) { openArchive(p, it.name); return@launch }
         }
         if (p.src != "adb" && it.ext == "apkm") { ApkInstall.start(p, it); return@launch }
@@ -3250,12 +3272,15 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 Box(Modifier.size(5.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape))
             }
             if (treeOn) {
+                TreeLog.Note("список «Файлов» (дерево)", depth)
+                val tlDm = androidx.compose.ui.platform.LocalDensity.current
                 Spacer(Modifier.width((TreeDim.ind * depth).dp))
                 // треугольник только у папок, в которых что-то есть (пустым стрелки нет); цвет по настройке (20.11.2026: по умолчанию в цвет текста)
                 val arrowCol = treeArrowColor()
                 val nonEmpty = cntNow == null || cntNow.first + cntNow.second > 0
-                if (f.isDir && nonEmpty) Box(Modifier.size(TreeDim.fmArrow.dp).tapOnly { Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики и ряби (tapOnly), как в «Источниках»
-                    androidx.compose.foundation.Canvas(Modifier.size(12.dp)) {
+                if (f.isDir && nonEmpty) Box(Modifier.size(TreeDim.fmArrow.dp).onGloballyPositioned { c -> TreeLog.measured("список «Файлов» (дерево)", depth, tlDm.density, tlDm.fontScale, "поле стрелки", c.positionInParent().x, c.size.width.toFloat()) }
+                    .tapOnly { Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, contentAlignment = Alignment.CenterStart) {   // 14.0: стрелка без узла семантики и ряби (tapOnly), как в «Источниках»; 16.0 код 79: треугольник с отступом слева, промежутки точка–стрелка и стрелка–значок равны
+                    androidx.compose.foundation.Canvas(Modifier.padding(start = TreeDim.paneArrowInk(isOpen).dp).size(12.dp)) {
                         val c = arrowCol
                         val path = androidx.compose.ui.graphics.Path().apply {
                             if (isOpen) { moveTo(0f, size.height * .2f); lineTo(size.width, size.height * .2f); lineTo(size.width / 2, size.height * .9f) }
@@ -3275,7 +3300,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
             } else if (p.src == "smb" && p.smb is AppsFs) AppsRowIcon(f.name, 32.dp) else FileTypeIcon(f.name, f.ext, if (p.src == "local") full else null, 32.dp,
                 remote = if (p.src != "local" && !f.isDir && f.size > 0 && (f.ext == "apk" || f.ext == "apks" || f.ext == "xapk" || f.ext == "apkm"))
                     RemoteApk(p.src + "|" + (p.net?.let { it.kind + "|" + it.host + "|" + it.user } ?: "") + "|" + full + "|" + f.size + "|" + f.date, f.size,
-                        p.src == "adb" || (p.src == "smb" && p.net?.kind != "cloud" && p.smb !is ArchiveFs)) { dest -> Fm.fetchTo(p, full, dest) } else null)
+                        p.src == "adb" || (p.src == "smb" && p.net?.kind != "cloud" && p.smb !is ArchiveFs), if (p.src == "adb") full else null) { dest -> Fm.fetchTo(p, full, dest) } else null)
             Column(Modifier.padding(start = if (dense) 8.dp else 10.dp).weight(1f)) {
                 MqText(f.name, active = hovered || pressed || focused || sel, fontSize = if (dense) 15.sp else 14.sp, lineHeight = if (dense) 17.sp else 18.sp, fontWeight = FontWeight.Bold, fontFamily = UiPrefs.listFontBold, names = true)
                 val narrowSub = !tvRow && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420
@@ -3332,10 +3357,10 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
         HorizontalDivider()
         if (!multi && !f.isDir) item(R.string.fm_open_as) { Fm.dlg = FmDlg.OpenAs(p, f) }
         if (!multi && !f.isDir && f.ext == "apk") item(R.string.fm_install) { Fm.openFile(p, f) }
-        if (!multi && !f.isDir && f.ext == "apk" && p.src == "local" && ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarket(p, f) }
+        if (!multi && !f.isDir && (f.ext == "apk" || ApkInstall.isBundle(f.ext)) && p.src == "local" && ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarket(p, f) }
         if (!multi && !f.isDir && f.ext in setOf("apks", "xapk", "apkm")) item(R.string.rp_menu) { Fm.repackFile(p, f) }
         if (!multi && !f.isDir && Fm.isArchive(f.name)) {
-            item(R.string.arc_open_as_archive) { Fm.openArchive(p, f.name) }
+            item(if (ApkInstall.isBundle(f.ext)) R.string.arc_open_as_folder else R.string.arc_open_as_archive) { Fm.openArchive(p, f.name) }
             if (!nested) {
                 item(R.string.fm_extract_here) { Fm.extractArc(p, f.name, 0) }
                 item(R.string.arc_extract_named) { Fm.extractArc(p, f.name, 1) }

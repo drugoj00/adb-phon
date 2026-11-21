@@ -71,6 +71,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import java.io.File
 
 /** Настройки внешнего вида списков «Файлов»: узкий шрифт, цвета папок, «Открывать как». Хранятся в prefs «fm» и входят в резервную копию. */
@@ -125,6 +126,7 @@ object UiPrefs {
         instMode.clear()
         listOf("apk", "apks", "apkm", "xapk").forEach { e -> p.getString("inst_$e", "ask")?.takeIf { it != "ask" }?.let { instMode[e] = it } }
         InstallerStore.get(ctx)   // 10.0: единый выбор установщика читается при запуске (перенос старых настроек)
+        if (Thumbs.TEST_HOOK) AppLog.enabled = true   // тестовая сборка: журнал включён без настройки
     }
 
     fun setAskInstaller(ctx: Context, v: Boolean) { askInstaller = v; sp(ctx).edit().putBoolean("ask_installer", v).apply() }
@@ -170,6 +172,38 @@ object TreeDim {
      * добавка после поля стрелки уравнивает их. В компактном режиме промежутки уже равны (7,8 и 7,5 dp), добавка 0.
      */
     fun rootSp(level: Int): Int = if (!UiPrefs.compactTree && level > 0) 5 else 0
+    /**
+     * 16.0 код 79 (4PDA, wad72: «промежутки в дереве у меня не меняются»): код 75 выровнял только дерево «Источников», а список «Файлов» в режиме дерева (FileManager, строки папки с треугольником)
+     * остался прежним (на A14 видимые промежутки точка–стрелка и стрелка–значок различались, цифры в журнале отчёта). Поле стрелки теперь 18 dp (компактно) или 22 dp, видимый треугольник 12 dp стоит в нём не по центру, а с отступом слева:
+     * промежутки между краем точки, видимой частью треугольника и значком равны (закрытый и раскрытый треугольник считаются отдельно), общая ширина строки не меняется.
+     */
+    fun paneArrowInk(open: Boolean): Float = (fmArrow - 12 - (dotW - 5) / 2f - (if (open) -1.2f else 1.8f)) / 2f   // закрытый треугольник пустой слева на 1,8 dp (0,15 от 12); раскрытый занимает все 12 dp, а значок открытой папки сам уже на 1,2 dp
+}
+
+/** 16.0 код 79: строки журнала про дерево папок: плотность экрана, масштаб шрифта и применённые отступы (раз для каждого сочетания), чтобы по журналу было видно, что реально нарисовано. */
+object TreeLog {
+    private val seen = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    @Composable
+    fun Note(kind: String, level: Int) {
+        if (!AppLog.enabled) return
+        val dm = androidx.compose.ui.platform.LocalDensity.current
+        val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+        androidx.compose.runtime.LaunchedEffect(kind, level, dm.density, dm.fontScale, UiPrefs.compactTree) {
+            val key = "$kind|$level|${dm.density}|${dm.fontScale}|${UiPrefs.compactTree}"
+            if (seen.add(key)) AppLog.i("TreeLog", "TreeLog: $kind, уровень $level: плотность ${dm.density} (${cfg.densityDpi} dpi), масштаб шрифта ${dm.fontScale}, экран ${cfg.screenWidthDp}x${cfg.screenHeightDp} dp, " +
+                "Android ${Build.VERSION.SDK_INT} ${Build.MANUFACTURER}, компактные отступы=${UiPrefs.compactTree}, точка ${TreeDim.dotW} dp, шаг уровня ${TreeDim.ind} dp, левый отступ ${TreeDim.pad} dp, " +
+                "поле стрелки ${TreeDim.arrow(false)} dp (список «Файлов» ${TreeDim.fmArrow} dp, отступ треугольника ${"%.2f".format(TreeDim.paneArrowInk(false))}/${"%.2f".format(TreeDim.paneArrowInk(true))} dp (закрыт/раскрыт)), добавка после стрелки ${TreeDim.rootSp(level)} dp, " +
+                "значок 28/32 dp (ТВ), ключ=$key")
+        }
+    }
+
+    /** Измеренное положение: [what] = стрелка (левый край, ширина) и текст (левый край) в dp относительно строки; пишется раз для каждого уровня и сочетания. */
+    fun measured(kind: String, level: Int, density: Float, fontScale: Float, what: String, xPx: Float, wPx: Float) {
+        if (!AppLog.enabled) return
+        val key = "m|$kind|$level|$density|$fontScale|${UiPrefs.compactTree}|$what"
+        if (seen.add(key)) AppLog.i("TreeLog", "TreeLog: измерено $kind, уровень $level: $what ширина ${"%.1f".format(wPx / density)} dp (${"%.0f".format(wPx)} px при плотности $density)")
+    }
 }
 
 val CondFont: FontFamily = FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
@@ -282,27 +316,185 @@ object Thumbs {
     private fun drawBmp(d: android.graphics.drawable.Drawable): Bitmap =
         Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also { b -> val c = android.graphics.Canvas(b); d.setBounds(0, 0, 96, 96); d.draw(c) }
 
-    /** Значок самого приложения из APK (в том числе адаптивный). null: файл не читается или это не APK. */
-    private fun iconOfApk(ctx: Context, path: String): Bitmap? {
-        val pm = ctx.packageManager
-        // 15.0 код 75 (wad72, Android 15, Realme): причина «значка нет» пишется в журнал; если Android не разобрал манифест (getPackageArchiveInfo вернул null) или не нарисовал значок,
-        // берётся запасной путь: картинка значка прямо из zip файла APK
-        val info = try { pm.getPackageArchiveInfo(path, 0)?.applicationInfo } catch (e: Throwable) {
-            AppLog.w("ApkIcon", "getPackageArchiveInfo: ${e.javaClass.simpleName}: ${e.message} (Android ${Build.VERSION.SDK_INT}) $path"); null
-        }
-        if (info == null) {
-            AppLog.w("ApkIcon", "getPackageArchiveInfo вернул null (Android ${Build.VERSION.SDK_INT}), пробую значок из zip: $path")
-            return iconFromZip(path)
-        }
-        info.sourceDir = path; info.publicSourceDir = path
-        return try { drawBmp(info.loadIcon(pm)) } catch (e: Throwable) {
-            AppLog.w("ApkIcon", "loadIcon: ${e.javaClass.simpleName}: ${e.message} (Android ${Build.VERSION.SDK_INT}), пробую значок из zip: $path")
-            iconFromZip(path)
-        }
+    /** Строка журнала про значки APK. В файле журнала метки (тега) нет, поэтому «ApkIcon» стоит в самом тексте: по нему строки ищут. */
+    private fun lg(msg: String) { AppLog.w("ApkIcon", "ApkIcon: $msg") }
+
+    /** 16.2: какая ветка показа значка выбрана для .apk и почему (одна строка на файл и ветку раз в 10 минут). Нужна, чтобы по журналу видеть, доходит ли дело до чтения значка. */
+    fun apkBranch(name: String, path: String?, branch: String) {
+        if (!AppLog.enabled) return
+        val key = "br:$name|$branch"
+        val now = System.currentTimeMillis()
+        val skip = synchronized(logTimes) { val t = logTimes[key]; if (t != null && now - t < 600_000L) true else { logTimes[key] = now; false } }
+        if (!skip) lg("ветка=$branch файл=$name путь=${path ?: "нет"} настройка=${if (UiPrefs.apkIcons) "вкл" else "выкл"}")
     }
 
-    /** Запасной значок: файл-картинка значка внутри APK (работает, даже если Android не разбирает манифест). Адаптивный значок без готовой картинки не поддерживается: тогда null и обычный значок типа. */
-    private fun iconFromZip(path: String): Bitmap? = try {
+    /** 16.2: в начале показа папки: сколько в ней .apk и при каких условиях (раз в 30 с на папку). */
+    fun logList(mode: String, path: String, apkCount: Int) {
+        if (!AppLog.enabled) return
+        val key = "ls:$mode|$path"
+        val now = System.currentTimeMillis()
+        val skip = synchronized(logTimes) { val t = logTimes[key]; if (t != null && now - t < 30_000L) true else { logTimes[key] = now; false } }
+        if (skip) return
+        lg("список режим=$mode path=$path apk=$apkCount настройка=${if (UiPrefs.apkIcons) "вкл" else "выкл"} Android=${Build.VERSION.RELEASE}(API ${Build.VERSION.SDK_INT}) версия=${appVersionText()} все_файлы=${allFilesText()} канал_оболочки=${Adb.bytesChannel() ?: "нет"}")
+    }
+
+    fun appVersionText(): String = runCatching { val pi = FmIo.app.packageManager.getPackageInfo(FmIo.app.packageName, 0); "${pi.versionName}(код ${pi.longVersionCode})" }.getOrDefault("?")
+    fun allFilesText(): String = if (Build.VERSION.SDK_INT >= 30) (if (runCatching { android.os.Environment.isExternalStorageManager() }.getOrDefault(false)) "да" else "нет") else "н/д"
+
+    /** Тестовая проверка (TEST_HOOK): файл apkicon_force.txt в папке файлов приложения (Android/data/app.adbphon/files): 1 = как будто система значок не отдала, 2 = и разбор архива пропускается. В выпуске false. */
+    const val TEST_HOOK = false
+    /** Тест (TEST_HOOK): файл apkicon_shell.txt: 1 = значок через оболочку сразу, даже если файл читается; 2 = то же, но без unzip (свой разбор zip); 3 = диагностика канала; 4 = считать файл закрытым от приложения (canRead=false). */
+    private fun shellForce(): Int = if (!TEST_HOOK) 0 else runCatching { java.io.File(FmIo.app.getExternalFilesDir(null), "apkicon_shell.txt").readText().trim().toInt() }.getOrDefault(0)
+    private fun forceMode(): Int = if (!TEST_HOOK) 0 else runCatching { java.io.File(FmIo.app.getExternalFilesDir(null), "apkicon_force.txt").readText().trim().toInt() }.getOrDefault(0)
+
+    // ---- 17.0 (код 81): значок APK через оболочку устройства (без копирования файла) и кэш на диске ----
+
+    private val shellGate = java.util.concurrent.Semaphore(2)     // чтение через оболочку: не больше двух файлов сразу (как значки APK)
+    private val shellFail = HashMap<String, Long>()               // ключ -> когда оболочка значка не дала: повтор не раньше чем через 5 минут
+    private val logTimes = HashMap<String, Long>()                // ключ -> когда писали в журнал: одна строка на файл раз в 10 минут (список прокручивается и перерисовывается)
+
+    private fun lgOnce(key: String, msg: String) {
+        val now = System.currentTimeMillis()
+        val skip = synchronized(logTimes) { val t = logTimes[key]; if (t != null && now - t < 600_000L) true else { logTimes[key] = now; false } }
+        if (!skip) lg(msg)
+    }
+
+    private fun shellFailedRecently(key: String): Boolean = synchronized(shellFail) { shellFail[key]?.let { System.currentTimeMillis() - it < 300_000L } == true }
+
+    private fun diskIcons(ctx: Context) = java.io.File(ctx.cacheDir, "apkicons").apply { mkdirs() }
+    /** Тест (TEST_HOOK): файл apkicon_salt.txt добавляется к ключу кэша значков на диске (новое значение = кэш как пустой). */
+    private fun cacheSalt(): String = if (!TEST_HOOK) "" else runCatching { java.io.File(FmIo.app.getExternalFilesDir(null), "apkicon_salt.txt").readText().trim() }.getOrDefault("")
+    private val appVer: Long by lazy { runCatching { FmIo.app.packageManager.getPackageInfo(FmIo.app.packageName, 0).longVersionCode }.getOrDefault(0L) }
+    /** Кэш значков на диске: ключ = путь + размер + время файла + версия программы (после обновления разбор мог улучшиться). */
+    private fun diskGet(ctx: Context, key: String): Bitmap? {
+        val png = java.io.File(diskIcons(ctx), sha1("$key|v$appVer${cacheSalt()}") + ".png")
+        return if (png.isFile) runCatching { BitmapFactory.decodeFile(png.path) }.onFailure { lgOnce("dg:$key", "кэш значка на диске не читается: ${it.javaClass.simpleName}: ${it.message}") }.getOrNull() else null
+    }
+    private fun diskPut(ctx: Context, key: String, b: Bitmap) {
+        val dir = diskIcons(ctx)
+        runCatching { java.io.File(dir, sha1("$key|v$appVer${cacheSalt()}") + ".png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }; prune(dir) }
+            .onFailure { lgOnce("dp:$key", "значок не записан в кэш на диске: ${it.javaClass.simpleName}: ${it.message}") }
+    }
+
+    /** Размер и время файла по оболочке («размер:секунды»): у файла, закрытого от приложения, File.length() и lastModified() дают 0. null: не вышло. */
+    private fun shellStat(path: String, anyHost: Boolean): String? {
+        val q = "'" + path.replace("'", "'\\''") + "'"
+        // ровно 2 раза по 20 цифр: ответ известной длины (связь ADB не закрывает поток вовремя)
+        val r = Adb.execBytes("printf '%020d%020d' \$(stat -c %s $q 2>/dev/null) \$(stat -c %Y $q 2>/dev/null)", 100, 2500L, anyHost, 40)
+        val t = r.data?.toString(Charsets.UTF_8)?.trim() ?: return null
+        if (t.length != 40) return null
+        val sz = t.substring(0, 20).toLongOrNull() ?: return null
+        val mt = t.substring(20).toLongOrNull() ?: return null
+        return if (sz > 0) "$sz:$mt" else null
+    }
+
+    /**
+     * Значок APK из частей архива, прочитанных оболочкой устройства (`unzip -p`, при его отсутствии свой разбор zip по смещениям): без копирования файла и без
+     * ограничения размера. Причины неудач дописываются в [why] (в журнал). null: не вышло.
+     */
+    private fun iconViaShell(path: String, anyHost: Boolean, why: StringBuilder): Bitmap? {
+        val ch = Adb.bytesChannel(anyHost)
+        if (ch == null) { why.append("через оболочку: нет канала (ни root, ни ADB, ни помощника), файл приложению не открывается: нет прав; "); return null }
+        val sh = object : ShellApk.Sh {
+            override val channel: String = ch
+            override val reliable: Boolean = ch != "ADB"
+            override fun run(cmd: String, max: Int, timeoutMs: Long, expect: Int) = Adb.execBytes(cmd, max, timeoutMs, anyHost, expect)
+        }
+        shellGate.acquire()
+        try {
+            val src = ShellApk(path, sh, noUnzip = shellForce() == 2)   // время считается с момента, когда место в очереди получено
+            val r = ApkIconRes.resolve(src)
+            val d = r.root
+            val bmp = if (d != null) ApkIconDraw.render(src, d) else null
+            why.append("через оболочку (").append(src.stats()).append("): ").append(r.trace)
+            if (d != null && bmp == null) why.append("; рисунок не нарисован (").append(ApkIconRes.describe(d)).append(")")
+            if (bmp == null && src.err.isNotEmpty()) why.append("; причина: ").append(src.err)
+            why.append("; ")
+            return bmp
+        } catch (e: Throwable) {
+            why.append("через оболочку: ${e.javaClass.simpleName}: ${e.message}; ")
+            return null
+        } finally { shellGate.release() }
+    }
+
+    /** Тест (TEST_HOOK, apkicon_shell.txt = 3): проверка, как связь ADB отдаёт большие ответы `exec:`; итог строкой в журнал. */
+    private fun shellDiag(path: String) {
+        val sb = StringBuilder("DIAG канал=${Adb.bytesChannel() ?: "нет"}: ")
+        for (n in listOf(1_000, 70_000, 300_000, 1_000_000, 3_000_000, 10_000_000, 30_000_000, 70_000_000)) {
+            val t = System.currentTimeMillis()
+            val r = Adb.execBytes("head -c $n " + "'" + path.replace("'", "'\\''") + "'", 200_000_000, 20_000L, true)
+            sb.append("$n->${r.data?.size ?: -1}${if (r.err.isNotEmpty()) "[" + r.err + "]" else ""} ${System.currentTimeMillis() - t}мс; ")
+        }
+        for (n in listOf(70_000, 1_000_000, 10_000_000)) {   // то же через dd блоками
+            val t = System.currentTimeMillis()
+            val r = Adb.execBytes("dd if='" + path + "' bs=4096 count=${n / 4096} 2>/dev/null", 200_000_000, 20_000L, true)
+            sb.append("dd$n->${r.data?.size ?: -1}${if (r.err.isNotEmpty()) "[" + r.err + "]" else ""} ${System.currentTimeMillis() - t}мс; ")
+        }
+        lg(sb.toString())
+    }
+
+    private val defaultIcon: Bitmap? by lazy { runCatching { drawBmp(FmIo.app.packageManager.defaultActivityIcon) }.getOrNull() }
+
+    /** Значок «по умолчанию» (робот системы): Android отдаёт его вместо ошибки, когда не смог прочитать ресурсы APK. */
+    private fun isDefaultIcon(pm: android.content.pm.PackageManager, d: android.graphics.drawable.Drawable, bmp: Bitmap): Boolean {
+        val cs = d.constantState
+        if (cs != null && cs === runCatching { pm.defaultActivityIcon.constantState }.getOrNull()) return true
+        return defaultIcon?.let { runCatching { it.sameAs(bmp) }.getOrDefault(false) } == true
+    }
+
+    /**
+     * Значок самого приложения из APK. null: файл не читается или значка нет.
+     * 16.0 код 79 (4PDA, wad72: Android 16, realme UI 7: «у обоих просто значки APK»): порядок способов и подробная причина в журнале по каждому:
+     * 1) система (getPackageArchiveInfo + loadIcon; значок «по умолчанию» и исключения не принимаются за успех, вместо loadIcon пробуется прямой getDrawableForDensity),
+     * 2) свой разбор архива: манифест + таблица ресурсов resources.arsc (ApkIconRes и ApkIconDraw: картинки с любыми именами, адаптивные, векторные значки),
+     * 3) прежний запасной способ: картинка с именем ic_launcher/icon из zip.
+     */
+    private fun iconOfApk(ctx: Context, path: String, why: StringBuilder): Bitmap? {
+        val pm = ctx.packageManager
+        val force = forceMode()
+        fun fin(b: Bitmap?, how: String): Bitmap? { if (b != null) why.append("получен способом «$how»; "); return b }
+        // 1. система
+        if (force < 1) {
+            val info = try { pm.getPackageArchiveInfo(path, 0)?.applicationInfo } catch (e: Throwable) { why.append("getPackageArchiveInfo: ${e.javaClass.simpleName}: ${e.message}; "); null }
+            if (info == null) { if (why.isEmpty()) why.append("getPackageArchiveInfo вернул null (манифест не разобран); ") }
+            else {
+                info.sourceDir = path; info.publicSourceDir = path
+                val viaLoad = try {
+                    val d = info.loadIcon(pm); val bmp = drawBmp(d)
+                    if (isDefaultIcon(pm, d, bmp)) { why.append("loadIcon вернул значок по умолчанию (info.icon=0x${Integer.toHexString(info.icon)}); "); null } else bmp
+                } catch (e: Throwable) { why.append("loadIcon: ${e.javaClass.simpleName}: ${e.message}; "); null }
+                if (viaLoad != null) return fin(viaLoad, "система")
+                if (info.icon != 0) {
+                    // loadIcon молча подменяет ошибку значком по умолчанию: ресурс читается напрямую, чтобы увидеть настоящую причину
+                    try {
+                        val d = pm.getResourcesForApplication(info).getDrawableForDensity(info.icon, android.util.DisplayMetrics.DENSITY_XXHIGH, null)
+                        if (d != null) { val bmp = drawBmp(d); if (!isDefaultIcon(pm, d, bmp)) return fin(bmp, "getDrawableForDensity") }
+                        why.append("getDrawableForDensity: пусто; ")
+                    } catch (e: Throwable) { why.append("getDrawableForDensity: ${e.javaClass.simpleName}: ${e.message}; ") }
+                } else why.append("у приложения нет значка в манифесте (для системы); ")
+            }
+        } else why.append("проверка: система пропущена; ")
+        // 2. свой разбор манифеста и таблицы ресурсов
+        if (force < 2) {
+            try {
+                java.util.zip.ZipFile(path).use { z ->
+                    val r = ApkIconRes.resolve(z)
+                    why.append("разбор архива: ").append(r.trace).append("; ")
+                    val d = r.root
+                    if (d != null) {
+                        val bmp = ApkIconDraw.render(z, d)
+                        if (bmp != null) return fin(bmp, "разбор архива")
+                        why.append("рисунок не нарисован (${ApkIconRes.describe(d)}); ")
+                    }
+                }
+            } catch (e: Throwable) { why.append("разбор архива: ${e.javaClass.simpleName}: ${e.message}; ") }
+        } else why.append("проверка: разбор архива пропущен; ")
+        // 3. картинка по имени
+        return fin(iconFromZip(path, why), "картинка по имени")
+    }
+
+    /** Запасной значок: файл-картинка значка внутри APK по имени (ic_launcher, icon, app_icon). Адаптивный значок без готовой картинки не поддерживается. */
+    private fun iconFromZip(path: String, why: StringBuilder): Bitmap? = try {
         java.util.zip.ZipFile(path).use { z ->
             val cand = z.entries().asSequence().filter { !it.isDirectory }.filter { e ->
                 val n = e.name.lowercase()
@@ -312,13 +504,13 @@ object Thumbs {
             }.toList()
             fun dens(n: String) = when { "xxxhdpi" in n -> 5; "xxhdpi" in n -> 4; "xhdpi" in n -> 3; "hdpi" in n -> 2; "mdpi" in n -> 1; else -> 0 }
             val best = cand.maxWithOrNull(compareBy({ dens(it.name.lowercase()) }, { it.size }))
-            if (best == null) { AppLog.w("ApkIcon", "в zip нет готовой картинки значка: $path"); null }
+            if (best == null) { why.append("в zip нет картинки значка по имени; "); null }
             else z.getInputStream(best).use { BitmapFactory.decodeStream(it) }?.let { Bitmap.createScaledBitmap(it, 96, 96, true) }
         }
-    } catch (e: Throwable) { AppLog.w("ApkIcon", "значок из zip: ${e.javaClass.simpleName}: ${e.message}: $path"); null }
+    } catch (e: Throwable) { why.append("значок из zip: ${e.javaClass.simpleName}: ${e.message}; "); null }
 
     /** APKS, XAPK, APKM: значок из «icon.png» набора или из основного APK внутри (его приходится вынуть во временный файл). */
-    private fun iconOfBundle(ctx: Context, path: String, tmpDir: java.io.File): Bitmap? {
+    private fun iconOfBundle(ctx: Context, path: String, tmpDir: java.io.File, why: StringBuilder): Bitmap? {
         java.util.zip.ZipFile(path).use { z ->
             val all = z.entries().asSequence().filter { !it.isDirectory }.toList()
             all.firstOrNull { it.name.equals("icon.png", true) }?.let { e ->
@@ -331,64 +523,126 @@ object Thumbs {
             val out = java.io.File(tmpDir, "b" + System.nanoTime().toString(36) + ".apk")
             try {
                 z.getInputStream(base).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
-                return iconOfApk(ctx, out.path)
+                return iconOfApk(ctx, out.path, why)
             } finally { out.delete() }
         }
     }
 
     /**
-     * Значок приложения из APK, без ADB и root. Файл, закрытый для обычного чтения (карта памяти под SAF), читается через выданный доступ:
-     * копия во временную папку (до 400 МБ). Набор APKS/XAPK/APKM: значок из него или из основного APK. Не вышло: null, список покажет нейтральный значок.
+     * Значок приложения из APK. Порядок (17.0 код 81):
+     * 1) файл приложению открывается (canRead): система + свой разбор, как раньше; не вышло, а есть оболочка: части архива через оболочку;
+     * 2) файл закрыт (Android 11+, realme UI, карта памяти): СРАЗУ части архива через оболочку (`unzip -p` / разбор zip по смещениям, ADB, помощник или root),
+     *    без копирования и для файла любого размера; затем прежние запасные пути (SAF до 400 МБ, копия через ADB до 150 МБ).
+     * Результат кэшируется на диске (путь + размер + время файла + версия программы). Набор APKS/XAPK/APKM: значок из него или из основного APK внутри.
+     * Не вышло: null (список покажет нейтральный значок), в журнал одна строка «ApkIcon:» с путём, размером, canRead, способом и причиной.
      */
     suspend fun apkIcon(ctx: Context, path: String): Bitmap? = load(apkKey(path), apkGate) {
         val tmpDir = java.io.File(ctx.cacheDir, "apkicon").apply { mkdirs() }
         val copy = java.io.File(tmpDir, "c" + System.nanoTime().toString(36))
+        val why = StringBuilder()
+        val f = java.io.File(path)
+        val can = f.canRead() && shellForce() != 4   // тест: 4 = как будто файл приложению закрыт
+        val ext = path.substringAfterLast('.', "").lowercase()
+        val saf = SafAccess.needs(path)
+        val safOk = saf && SafAccess.covered(path)
+        var size = f.length()
+        var dkey = apkKey(path)
+        val t0 = System.currentTimeMillis()
+        lgOnce("st:$path", "старт чтения значка: $path (читается=$can, размер=$size, SAF нужен=$saf, расширение=$ext, канал оболочки=${Adb.bytesChannel() ?: "нет"})")
+        fun head() = "$path ($size Б, читается=$can, SAF нужен=$saf, SAF выдан=$safOk, Android ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER} ${Build.MODEL}, канал оболочки=${Adb.bytesChannel() ?: "нет"}, ${System.currentTimeMillis() - t0} мс)"
         try {
-            var src = path
-            if (!java.io.File(path).canRead() && SafAccess.needs(path) && SafAccess.covered(path)) {
-                if ((SafAccess.stat(path)?.size ?: Long.MAX_VALUE) > 400L * 1024 * 1024) { AppLog.w("ApkIcon", "SAF: файл больше 400 МБ: $path"); return@load null }
-                SafAccess.openIn(path).use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
-                src = copy.path
+            if (!can && Adb.bytesChannel() != null) {
+                // у файла, закрытого от приложения, размер и время для ключа кэша берутся у оболочки
+                shellStat(path, false)?.let { st -> dkey = "a:$path:$st"; size = st.substringBefore(':').toLongOrNull() ?: size }
             }
-            val r = iconOfFile(ctx, src, path.substringAfterLast('.', "").lowercase(), tmpDir)
-            if (r == null) AppLog.w("ApkIcon", "значок не получен: $path (читается=${java.io.File(path).canRead()}, SAF нужен=${SafAccess.needs(path)}, SAF выдан=${SafAccess.covered(path)}, размер=${java.io.File(src).length()})")
-            r
+            if (shellForce() == 3) { shellDiag(path); return@load null }
+            if (shellForce() !in 1..3) diskGet(ctx, dkey)?.let { return@load it }
+            fun done(b: Bitmap?): Bitmap? {
+                if (b != null) { diskPut(ctx, dkey, b); if (why.isNotEmpty()) lgOnce("ok:$dkey", "значок получен: ${head()}; $why") }
+                return b
+            }
+            var shellTried = false
+            fun viaShell(): Bitmap? {
+                shellTried = true
+                if (shellFailedRecently(dkey)) { why.append("через оболочку: недавно не вышло, повтор позже; "); return null }
+                val b = iconViaShell(path, false, why)
+                if (b == null) synchronized(shellFail) { shellFail[dkey] = System.currentTimeMillis() }
+                return b
+            }
+            if (ext == "apk" && (!can || shellForce() in 1..2) && Adb.bytesChannel() != null) viaShell()?.let { return@load done(it) }
+            var src = path
+            if (!can && saf && safOk) {
+                if ((SafAccess.stat(path)?.size ?: Long.MAX_VALUE) > 400L * 1024 * 1024) why.append("SAF: файл больше 400 МБ, копия не делается; ")
+                else {
+                    SafAccess.openIn(path).use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
+                    src = copy.path
+                    why.append("значок читается из SAF-копии (${copy.length()} Б); ")
+                }
+            } else if (!can && !saf) {
+                // файл приложению не открывается, а список показан: копия через ADB или root (до 150 МБ) и значок из неё
+                if (size > 150L * 1024 * 1024) why.append("файл недоступен приложению и больше 150 МБ ($size Б), копия через ADB не делается; ")
+                else try {
+                    kotlinx.coroutines.runBlocking { Adb.pull(path, copy) }
+                    if (copy.length() > 0) { src = copy.path; why.append("значок читается из копии через ADB/root (${copy.length()} Б); ") }
+                    else why.append("копия через ADB пустая (ADB не подключён?); ")
+                } catch (e: Throwable) { why.append("копия через ADB не вышла: ${e.javaClass.simpleName}: ${e.message}; ") }
+            }
+            if (!can && src == path && ext == "apk" && !shellTried) why.append("файл недоступен приложению (нет прав), оболочки нет; ")
+            val r = if (!can && src == path) null else iconOfFile(ctx, src, ext, tmpDir, why)
+            if (r != null) return@load done(r)
+            // прямое чтение не дало значка, а оболочка ещё не пробовалась: читаем куски архива оболочкой
+            if (ext == "apk" && can && !shellTried && Adb.bytesChannel() != null) viaShell()?.let { return@load done(it) }
+            lgOnce("no:$dkey", "значка нет: ${head()}; $why")
+            null
         } catch (e: Throwable) {
-            AppLog.w("ApkIcon", "сбой чтения значка: $path: ${e.javaClass.simpleName}: ${e.message}")
+            lg("сбой чтения значка: ${head()}: ${e.javaClass.simpleName}: ${e.message}; $why")
             throw e
         } finally { copy.delete() }
     }
 
-    private fun iconOfFile(ctx: Context, src: String, ext: String, tmpDir: java.io.File): Bitmap? =
-        if (ext == "apk") iconOfApk(ctx, src) else iconOfBundle(ctx, src, tmpDir)
+    private fun iconOfFile(ctx: Context, src: String, ext: String, tmpDir: java.io.File, why: StringBuilder): Bitmap? =
+        if (ext == "apk") iconOfApk(ctx, src, why) else iconOfBundle(ctx, src, tmpDir, why)
 
     /**
      * 11.0: значок APK для источников без обычного пути файла (телефон по ADB, сеть, облако). Сначала дисковый кэш значков; если его нет и [allowFetch],
      * файл (до 150 МБ) копируется во временный файл, значок вынимается и сохраняется в кэш (PNG), копия удаляется. Облако без кэша не качается
      * (трафик и квота): [allowFetch] = false, значок остаётся обычным. Не вышло: null.
      */
-    suspend fun apkIconRemote(ctx: Context, key: String, size: Long, ext: String, allowFetch: Boolean, fetch: suspend (java.io.File) -> Unit): Bitmap? {
+    suspend fun apkIconRemote(ctx: Context, key: String, size: Long, ext: String, allowFetch: Boolean, devPath: String? = null, fetch: suspend (java.io.File) -> Unit): Bitmap? {
         val mk = "ar:$key"
         cache.get(mk)?.let { return it }
+        lgOnce("st:$mk", "старт чтения значка (удалённый источник): ${devPath ?: key} (размер=$size, загрузка=${if (allowFetch) "да" else "нет"}, канал оболочки=${Adb.bytesChannel(true) ?: "нет"})")
         val dir = java.io.File(ctx.cacheDir, "apkicons").apply { mkdirs() }
-        val png = java.io.File(dir, sha1(key) + ".png")
+        val png = java.io.File(dir, sha1(key + cacheSalt()) + ".png")
         if (png.isFile) runCatching { BitmapFactory.decodeFile(png.path) }.getOrNull()?.let { cache.put(mk, it); return it }
-        if (!allowFetch || size <= 0L || size > 150L * 1024 * 1024) return null
+        // 17.0 (код 81): файл лежит на подключённом по ADB устройстве: части архива читаются оболочкой (`unzip -p`), копия не нужна, размер не ограничен
+        val shellOk = devPath != null && ext == "apk" && allowFetch && Adb.bytesChannel(true) != null
+        if (!shellOk && (!allowFetch || size <= 0L || size > 150L * 1024 * 1024)) {
+            if (allowFetch && size > 150L * 1024 * 1024) lgOnce("big:$key", "значка нет: $key ($size Б): файл больше 150 МБ, а оболочки для чтения кусков нет (ADB не подключён?)")
+            return null
+        }
         if (synchronized(none) { none[mk]?.let { t -> System.currentTimeMillis() - t <= 20_000L } == true }) return null
         val res = apkGate.withPermit {
             remoteGate.withPermit {
                 cache.get(mk) ?: withContext(Dispatchers.IO) {
                     val tmpDir = java.io.File(ctx.cacheDir, "apkicon").apply { mkdirs() }
                     val copy = java.io.File(tmpDir, "r" + System.nanoTime().toString(36) + "." + ext)
+                    val why = StringBuilder()
                     try {
+                        if (shellOk && !shellFailedRecently(mk)) {
+                            val b = iconViaShell(devPath!!, true, why)
+                            if (b != null) { runCatching { png.outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }; prune(dir) }; lgOnce("ok:$mk", "значок получен: $devPath ($size Б, устройство по ADB, Android ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER} ${Build.MODEL}); $why"); return@withContext b }
+                            synchronized(shellFail) { shellFail[mk] = System.currentTimeMillis() }
+                        }
+                        if (size <= 0L || size > 150L * 1024 * 1024) { lgOnce("no:$mk", "значка нет: $devPath ($size Б, устройство по ADB, Android ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER} ${Build.MODEL}); $why"); return@withContext null }
                         fetch(copy)
-                        val r = iconOfFile(ctx, copy.path, ext, tmpDir)
-                        if (r == null) AppLog.w("ApkIcon", "значок не получен из копии: $key (размер копии ${copy.length()})")
+                        val r = iconOfFile(ctx, copy.path, ext, tmpDir, why)
+                        if (r == null) lgOnce("no:$mk", "значок не получен из копии: ${devPath ?: key} (размер копии ${copy.length()}, Android ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER} ${Build.MODEL}); $why")
                         else runCatching { png.outputStream().use { r.compress(Bitmap.CompressFormat.PNG, 90, it) }; prune(dir) }
                         r
                     } catch (e: kotlinx.coroutines.CancellationException) { throw e
                     } catch (e: Throwable) {
-                        AppLog.w("ApkIcon", "сбой значка из удалённого файла: $key: ${e.javaClass.simpleName}: ${e.message}")
+                        lg("сбой значка из удалённого файла: $key: ${e.javaClass.simpleName}: ${e.message}")
                         null
                     } finally { copy.delete() }
                 }
@@ -423,10 +677,26 @@ object Thumbs {
     private suspend fun load(key: String, g: Semaphore = gate, block: () -> Bitmap?): Bitmap? {
         cache.get(key)?.let { return it }
         if (synchronized(none) { none[key]?.let { t -> !((key.startsWith("a:") || key.startsWith("ar:")) && System.currentTimeMillis() - t > 20_000L) } == true }) return null
+        val isApk = key.startsWith("a:") || key.startsWith("ar:")
+        if (isApk && synchronized(inflight) { key in inflight }) return null   // это чтение ещё идёт (прошлая попытка не закончилась): вторую не запускаем
         return g.withPermit {
-            cache.get(key) ?: withContext(Dispatchers.IO) { runCatching(block).getOrNull() }.also { b -> if (b != null) { cache.put(key, b); synchronized(none) { none.remove(key) } } else synchronized(none) { none[key] = System.currentTimeMillis() } }
+            cache.get(key) ?: run {
+                val b = if (!isApk) withContext(Dispatchers.IO) { runCatching(block).getOrNull() } else {
+                    // 16.2: чтение значка APK идёт в отдельной задаче и ждётся не дольше 25 с: зависшее чтение (медленный файл, система не отвечает) раньше занимало место в очереди (2 места)
+                    // навсегда, и у остальных APK значки не появлялись, а в журнале ничего не писалось
+                    synchronized(inflight) { inflight += key }
+                    val t0 = System.currentTimeMillis()
+                    val d = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).let { sc -> sc.async { runCatching(block).getOrNull() } }
+                    d.invokeOnCompletion { synchronized(inflight) { inflight -= key }; runCatching { d.getCompleted() }.getOrNull()?.let { cache.put(key, it) } }
+                    kotlinx.coroutines.withTimeoutOrNull(25_000L) { d.await() }.also { if (it == null && d.isActive) lgOnce("to:$key", "значок не успел за 25 с, чтение продолжается в фоне: $key (прошло ${System.currentTimeMillis() - t0} мс)") }
+                }
+                if (b != null) { cache.put(key, b); synchronized(none) { none.remove(key) } } else synchronized(none) { none[key] = System.currentTimeMillis() }
+                b
+            }
         }
     }
+    private val inflight = HashSet<String>()
+    private val bgScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 }
 
 /** Дата «2026-11-08 03:32» на экране как «08.11.2026 03:32» (день.месяц.год). */
@@ -437,12 +707,15 @@ fun fmDate(s: String): String = Regex("""^(\d{4})-(\d{2})-(\d{2})(.*)$""").repla
  * приложения; если для типа выбрано «открывать в другом приложении», значок этого приложения.
  */
 /** 11.0: APK на источнике без обычного пути (ADB, сеть, облако): ключ, размер и способ получить файл во временную копию. */
-class RemoteApk(val key: String, val size: Long, val allowFetch: Boolean, val fetch: suspend (java.io.File) -> Unit)
+class RemoteApk(val key: String, val size: Long, val allowFetch: Boolean, val devPath: String? = null, val fetch: suspend (java.io.File) -> Unit)
 
 @Composable
 fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifier: Modifier = Modifier, remote: RemoteApk? = null) {
     val customSpec = CustomIcons.specFor(ext, localPath, fileCat(ext))
-    if (customSpec != null) { CustomIconView(customSpec, size, modifier); return }
+    if (customSpec != null) {
+        if (fileCat(ext) == FCat.APK) LaunchedEffect(name) { Thumbs.apkBranch(name, localPath, "свой значок для типа/расширения (CustomIcons), значок из APK не запрашивается") }
+        CustomIconView(customSpec, size, modifier); return
+    }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val cat = fileCat(ext)
     // запомненный выбор программы для расширения: значок файла = значок этой программы (у фото и видео бейджем в углу поверх миниатюры)
@@ -460,9 +733,11 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
     val apkOn = UiPrefs.apkIcons
     LaunchedEffect(localPath, other, remote?.key, apkOn) {
         // 20.11.2026 (wad72): настройка «Значок приложения у .apk» выключена: у APK обычный значок типа
-        if (cat == FCat.APK && !apkOn) { bmp = null; return@LaunchedEffect }
+        if (cat == FCat.APK && !apkOn) { bmp = null; Thumbs.apkBranch(name, localPath, "настройка «Значок приложения у .apk» выключена"); return@LaunchedEffect }
+        if (cat == FCat.APK && localPath == null && remote == null) Thumbs.apkBranch(name, null, "нет пути и нет удалённого источника (localPath=null, remote=null): значок не запрашивается")
         if (localPath == null && remote != null && other == null && cat == FCat.APK) {
-            bmp = Thumbs.peek("ar:" + remote.key) ?: run { delay(150); Thumbs.apkIconRemote(ctx, remote.key, remote.size, ext, remote.allowFetch, remote.fetch) }
+            Thumbs.apkBranch(name, remote.devPath, "удалённый источник (устройство по ADB/сеть/облако) размер=${remote.size} загрузка=${if (remote.allowFetch) "да" else "нет"}")
+            bmp = Thumbs.peek("ar:" + remote.key) ?: run { delay(150); Thumbs.apkIconRemote(ctx, remote.key, remote.size, ext, remote.allowFetch, remote.devPath, remote.fetch) }
             return@LaunchedEffect
         }
         if (other != null) {
@@ -472,6 +747,7 @@ fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifi
         }
         if (localPath == null || (!UiPrefs.thumbs && cat != FCat.APK)) return@LaunchedEffect   // 11.0: значок приложения у APK не зависит от «Миниатюр» (они для фото и видео)
         val key = when (cat) { FCat.PHOTO -> "p:$localPath"; FCat.VIDEO -> "v:$localPath"; FCat.APK -> Thumbs.apkKey(localPath); else -> null } ?: return@LaunchedEffect
+        if (cat == FCat.APK) Thumbs.apkBranch(name, localPath, "локальный путь: значок читается из файла")
         bmp = Thumbs.peek(key) ?: run {
             delay(120)       // при быстрой прокрутке строка успевает уйти с экрана до загрузки
             when (cat) { FCat.PHOTO -> Thumbs.photo(localPath); FCat.VIDEO -> Thumbs.video(localPath); else -> Thumbs.apkIcon(ctx, localPath) }

@@ -234,6 +234,7 @@ fun UploadDialog(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var clearAsk by remember { mutableStateOf(false) }
     val addr = remember { Lan.myAddress()?.first }
     val fr = remember { FocusRequester() }
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -267,8 +268,13 @@ fun UploadDialog(onApks: (List<ApkFile>) -> Unit, onClose: () -> Unit) {
                         onApks(list)
                     }
                 }
-                Chip(stringResource(R.string.wifi_clear), false) { UploadServer.dir?.listFiles()?.forEach { it.delete() }; files = emptyList() }
+                Chip(stringResource(R.string.wifi_clear), false) { if (files.isNotEmpty()) clearAsk = true }
             }
         }
     }
+    // 17.0: удаление всегда с подтверждением
+    if (clearAsk) ConfirmDeleteAlert(
+        what = stringResource(R.string.cd_wifi_clear, files.size),
+        onYes = { clearAsk = false; UploadServer.dir?.listFiles()?.forEach { it.delete() }; files = emptyList() }, onNo = { clearAsk = false },
+    )
 }

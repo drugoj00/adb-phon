@@ -137,6 +137,20 @@ object Bundles {
         best.paths
     }.getOrNull()
 
+    private fun langKey(l: String) = when (l) { "id" -> "in"; "he" -> "iw"; "yi" -> "ji"; "jv" -> "jw"; else -> l }
+
+    /**
+     * 17.0 (код 83): основной язык устройства, которого нет среди языковых частей набора (например, в наборе только en, а язык телефона ru).
+     * null: язык есть, он английский или в наборе нет языковых частей (тогда строки лежат в основной части).
+     */
+    internal fun missingLanguage(names: List<String>, primary: String? = null): String? {
+        val langs = names.mapNotNull { kindOf(it.substringAfterLast('/')).lang }.map { langKey(it) }
+        if (langs.isEmpty()) return null
+        val p = primary ?: runCatching { android.os.LocaleList.getDefault()[0].language }.getOrNull() ?: Locale.getDefault().language
+        val k = langKey(p)
+        return if (k == "en" || k in langs) null else p
+    }
+
     /** Часть привязана к процессору, плотности экрана или языку (config-часть). */
     internal fun isConfigPart(file: String): Boolean = kindOf(file.substringAfterLast('/')).let { it.abi != null || it.dpi != null || it.lang != null }
 
@@ -234,9 +248,12 @@ object Bundles {
             val obbFinal = if (keepZip.exists()) obbItems.map { it.copy(zip = keepZip) } else obbItems
             val total = parts.sumOf { it.length() } + obbs.sumOf { it.size.coerceAtLeast(0) }
             val name = (label ?: fallbackName) + "  (" + ctx.getString(R.string.bundle_parts, parts.size) + (if (obbFinal.isNotEmpty()) ", OBB" else "") + ")"
-            return ApkFile(name, Uri.fromFile(baseFile), total, null, null, parts, obbFinal, pkg)
+            return ApkFile(name, Uri.fromFile(baseFile), total, null, null, parts, obbFinal, pkg, missingLanguage(cand))
         }
     }
+
+    /** Ответ системы на последнюю установку набора по ADB/root (для понятной причины и журнала). */
+    @Volatile var lastRaw: String = ""
 
     /** Копирует OBB в память устройства. Возвращает число скопированных файлов или -1, если нет доступа к памяти. */
     fun copyObb(items: List<ObbItem>): Int {
@@ -304,6 +321,7 @@ object Bundles {
         }
         onPhase?.invoke(1)
         val r = Adb.installFiles(parts, flags)
+        lastRaw = r
         if (!r.contains("Success", true)) { deleteObb(f.obb); return false }
         return true
     }
