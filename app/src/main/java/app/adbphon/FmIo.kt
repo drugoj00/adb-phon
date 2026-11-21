@@ -128,10 +128,10 @@ object FmIo {
             val arr = first ?: throw NeedPriv()
             // 19.11.2026: один stat на запись вместо трёх (isDirectory, length, lastModified): на FUSE каждый вызов дорог (список в 3000 файлов: 290 мс -> ~170 мс)
             val fast = FmSub.mode != FmSub.CREATED
-            arr.filter { it.name != FmTrash.DIR }.map { f ->
+            parallelMapNotNull(arr.filter { it.name != FmTrash.DIR }) { f ->
                 if (fast) {
                     val st = runCatching { android.system.Os.stat(f.path) }.getOrNull()
-                    if (st != null) { val dir = android.system.OsConstants.S_ISDIR(st.st_mode); return@map FmItem(f.name, dir, if (dir) 0L else st.st_size, FmSub.stampMs(st.st_mtime * 1000L)) }
+                    if (st != null) { val dir = android.system.OsConstants.S_ISDIR(st.st_mode); return@parallelMapNotNull FmItem(f.name, dir, if (dir) 0L else st.st_size, FmSub.stampMs(st.st_mtime * 1000L)) }
                 }
                 FmItem(f.name, f.isDirectory, if (f.isDirectory) 0L else f.length(), FmSub.stamp(f))
             }

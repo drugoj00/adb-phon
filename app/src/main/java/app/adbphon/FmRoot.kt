@@ -80,6 +80,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
@@ -433,6 +434,11 @@ object FmRootCfg {
     }
 
     private suspend fun loadKidsNow(id: String, favs: List<NetConn>) {
+        val perfK = System.nanoTime()
+        try { loadKidsNow2(id, favs) } finally { PerfLog.mark("loadKids $id: ${(System.nanoTime() - perfK) / 1_000_000} мс") }
+    }
+
+    private suspend fun loadKidsNow2(id: String, favs: List<NetConn>) {
         kidErr.remove(id); kidErrOwnKey.remove(id)
         // облачные узлы без модуля «ADB-phon Облака»: сеть не трогаем, узел покажет «Нужен модуль облаков»
         if ((id.startsWith("N|cloud|") || (id.startsWith("T|") && !NetTrash.isRid(id.removePrefix("T|")))) && !CloudModule.ok(Fm.sctx)) { kidErr[id] = CloudModule.MARK; return }
@@ -470,7 +476,9 @@ object FmRootCfg {
                 AdbFs.list(path).filter { it.isDir }.take(300).map { TK(it.name, "D|" + it.path, it.path, true, 0L, it.date) }
             } else if (id.startsWith("L|")) {
                 val path = id.removePrefix("L|")
+                val perfL = System.nanoTime()
                 val plain = withContext(Dispatchers.IO) { File(path).listFiles() }
+                PerfLog.mark("listFiles ${plain?.size} шт: ${(System.nanoTime() - perfL) / 1_000_000} мс")
                 if ((plain == null || plain.isEmpty()) && FmIo.privEnabled && (plain == null || FmIo.restricted(path) || path.trimEnd('/').isEmpty())) {
                     // /data и другие закрытые места: список читает root (или ADB), как и в обычном списке «Файлов»
                     FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
@@ -484,13 +492,14 @@ object FmRootCfg {
                     val fast = FmSub.mode != FmSub.CREATED
                     class Ent(val f: File, val dir: Boolean, val size: Long, val dt: String, val low: String)
                     val ents = ArrayList<Ent>(plain?.size ?: 0)
-                    for (f in plain.orEmpty()) {
+                    ents.addAll(parallelMapNotNull(plain.orEmpty().asList()) { f ->
                         val nm = f.name
-                        if (nm.startsWith(".")) continue
+                        if (nm.startsWith(".")) return@parallelMapNotNull null
                         val st = if (fast) runCatching { android.system.Os.stat(f.path) }.getOrNull() else null
-                        if (st != null) { val d = android.system.OsConstants.S_ISDIR(st.st_mode); ents.add(Ent(f, d, if (d) 0L else st.st_size, FmSub.stampMs(st.st_mtime * 1000L), nm.lowercase())) }
-                        else { val d = f.isDirectory; ents.add(Ent(f, d, if (d) 0L else f.length(), FmSub.stamp(f), nm.lowercase())) }
-                    }
+                        if (st != null) { val d = android.system.OsConstants.S_ISDIR(st.st_mode); Ent(f, d, if (d) 0L else st.st_size, FmSub.stampMs(st.st_mtime * 1000L), nm.lowercase()) }
+                        else { val d = f.isDirectory; Ent(f, d, if (d) 0L else f.length(), FmSub.stamp(f), nm.lowercase()) }
+                    })
+                    PerfLog.mark("stat всех: ${(System.nanoTime() - perfL) / 1_000_000} мс (накоплено)")
                     ents.sortWith(compareByDescending<Ent> { it.dir }.thenBy { it.low })
                     appCount[id] = ents.size
                     ents.take(KEEP).map { if (it.dir) TK(it.f.name, "L|" + it.f.absolutePath, it.f.absolutePath, true, 0L, it.dt) else TK(it.f.name, "F|" + it.f.absolutePath, it.f.absolutePath, false, it.size, it.dt) }
@@ -694,6 +703,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val tv = Marq.tv
     val prim = MaterialTheme.colorScheme.primary
     val (devTotal, devFree) = remember(p.root) { statOf("/sdcard") }
+    val perfT0 = System.nanoTime()
     val rows = ArrayList<RR>()
     val visOpen = ArrayList<String>()
     rows += RR("h:mem", stringResource(R.string.rt_group_storage), Icons.Filled.PhoneAndroid, prim, header = 1)
@@ -738,7 +748,8 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         visOpen += id
         val ks0 = FmRootCfg.kids[id]
         // 10.0 (chk): сначала сортировка по настройке, потом обрезка до LIMIT строк (раньше обрезалось по имени, и при «по дате»/«по размеру» в больших папках нужное отсекалось)
-        val ks = ks0?.let { FmRootCfg.sortKids(p, id, it) }?.let { if (id.startsWith("L|") || id.startsWith("N|")) it.take(FmRootCfg.LIMIT) else it }
+        val ks = ks0?.let { PerfLog.t("sortKids(${it.size})", 1) { FmRootCfg.sortKids(p, id, it) } }?.let { if (id.startsWith("L|") || id.startsWith("N|")) it.take(FmRootCfg.LIMIT) else it }
+        if (ks != null && AppLog.enabled) Thumbs.logList("дерево", id, ks.count { !it.isDir && it.name.substringAfterLast('.', "").lowercase().let { e -> e == "apk" || e == "apks" || e == "xapk" || e == "apkm" } })
         if (ks == null) {
             val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
             // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
@@ -778,6 +789,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             return
         }
         if (ks.isEmpty()) { rows += RR("t:" + id + ":empty", Fm.str(R.string.tr_none), Icons.Filled.Folder, Color(0xFF9E9E9E), level = level); return }
+        val perfLoop = System.nanoTime()
         ks.forEach { k ->
             if (k.id.startsWith("Ti|")) {
                 val ti = CloudTrash.tkItems[k.id]
@@ -802,7 +814,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 rows += RR("t:" + k.id, k.name, iconFor(item), Color(0xFF90A4AE), level = level, file = item, dateRaw = k.date.takeIf { it.isNotBlank() }, lpath = if (id.startsWith("L|") && item.ext in setOf("apk", "apks", "xapk", "apkm")) k.path else null,
                     // 11.0: значок APK и на телефоне по ADB, и в сети: временная копия (до 150 МБ), облако только из кэша значков
                     remoteApk = if (!id.startsWith("L|") && k.size > 0 && item.ext in setOf("apk", "apks", "xapk", "apkm") && (c != null || id.startsWith("D|")))
-                        RemoteApk((if (c != null) "N|" + c.kind + "|" + c.host + "|" + c.user else "D") + "|" + k.path + "|" + k.size + "|" + k.date, k.size, c == null || c.kind != "cloud") { dest ->
+                        RemoteApk((if (c != null) "N|" + c.kind + "|" + c.host + "|" + c.user else "D") + "|" + k.path + "|" + k.size + "|" + k.date, k.size, c == null || c.kind != "cloud", if (c == null) k.path else null) { dest ->
                             if (c != null) FmRootCfg.fsFor(c).copyTo(k.path, dest) else Adb.pull(k.path, dest)
                         } else null,
                     act = { Fm.openFromTree(c, k.path, item) }, selE = selOf(k, id, c))
@@ -824,6 +836,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                 addKids(k.id, level + 1, c)
             }
         }
+        PerfLog.mark("addKids цикл ${ks.size} строк: ${(System.nanoTime() - perfLoop) / 1_000_000} мс")
         FmRootCfg.appCount[id]?.takeIf { it > ks.size }?.let { rows += RR("t:" + id + ":more", "… " + it, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level) }
     }
     /** Раскрытое облако или сетевой источник с корзиной: две папки, «Корзина» первой и «диск» (корень источника) второй. */
@@ -972,6 +985,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         if ("apps" in p.rootOpen) AppsFs.keys.forEach { (k, res) -> rows += RR("apps:" + k, stringResource(res), Icons.Filled.Folder, Color(0xFF9CCC65), level = 1, act = { Fm.openApps(p, k) }, treeId = "A|" + k); addKids("A|" + k, 2, null) }
     }
     if ("adb" in shown) { rows += RR("adb", stringResource(R.string.rt_adb), Icons.Filled.Android, Color(0xFF9CCC65), act = { fmLeaveRoot(p); Fm.setSource(p, "adb") }, treeId = "D|/"); pend("D|/"); addKids("D|/", 1, null) }
+    PerfLog.mark("строки собраны (до пост-обработки): ${(System.nanoTime() - perfT0) / 1_000_000} мс, всего ${rows.size}")
     rows += RR("showhide", stringResource(R.string.rt_showhide), Icons.Filled.Settings, Color(0xFF78909C), act = { Fm.dlg = FmDlg.RootShow() })
 
     // число папок и файлов в корнях томов: в фоне
@@ -995,6 +1009,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     LaunchedEffect(Unit) { androidx.compose.runtime.snapshotFlow { p.rootSel }.collect { s -> if (s != null) ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putString("root_sel_p${p.id}", s).apply() } }
     // 10.11.2026 (владелица: «галочка у любого раскрытого устройства или папки, везде и у всех»): у каждой раскрытой строки дерева (устройство, том, облако, диск, папка, корзина) галочка отмечает всё, что отмечаемо в ней (прямые дети);
     // у строки без своей отметки и свёрнутой галочка тоже есть: нажатие раскрывает узел и отмечает всё внутри после загрузки
+    val perfP = System.nanoTime()
     val applyNow = ArrayList<Pair<String, List<FmRootCfg.SelE>>>()
     for (i in rows.indices) {
         val r = rows[i]; val tid = r.treeId ?: continue
@@ -1004,6 +1019,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         while (j < rows.size && rows[j].header != 1 && rows[j].level > r.level) { if (rows[j].level == r.level + 1) rows[j].selE?.let { acc[it.key] = it }; j++ }
         if (acc.isNotEmpty()) { r.selAll = acc.values.toList(); if (tid in FmRootCfg.selAllPending) applyNow += tid to r.selAll }
     }
+    PerfLog.mark("пост: selAll ${(System.nanoTime() - perfP) / 1_000_000} мс")
     androidx.compose.runtime.SideEffect { for ((tid, list) in applyNow) if (FmRootCfg.selAllPending.remove(tid)) list.forEach { FmRootCfg.sel[it.key] = it } }
     // 10.11.2026 (владелица): групповых галочек (LAN, Облачные диски, Wi-Fi, Приложения) и галочек у аккаунтов облаков нет: галочка только у раскрытой строки, где ПРЯМО внутри есть папки или файлы
     // 10.11.2026 (владелица): галочка «всё внутри» только у групп, у строки «ADB» и у РАСКРЫТЫХ строк; у свёрнутых устройств и папок её нет
@@ -1014,35 +1030,51 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         r.selReq = true
         if (tid in virtIds) r.selTarget = tid + (if (tid.startsWith("N|cloud|")) "/" else NetTrash.ROOT_MARK)
     }
-    for (i in rows.indices) {
-        val lv = rows[i].level
-        if (lv <= 0 || rows[i].header == 1) continue
-        // 10.11.2026 (владелица: «в X-plore там одна линия»): вертикаль уровня k идёт от родителя вниз до раскрытого ребёнка цепочки (или до последнего ребёнка, если раскрытых нет); у соседей параллельных линий и засечек нет
-        val moreArr = BooleanArray(lv)
-        var tickOwn = true; var halfOwn = true
-        for (k in 1..lv) {
-            var pj = i - 1
-            while (pj >= 0 && !(rows[pj].level == k - 1 && rows[pj].header == 0)) pj--
-            if (pj < 0) continue
+    // 21.11.2026 (ускорение «тормозит раскрытие»): раньше для каждой строки и каждого уровня заново шёл поиск родителя назад и проход по всем детям родителя (O(n²): 244 строки
+    // раскрытой папки занимали на Galaxy A7 около 2 секунд в главном потоке). Теперь родитель уровня берётся из «последней строки уровня», а итог по детям родителя считается один раз.
+    run {
+        val maxLv = 64
+        val lastAt = IntArray(maxLv) { -1 }
+        val endOf = IntArray(rows.size) { -2 }          // конец вертикали детей родителя: -1 нет детей, -2 ещё не считали
+        val openOf = BooleanArray(rows.size)            // у родителя есть раскрытый ребёнок
+        fun endFor(pj: Int): Int {
+            var e = endOf[pj]
+            if (e != -2) return e
+            val k = rows[pj].level + 1
             var j = pj + 1; var lastChild = -1; var openChild = -1
             while (j < rows.size && rows[j].header != 1 && rows[j].level >= k) {
                 if (rows[j].level == k) { lastChild = j; if (j + 1 < rows.size && rows[j + 1].header != 1 && rows[j + 1].level > k) openChild = j }
                 j++
             }
-            if (lastChild < 0) continue
-            val end = if (openChild >= 0) openChild else lastChild
-            moreArr[k - 1] = i < end
-            if (k == lv) { halfOwn = i == end; tickOwn = if (openChild >= 0) i == end else true }
+            e = if (lastChild < 0) -1 else if (openChild >= 0) openChild else lastChild
+            endOf[pj] = e; openOf[pj] = openChild >= 0
+            return e
         }
-        rows[i].more = moreArr; rows[i].tick = tickOwn; rows[i].half = halfOwn
-        rows[i].lx = FloatArray(lv) { idx ->
-            val k = idx + 1
-            var j = i - 1
-            while (j >= 0 && !(rows[j].level == k - 1 && rows[j].header == 0)) j--
-            val groupParent = j >= 0 && rows[j].expandKey != null
-            (TreeDim.pad + TreeDim.ind * (k - 1) + (if (groupParent) 9 else if (tv) 15 else TreeDim.arrow(false) / 2)).toFloat()
+        val padPx = TreeDim.pad; val indPx = TreeDim.ind; val half = TreeDim.arrow(false) / 2
+        for (i in rows.indices) {
+            val r = rows[i]
+            val lv = r.level
+            if (lv > 0 && r.header != 1) {
+                val moreArr = BooleanArray(lv)
+                var tickOwn = true; var halfOwn = true
+                val lxArr = FloatArray(lv)
+                for (k in 1..lv) {
+                    val pj = if (k - 1 < maxLv) lastAt[k - 1] else -1
+                    val groupParent = pj >= 0 && rows[pj].expandKey != null
+                    lxArr[k - 1] = (padPx + indPx * (k - 1) + (if (groupParent) 9 else if (tv) 15 else half)).toFloat()
+                    if (pj < 0) continue
+                    val end = endFor(pj)
+                    if (end < 0) continue
+                    moreArr[k - 1] = i < end
+                    if (k == lv) { halfOwn = i == end; tickOwn = if (openOf[pj]) i == end else true }
+                }
+                r.more = moreArr; r.tick = tickOwn; r.half = halfOwn
+                r.lx = lxArr
+            }
+            if (r.header == 0 && lv in 0 until maxLv) lastAt[lv] = i
         }
     }
+    PerfLog.mark("пост: more/lx ${(System.nanoTime() - perfP) / 1_000_000} мс (накоплено)")
     // 10.0 (fm1): видимые отмечаемые строки: элемент → его содержимое (строки уровнем ниже под раскрытой папкой) и верхний уровень (родитель без своей отметки)
     val visSel = run {
         val byKey = LinkedHashMap<String, FmRootCfg.SelE>(); val kidsOf = HashMap<String, MutableList<String>>(); val top = ArrayList<String>()
@@ -1060,6 +1092,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         }
         FmRootCfg.VisSel(byKey, kidsOf, top)
     }
+    PerfLog.mark("пост: visSel ${(System.nanoTime() - perfP) / 1_000_000} мс (накоплено)")
     androidx.compose.runtime.SideEffect { val vis = rows.filter { it.header == 0 }; FmRootCfg.setRows(p.id, vis.map { it.key }, vis.map { it.level }); FmRootCfg.setVisSel(p.id, visSel) }
     val rootCtx = LocalContext.current
     // 19.11.2026 (4PDA, mikolkavod: «передёргивание первой вкладки в файлах при переключении по нижним значкам»): строки, которые уже есть при создании списка
@@ -1097,6 +1130,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
             FmRootCfg.scrollTarget.remove(p.id)
         }
         // «Дом»: список наверх и фокус первой строке (если пульт или мышь/клавиатура уже использовались)
+        PerfLog.mark("FmRootList: строк ${rows.size}, сборка строк ${(System.nanoTime() - perfT0) / 1_000_000} мс")
         val firstKey = rows.firstOrNull { it.header == 0 }?.key
         // T3 (19.11.2026): «Дом» срабатывает только на нажатие, а не при каждом новом создании списка: раньше после первого нажатия «Дом» список при каждом возврате на экран
         // прокручивался наверх (и забывал положение), а на пульте фокус уходил на первую строку
@@ -1345,14 +1379,9 @@ internal fun RootSelBar(p: FmPane) {
             }
         }
     }
-    if (confirmForever) LAlertDialog(
-        onDismissRequest = { confirmForever = false },
-        title = { Text(stringResource(R.string.dd_t_perm, if (trash.size == 1) trash[0].name else stringResource(R.string.dd_items, trash.size))) },
-        text = { Text(stringResource(R.string.dd_s_perm), color = red, fontWeight = FontWeight.SemiBold) },
-        confirmButton = {
-            TextButton({ confirmForever = false; doForever() }) { Text(stringResource(R.string.sb_forever), color = red) }
-        },
-        dismissButton = { TextButton({ confirmForever = false }) { Text(stringResource(R.string.btn_cancel)) } },
+    if (confirmForever) ConfirmDeleteAlert(
+        what = stringResource(R.string.dd_t_perm, if (trash.size == 1) trash[0].name else stringResource(R.string.dd_items, trash.size)),
+        onYes = { confirmForever = false; doForever() }, onNo = { confirmForever = false },
     )
 }
 
@@ -1667,10 +1696,12 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
             else if (r.treeId != null && FmRootCfg.treeOn) {
                 // 10.2 (58, как в X-plore): синий треугольник только у папок, в которых что-то есть
                 val open = r.treeId in p.rootOpen
+                TreeLog.Note("Источники", r.level)
+                val tlDm = androidx.compose.ui.platform.LocalDensity.current
                 val empty = !open && cntNow != null && cntNow.first + cntNow.second == 0
                 val arrowCol = treeArrowColor()   // 20.11.2026: цвет стрелок по настройке (по умолчанию в цвет текста)
                 if (empty) Spacer(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp))
-                else Box(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp).tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
+                else Box(Modifier.padding(end = TreeDim.rootSp(r.level).dp).size(TreeDim.arrow(tv).dp).onGloballyPositioned { cc -> TreeLog.measured("Источники", r.level, tlDm.density, tlDm.fontScale, "поле стрелки", cc.positionInParent().x, cc.size.width.toFloat()) }.tapOnly { rowToggle(r.treeId) }, contentAlignment = Alignment.Center) {   // 14.0: стрелка без узла семантики, без фокуса и без ряби (tapOnly) (раскрывает и нажатие на строку), меньше узлов семантики
                     androidx.compose.foundation.Canvas(Modifier.size(if (tv) 16.dp else 12.dp)) {
                         val c = arrowCol
                         val path = androidx.compose.ui.graphics.Path().apply {
@@ -1801,7 +1832,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
                     val nn = if (dot > 0 && !e.isDir) e.name.substring(0, dot) + " (1)" + e.name.substring(dot) else e.name + " (1)"
                     Fm.copyMoveTo(false, pane(e.parentPath), pane(e.parentPath), "local", e.parentPath, listOf(e.name), nn); refresh()
                 }
-                if (!multiSel && !e.isDir && e.name.endsWith(".apk", true) && ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarket(pane(e.parentPath), FmItem(e.name, false, 0, "")) }
+                if (!multiSel && !e.isDir && e.name.substringAfterLast('.').lowercase().let { x -> x == "apk" || ApkInstall.isBundle(x) } && ApkInstall.installedStores(Fm.sctx).isNotEmpty()) item(R.string.inst_market) { ApkInstall.openMarket(pane(e.parentPath), FmItem(e.name, false, 0, "")) }
                 item(R.string.fm_props) { Fm.props(pane("/"), rel) }
                 item(R.string.perm_title) { Fm.dlg = FmDlg.Perms(pane("/"), rel) }
                 item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(pane(e.parentPath), tg.filter { it.parentPath == e.parentPath }.map { it.name }) }

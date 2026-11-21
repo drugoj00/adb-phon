@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -167,15 +169,20 @@ private fun T(text: String, size: Float, modifier: Modifier = Modifier, weight: 
 }
 
 /** Общий каркас окон копирования, переноса и удаления: одна ширина, скругление 24, отступы 16, шаг 8/12/16. Сверху ряд кнопок-значков. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-fun FmDialogFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun FmDialogFrame(onDismiss: () -> Unit, enterFocus: FocusRequester? = null, content: @Composable ColumnScope.() -> Unit) {
     val tv = Marq.tv
     LDialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             val land = maxWidth > maxHeight
             val w = if (land || tv) minOf(maxWidth * 0.88f, if (tv) 720.dp else 760.dp) else maxWidth - 20.dp
             androidx.compose.material3.Surface(Modifier.width(w).heightIn(max = maxHeight * 0.92f), shape = RoundedCornerShape(16.dp), tonalElevation = 6.dp) {
-                Column(Modifier.barScroll().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+                // 17.0: enterFocus - куда уходит фокус при входе в окно клавишей/пультом (у окна удаления «Отмена», даже если окно открыто из режима касания)
+                Column(
+                    (if (enterFocus != null) Modifier.focusProperties { enter = { enterFocus } }.focusGroup() else Modifier).barScroll().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp), content = content,
+                )
             }
         }
     }
@@ -309,8 +316,8 @@ private fun NumCell(n: CNode, w: androidx.compose.ui.unit.Dp, k: Float) {
 
 /**
  * Единое подтверждение удаления: сверху «Удалить» и «Отмена», затем что именно и куда («в корзину» или «навсегда»).
- * Навсегда: красная кнопка и «Отменить нельзя». Для удаления в корзину есть галочка «Больше не спрашивать» (ставит «Только безвозвратное»).
- * Спрашивать ли вообще, решает настройка «Подтверждение удаления» (см. Fm.askDelete).
+ * Навсегда: красная кнопка и «Отменить нельзя». 17.0: окно показывается ВСЕГДА (один файл, несколько, любая кнопка и меню), галочки «Больше не спрашивать» нет;
+ * фокус по умолчанию на «Отмена», «Удалить» только по нажатию.
  */
 @Composable
 fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
@@ -322,15 +329,13 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
     val cloud = tconn != null
     val ctype = if (tconn != null) CloudTrash.typeFor(cctx, tconn) else null
     var perm by remember { androidx.compose.runtime.mutableStateOf(d.force) }
-    var never by remember { androidx.compose.runtime.mutableStateOf(false) }
     val red = Color(0xFFC62828)
     val permanent = perm || (d.plan?.perm ?: true)
-    FmDialogFrame(close) {
+    FmDialogFrame(close, enterFocus = cancelFocus) {
         val bs = if (tv) 76.dp else 64.dp
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             DropIconButton(Icons.Filled.DeleteOutline, stringResource(R.string.fm_delete), deleteRed(), bs, Modifier.weight(1f), shortLabel = stringResource(R.string.fm_delete), labelColor = MaterialTheme.colorScheme.onSurface) {
                 close()
-                if (never && !permanent) FmDel.setConfirm(cctx, FmDel.PERM)
                 Fm.deletePermanent = permanent   // 9.3: было «perm» (только галочка): у источника без корзины удаление шло в несуществующую корзину и тихо не выполнялось
                 Fm.delete(d.pane, d.names).invokeOnCompletion { Fm.deletePermanent = false }
             }
@@ -368,10 +373,6 @@ fun DeleteDialog(d: FmDlg.Delete, close: () -> Unit) {
                 BigCheckbox(perm, { perm = it })
                 T(stringResource(R.string.tr_del_perm), 14f * k, color = if (perm) red else MaterialTheme.colorScheme.onSurface, maxLines = 2)
             }
-        }
-        if (!permanent) Row(Modifier.fillMaxWidth().clickable { never = !never }, verticalAlignment = Alignment.CenterVertically) {
-            BigCheckbox(never, { never = it })
-            T(stringResource(R.string.dd_never), 14f * k, maxLines = 2)
         }
     }
 }

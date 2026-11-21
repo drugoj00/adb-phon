@@ -141,6 +141,9 @@ class InstRun {
     var ok by mutableIntStateOf(0)
     var bad by mutableIntStateOf(0)
     val fails = mutableStateListOf<String>()
+    /** 17.0: что установлено удачно (название, версия, код версии): итог «Установлено: …» вместо общего «все пакеты». */
+    class OkItem(val label: String, val verName: String, val verCode: Long)
+    val okItems = mutableStateListOf<OkItem>()
     /** 7.6: установка уехала «В фоне» (ход ведёт служба, окно можно открыть из уведомления). */
     var background by mutableStateOf(false)
     /** 7.6: «Остановить»: оставшиеся файлы не ставятся (текущий файл дожимается). */
@@ -186,8 +189,10 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
     val sizeText = sizeLabel(f.size)
     if (m == null) {
         Column(modifier) {
-            Text(f.name, color = t.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(f.name, color = t.text, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            f.parts?.let { Text(stringResource(R.string.ii_parts, it.size), color = t.hint, fontSize = 11.sp) }
             Text(sizeText, color = t.hint, fontSize = 11.sp)
+            if (f.missLang != null) Text(stringResource(R.string.ii_lang_missing, f.missLang), color = warnCol(t.dark), fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         return
     }
@@ -198,9 +203,14 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
     Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (m.icon != null) Image(m.icon, null, Modifier.size(40.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(m.label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(m.label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val parts = f.parts?.size
-            Text(m.pkg + (if (parts != null) " · " + stringResource(R.string.ii_parts, parts) else "") + (if (!full) " · " + f.name else ""), color = t.hint, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // 17.0: на крупном шрифте подпись не обрезается: пакет, число частей и имя файла отдельными строками, до двух строк каждая
+            Text(m.pkg, color = t.hint, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (parts != null && !f.folderSet) Text(stringResource(R.string.ii_parts, parts), color = t.hint, fontSize = 11.sp)
+            if (f.folderSet) Text(stringResource(R.string.ii_set_note, parts ?: 0), color = t.hint, fontSize = 11.sp, maxLines = 2)
+            if (!full) Text(f.name, color = t.hint, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (f.missLang != null) Text(stringResource(R.string.ii_lang_missing, f.missLang), color = warn, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(kindText, color = kindCol, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             val newBytes = if (f.size > 0) f.size else m.size
             val newSizeText = sizeLabel(newBytes)
@@ -262,6 +272,11 @@ fun InstProgressView(run: InstRun) {
                 if (run.bad == 0) stringResource(R.string.ii_done_all) else stringResource(R.string.install_result_n, run.ok, run.bad),
                 color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
             )
+            // 17.0: итог с названием и версией приложения (не только «все пакеты»)
+            run.okItems.take(6).forEach { o ->
+                Text(if (o.verName.isNotEmpty()) stringResource(R.string.silent_win_done, o.label, o.verName, o.verCode.toInt()) else o.label, color = t.sub, fontSize = 12.sp)
+            }
+            if (run.okItems.size > 6) Text(stringResource(R.string.ii_more, run.okItems.size - 6), color = t.hint, fontSize = 11.sp)
             // 20.11.2026: конец: полоска просто заполнена цветом темы (не зелёная и не красная), итог и ошибки текстом
             ThemedProgress({ 1f }, Modifier.fillMaxWidth().height(6.dp), t.accent)
             if (run.fails.isNotEmpty()) {
@@ -284,9 +299,18 @@ fun InstProgressView(run: InstRun) {
 }
 
 /** Причина отказа системы на языке программы: код INSTALL_FAILED_* переводится, исходный код остаётся в скобках. */
-private fun friendlyReason(ctx: Context, raw: String): String {
+internal fun friendlyReason(ctx: Context, raw: String): String {
     val code = Regex("INSTALL_[A-Z_]+").find(raw)?.value
-    val res = when (code) {
+    val res = when {
+        code == "INSTALL_FAILED_MISSING_SPLIT" || raw.contains("must include a base package", true) -> R.string.ii_err_split
+        else -> friendlyRes(code)
+    }
+    if (res != null) return ctx.getString(res) + (if (code != null) " (" + code + ")" else "")
+    return raw.lines().firstOrNull { it.isNotBlank() }?.trim()?.take(140) ?: ctx.getString(R.string.ii_fail_generic)
+}
+
+private fun friendlyRes(code: String?): Int? {
+    return when (code) {
         "INSTALL_FAILED_UPDATE_INCOMPATIBLE" -> R.string.ii_err_incompat
         "INSTALL_FAILED_VERSION_DOWNGRADE" -> R.string.ii_err_downgrade
         "INSTALL_FAILED_INSUFFICIENT_STORAGE" -> R.string.ii_err_storage
@@ -294,8 +318,6 @@ private fun friendlyReason(ctx: Context, raw: String): String {
         "INSTALL_FAILED_NO_MATCHING_ABIS" -> R.string.ii_err_abi
         else -> null
     }
-    if (res != null) return ctx.getString(res) + " (" + code + ")"
-    return raw.lines().firstOrNull { it.isNotBlank() }?.trim()?.take(140) ?: ctx.getString(R.string.ii_fail_generic)
 }
 
 /**
@@ -344,7 +366,7 @@ private suspend fun keepDataDowngrade(ctx: Context, pkg: String, apk: File): Str
 /** Установка с отчётом о ходе: файл за файлом; понижение версии идёт через безопасный путь (копия текущей версии, возврат при неудаче). */
 suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<String, ApkMeta?>, run: InstRun, wipe: Boolean = false): Pair<Int, Int> =
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        run.ok = 0; run.bad = 0; run.fails.clear(); run.finished = false; run.running = true
+        run.ok = 0; run.bad = 0; run.fails.clear(); run.okItems.clear(); run.finished = false; run.running = true
         run.total = files.size; run.index = 0; run.done = 0L; run.phase = 0
         run.all = files.sumOf { it.size.coerceAtLeast(1L) }.coerceAtLeast(1L)
         var base = 0L
@@ -355,6 +377,7 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                 if (run.stop) { run.bad++; run.fails.add((meta?.label ?: f0.name) + ": " + ctx.getString(R.string.ii_stopped)); base += f0.size.coerceAtLeast(1L); run.done = base; continue }
                 val sz = f0.size.coerceAtLeast(1L)
                 var reason: String? = null
+                var raw = ""
                 try {
                     if (meta != null && meta.sigDiffers) throw IllegalStateException(ctx.getString(R.string.ii_sig_fail))
                     if (meta != null && meta.kind == ApkMeta.Kind.DOWNGRADE && meta.curPlainSystem) throw IllegalStateException(ctx.getString(R.string.ii_down_system))
@@ -364,8 +387,10 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                         val partsTotal = parts.sumOf { it.length() }.coerceAtLeast(1L)
                         Adb.onInstallBytes = { n -> run.done = base + n.coerceAtMost(partsTotal); if (n >= partsTotal) run.phase = 2 }
                         run.phase = if (f0.obb.isNotEmpty()) 3 else 1
+                        Bundles.lastRaw = ""
                         val ok = Bundles.installAdb(ctx, f0, if (meta?.kind == ApkMeta.Kind.DOWNGRADE) "-r -d" else "-r") { ph -> run.phase = ph }
-                        if (!ok) reason = ctx.getString(R.string.ii_fail_generic)
+                        raw = Bundles.lastRaw
+                        if (!ok) reason = if (raw.isNotBlank()) friendlyReason(ctx, raw) else ctx.getString(R.string.ii_fail_generic)
                     } else {
                         val f = Batch.materialize(f0)
                         val local: File? = f.file ?: if (meta?.kind == ApkMeta.Kind.DOWNGRADE) {
@@ -385,14 +410,18 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                             val input = local?.inputStream() ?: ctx.contentResolver.openInputStream(f.uri)!!
                             input.use { Adb.installApk(it, if (local != null) local.length() else f.size) }
                         }
+                        raw = out
                         if (!out.contains("Success", true)) reason = if (out.startsWith("FAIL:")) out.removePrefix("FAIL:") else friendlyReason(ctx, out)
                     }
                 } catch (e: Exception) {
                     val m = e.message ?: e.javaClass.simpleName
+                    raw = m
                     reason = if (m.contains("Not connected", true)) ctx.getString(R.string.shz_err_no_adb) else m.take(140)
                 }
                 Adb.onInstallBytes = null
-                if (reason == null) run.ok++ else { run.bad++; run.fails.add(run.name + ": " + reason) }
+                InstLog.result(if (Adb.isRoot) "root" else "adb", meta?.pkg ?: f0.pkg ?: (f0.parts?.firstOrNull() ?: f0.file ?: f0.uri.path?.let { java.io.File(it) })?.let { ApkIconRes.manifestHead(it.path)?.pkg }, meta?.verName, meta?.verCode, f0.parts?.size ?: 1, raw, reason == null)
+                if (reason == null) { run.ok++; run.okItems.add(InstRun.OkItem(meta?.label ?: f0.name, meta?.verName.orEmpty(), meta?.verCode ?: 0L)) }
+                else { run.bad++; run.fails.add(run.name + ": " + reason) }
                 base += sz; run.done = base
             }
         } finally {
@@ -436,6 +465,10 @@ fun InstallConfirmDialog(d: FmDlg.InstallConfirm, close: () -> Unit) {
             Column(Modifier.heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 d.files.take(40).forEach { f -> ApkInfoBlock(f, d.metas[f.name], full = d.files.size == 1, modifier = Modifier.fillMaxWidth()) }
                 if (d.files.size > 40) Text(stringResource(R.string.ii_more, d.files.size - 40), color = t.hint, fontSize = 11.sp)
+                // 17.0 (код 85): «Посмотреть в магазине» для одного пакета или набора, если установлен хотя бы один магазин
+                val mp = d.files.singleOrNull()?.let { f -> d.metas[f.name]?.pkg ?: f.pkg }
+                if (mp != null && ApkInstall.installedStores(androidx.compose.ui.platform.LocalContext.current).isNotEmpty())
+                    TextButton({ ApkInstall.openMarketPkg(mp) }) { Text(stringResource(R.string.inst_market), fontSize = 13.sp) }
             }
         },
         confirmButton = {

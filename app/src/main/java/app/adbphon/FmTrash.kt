@@ -65,19 +65,24 @@ object FmDel {
 
     fun init(ctx: Context) {
         val p = sp(ctx)
-        confirm = p.getInt("del_confirm", ALWAYS).coerceIn(ALWAYS, OFF)
+        // 17.0: подтверждение удаления всегда (прежние значения «Только безвозвратное» и «Выключено» из настроек и копий настроек не действуют)
+        confirm = ALWAYS
+        if (p.getInt("del_confirm", ALWAYS) != ALWAYS) p.edit().putInt("del_confirm", ALWAYS).apply()
         trashOn = p.getBoolean("ftrash_on", true)
         keepDays = p.getInt("ftrash_days", 30).coerceAtLeast(0)
         maxMb = p.getInt("ftrash_max_mb", 0).coerceAtLeast(0)
     }
 
-    fun setConfirm(ctx: Context, v: Int) { confirm = v; sp(ctx).edit().putInt("del_confirm", v).apply() }
+    /** 17.0: значение игнорируется, подтверждение удаления не отключается. */
+    @Suppress("UNUSED_PARAMETER")
+    fun setConfirm(ctx: Context, v: Int) { confirm = ALWAYS; sp(ctx).edit().putInt("del_confirm", ALWAYS).apply() }
     fun setTrashOn(ctx: Context, v: Boolean) { trashOn = v; sp(ctx).edit().putBoolean("ftrash_on", v).apply() }
     fun setKeepDays(ctx: Context, v: Int) { keepDays = v; sp(ctx).edit().putInt("ftrash_days", v).apply() }
     fun setMaxMb(ctx: Context, v: Int) { maxMb = v; sp(ctx).edit().putInt("ftrash_max_mb", v).apply() }
 
     /** Нужно ли окно подтверждения: [permanent] = удаление навсегда (минуя корзину) или очистка корзины. */
-    fun needAsk(permanent: Boolean): Boolean = when (confirm) { ALWAYS -> true; PERM -> permanent; else -> false }
+    @Suppress("UNUSED_PARAMETER")
+    fun needAsk(permanent: Boolean): Boolean = true
 }
 
 /** Как будет удалено: [perm] = навсегда (хотя бы часть), [big] элементов больше лимита корзины, [none] элементов там, где корзины нет. */
@@ -351,14 +356,7 @@ fun FilesDeleteSection() {
     val ctx = LocalContext.current
     val fw = androidx.compose.ui.text.font.FontWeight.Medium
     Text(stringResource(R.string.ds_confirm), fontWeight = fw)
-    EqChoices(listOf(
-        EqChoice(stringResource(R.string.ds_c_always), FmDel.confirm == FmDel.ALWAYS) { FmDel.setConfirm(ctx, FmDel.ALWAYS) },
-        EqChoice(stringResource(R.string.ds_c_perm), FmDel.confirm == FmDel.PERM) { FmDel.setConfirm(ctx, FmDel.PERM) },
-        EqChoice(stringResource(R.string.ds_c_off), FmDel.confirm == FmDel.OFF) { FmDel.setConfirm(ctx, FmDel.OFF) },
-    ), perRow = 1)
-    val off = FmDel.confirm == FmDel.OFF
-    if (off) Text(stringResource(R.string.ds_off_warn), fontSize = 12.sp, color = Color(0xFFC62828))
-    else Collapsible(stringResource(R.string.hint_more)) { Text(stringResource(R.string.ds_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
+    Text(stringResource(R.string.ds_always_note), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
     SettingSwitch(FmDel.trashOn, { FmDel.setTrashOn(ctx, it) }, stringResource(R.string.ft_switch), stringResource(R.string.ft_switch_hint))
     // 7.5: параметры корзины остаются на месте и при выключенной корзине (приглушены, не работают), чтобы страница не прыгала и нажатие по соседнему
     // пункту не попадало на «Окно терминала» и «Резервную копию», сдвинувшиеся вверх
