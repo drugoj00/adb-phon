@@ -251,6 +251,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     // 11.0: понижение: сначала без удаления; если система не даёт, отдельное окно с выбором (удаление только после него)
     var wipeAsk by remember { mutableStateOf<Pair<List<File>, Long>?>(null) }
+    var copyAsk by remember { mutableStateOf<AppCopy?>(null) }
     suspend fun install(files: List<File>, code: Long): String = ViaAsk.installOrAsk(ctx, files) {
         val r = AppBackups.installFiles(ctx, pkg, files, code)
         if (r == "nodown") wipeAsk = files to code
@@ -282,6 +283,13 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
         onClose = { browser = false },
     )
 
+    // 17.0: удаление сохранённой копии версии всегда с подтверждением
+    copyAsk?.let { c ->
+        ConfirmDeleteAlert(
+            what = stringResource(R.string.cd_ver_copy, "${c.versionName} (${c.versionCode})"),
+            onYes = { copyAsk = null; AppBackups.delete(c); tick++ }, onNo = { copyAsk = null },
+        )
+    }
     wipeAsk?.let { (wf, wc) ->
         HDialog(onDismissRequest = { wipeAsk = null }) {
             Column(Modifier.clip(RoundedCornerShape(16.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(16.dp)).padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -334,7 +342,7 @@ fun VersionsDialog(pkg: String, label: String, onClose: () -> Unit) {
                         Chip(stringResource(R.string.ver_install), installed?.second == c.versionCode) {
                             run { install(c.files, c.versionCode) }
                         }
-                        Chip(stringResource(R.string.ver_delete_copy), false) { AppBackups.delete(c); tick++ }
+                        Chip(stringResource(R.string.ver_delete_copy), false) { copyAsk = c }
                     }
                 }
                 val list = fd

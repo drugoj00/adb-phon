@@ -107,7 +107,7 @@ object RootShell {
     val short = RootSession("short")
     val long = RootSession("long")
 
-    /** null: ещё не определяли; true: su знает ключ -mm (общее пространство имён, Magisk); false: обычный su. */
+    /** null: ещё не определяли; true: su знает ключ -mm (общее пространство имён); false: обычный su. */
     @Volatile var mountMaster: Boolean? = null
         private set
     private var store: ((Boolean) -> Unit)? = null

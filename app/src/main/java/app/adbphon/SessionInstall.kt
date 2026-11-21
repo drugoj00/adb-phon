@@ -20,7 +20,16 @@ object SessionInstall {
     /** Результат сессии: [code] 0 успех, 3 отменено пользователем, остальное ошибка (-1 время вышло, -2 сбой записи). */
     class Result(val code: Int, val message: String) { val ok get() = code == 0; val cancelled get() = code == PackageInstaller.STATUS_FAILURE_ABORTED }
 
+    /** 17.0 (код 83): итог пишется в журнал (код ошибки системы, пакет, версия), причина отказа переводится на язык программы. */
     suspend fun install(ctx: Context, parts: List<File>): Result {
+        val r = installRaw(ctx, parts)
+        val info = runCatching { ctx.packageManager.getPackageArchiveInfo(parts.first().path, 0) }.getOrNull().takeIf { parts.isNotEmpty() }
+        @Suppress("DEPRECATION")
+        InstLog.result("session", info?.packageName, info?.versionName, info?.let { if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong() }, parts.size, if (r.ok) "" else (r.code.toString() + " " + r.message), r.ok)
+        return if (r.ok || r.cancelled) r else Result(r.code, friendlyReason(ctx, r.message))
+    }
+
+    private suspend fun installRaw(ctx: Context, parts: List<File>): Result {
         if (parts.isEmpty()) return Result(-2, "no files")
         if (!Integrity.safe(ctx)) return Result(-2, "integrity")
         val app = ctx.applicationContext
