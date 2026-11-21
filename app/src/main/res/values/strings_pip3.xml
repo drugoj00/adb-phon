@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_pip_mic_off">Mute microphone</string>
+    <string name="call_pip_mic_on">Turn microphone on</string>
+    <string name="call_pip_spk_off">Speaker off</string>
+    <string name="call_pip_spk_on">Speaker on</string>
+</resources>

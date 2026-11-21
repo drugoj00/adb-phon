@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="roothint_title">No root for this app</string>
+    <string name="roothint_text">Grant it in the root manager app: Superuser tab, enable ADB-phon.</string>
+    <string name="roothint_open">Open the root manager app</string>
+    <string name="roothint_retry">Retry</string>
+    <string name="roothint_not_found">Root manager app not found</string>
+    <string name="roothint_still">Root is still not granted</string>
+</resources>
