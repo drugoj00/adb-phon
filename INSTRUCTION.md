@@ -83,10 +83,10 @@ What it is: ADB-phon connects to the ADB of this phone or of another device on t
 4. **Step 4.** Link tab: enter “Pairing port” and “Pairing code”, tap “Pair”. Then tap “Connect”.
 5. **Step 5.** Check: the text “Connected to this phone”.
 
-### Android 8–10
+### Android 8-10
 
 1. **Step 1.** Once, from a computer over USB, run `adb tcpip 5555`. The “Phone in Window with Sound” program has a button for it.
-2. **Step 2.** In ADB-phon on the Link tab tap the connect button (“Android 8–10: ADB over network”) and allow debugging on the phone.
+2. **Step 2.** In ADB-phon on the Link tab tap the connect button (“Android 8-10: ADB over network”) and allow debugging on the phone.
 3. **Step 3.** After the phone reboots, repeat the command.
 
 ### Root
@@ -100,7 +100,7 @@ If the device has root, neither ADB nor a computer is needed. Tap “Connect via
 3. **Step 3.** On first connection the device asks “Allow debugging?”: tick “Always”.
 4. **Step 4.** A long press on a device in the list opens the menu “Connect” or “Disconnect”. Favorite devices can have their own names.
 
-Limits: Android 8–10 needs the command from a computer after every phone reboot. Without developer options ADB over Wi-Fi is not available.
+Limits: Android 8-10 needs the command from a computer after every phone reboot. Without developer options ADB over Wi-Fi is not available.
 
 ## Installing apps
 
@@ -191,7 +191,7 @@ What it is: rights that Android normally gives only through settings. They survi
 2. **Step 2.** In the list: “Enable accessibility service”, “Allow writing secure settings”, “Draw over other apps”, “Usage access”, “All files access”, “Install unknown apps”, “No battery restrictions”, “Notification access”, “Modify system settings”, “Remove "restricted settings" limit”.
 3. **Step 3.** For the accessibility service tap “Keep service enabled after reboot”. On screen: “Pinned: will be re-enabled on every boot”. To undo: “Stop keeping it enabled”.
 
-Limits: ADB or root is required. On Android 13–14 the service often turns itself off, which is why pinning exists.
+Limits: ADB or root is required. On Android 13-14 the service often turns itself off, which is why pinning exists.
 
 ## Remote
 
