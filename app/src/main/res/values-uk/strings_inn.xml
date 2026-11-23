@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="inn_channel">Встановлення</string>
+    <string name="inn_title">Встановлення: %1$s</string>
+    <string name="inn_transfer">Передача файлу… %1$d %%</string>
+    <string name="inn_wait">Очікується відповідь у системному вікні</string>
+    <string name="inn_installing">Триває встановлення…</string>
+    <string name="inn_ok">Встановлено: %1$s %2$s</string>
+    <string name="inn_fail">Не встановлено: %1$s</string>
+    <string name="inn_fail_unknown">Система не встановила застосунок</string>
+    <string name="inn_cancel">Скасовано</string>
+    <string name="inn_sub_wait">Чекає відповіді</string>
+</resources>
