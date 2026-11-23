@@ -16,24 +16,16 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 17.0.** [ADB-phon-17.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 18.0.** [ADB-phon-18.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `6992e976792404b6d3d4ae5b2ad97413cb22478d29156fcdc9c0cd337e668fcd`
+SHA-256: `4cede94ed2e569c2a77582c61962d49adeae43ff4ae95bb17709ad3feaecd59e`
 
-## What's new in 17.0
+## What's new in 18.0
 
-- Tapping .apks, .xapk, .apkm opens the install window of the set at once (like .apk); contents as a folder: menu item "Open as folder"
-- View in store: for installed apps and for .apks, .xapk, .apkm sets
-- Install a set of APK parts (base.apk and split_*.apk from one folder) as one package; clear text when the set is incomplete
-- "Open with…" works for names with several dots (file.name.v1.xapk)
-- Package install window: number of parts, size of the whole set, a warning when the set has no device language
-- Install result with the app name and version; the caption is not cut off at a large font
-- Log: the result of every install (method, package, version, error code)
-- Fixed: the app icon of an .apk on devices where the system does not provide the icon; icons are read for large files too, without copying
-- Log: the reason when an .apk has no icon
-- File tree: equal indents
-- Hint on how to grant root: a window with the buttons Open the root manager app and Retry
-- Call window: Microphone and Speaker buttons
+- Smooth folder expanding and scrolling in Files
+- The app icon of an .apk is not covered by the file type icon
+- Faster response
+- Bug fixes
 
 **Requirements and limits**
 
@@ -101,7 +93,7 @@ SHA-256: `6992e976792404b6d3d4ae5b2ad97413cb22478d29156fcdc9c0cd337e668fcd`
 
 ## Quick start
 
-1. Download ADB-phon-17.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-18.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8–10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
