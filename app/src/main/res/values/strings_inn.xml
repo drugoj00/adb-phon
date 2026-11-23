@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="inn_channel">Installation</string>
+    <string name="inn_title">Installing: %1$s</string>
+    <string name="inn_transfer">Transferring file… %1$d %%</string>
+    <string name="inn_wait">Waiting for a reply in the system window</string>
+    <string name="inn_installing">Installing…</string>
+    <string name="inn_ok">Installed: %1$s %2$s</string>
+    <string name="inn_fail">Not installed: %1$s</string>
+    <string name="inn_fail_unknown">The system did not install the app</string>
+    <string name="inn_cancel">Cancelled</string>
+    <string name="inn_sub_wait">Waiting for reply</string>
+</resources>

@@ -1868,6 +1868,8 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="stream_notif_title">Streaming a file to the player</string>
     <string name="stream_notif_text">Video or music from a network folder or cloud is playing</string>
     <string name="fm_open_copying">Copying the file, then it will open…</string>
+    <string name="fm_downloading">Downloading</string>
+    <string name="fm_already_loading">The file is already downloading…</string>
     <string name="sub_console_adb">Console · ADB</string>
     <string name="sub_console_helper">Console · helper</string>
     <string name="sub_console_root">Console · root</string>

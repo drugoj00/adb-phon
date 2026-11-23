@@ -61,4 +61,12 @@
     <string name="ii_root_restored">the current version and its data were restored from the copy</string>
     <string name="ii_root_data_failed">the older version is installed, but restoring the data failed (the copy is in ADB-phon/Backups)</string>
     <string name="ii_down_title">An older version will be installed</string>
+    <string name="ii_busy">This file is already being installed</string>
+    <string name="ii_installing_now">Installing…</string>
+    <string name="ii_ph_system">Waiting for the answer in the system window…</string>
+    <string name="ii_ph_system_hint">Tap “Install” or “Update” in the Android system window. There is no need to start the installation again.</string>
+    <string name="ii_slow_hint">On a slow device installation takes a few minutes. There is no need to tap again.</string>
+    <string name="ii_busy_wait">This file is already being installed, the result will appear here. There is no need to start it again.</string>
+    <string name="ii_already">Already installed: version %1$s (%2$d)</string>
+    <string name="ii_already_short">Already installed</string>
 </resources>
