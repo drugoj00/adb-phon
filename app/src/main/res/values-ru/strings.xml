@@ -1854,6 +1854,8 @@
     <string name="stream_notif_title">Файл отдаётся плееру</string>
     <string name="stream_notif_text">Играет видео или музыка из сетевой папки или облака</string>
     <string name="fm_open_copying">Файл копируется, затем откроется…</string>
+    <string name="fm_downloading">Загрузка</string>
+    <string name="fm_already_loading">Файл уже загружается…</string>
     <string name="sub_console_adb">Консоль · ADB</string>
     <string name="sub_console_helper">Консоль · помощник</string>
     <string name="sub_console_root">Консоль · root</string>

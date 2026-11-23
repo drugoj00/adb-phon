@@ -61,4 +61,12 @@
     <string name="ii_root_restored">текущая версия и её данные возвращены из копии</string>
     <string name="ii_root_data_failed">старая версия установлена, но вернуть данные не удалось (копия в ADB-phon/Backups)</string>
     <string name="ii_down_title">Ставится более старая версия</string>
+    <string name="ii_busy">Установка этого файла уже идёт</string>
+    <string name="ii_installing_now">Идёт установка…</string>
+    <string name="ii_ph_system">Ожидается ответ в системном окне…</string>
+    <string name="ii_ph_system_hint">Нужно нажать «Установить» или «Обновить» в системном окне Android. Повторно запускать установку не нужно.</string>
+    <string name="ii_slow_hint">На слабом устройстве установка занимает несколько минут. Повторно нажимать не нужно.</string>
+    <string name="ii_busy_wait">Установка этого файла уже идёт, итог появится здесь. Повторно запускать не нужно.</string>
+    <string name="ii_already">Уже установлено: версия %1$s (%2$d)</string>
+    <string name="ii_already_short">Уже установлено</string>
 </resources>
