@@ -99,6 +99,19 @@ object CustomIcons {
         return sp(c).all.keys.filter { it.startsWith("e:") && sp(c).getString(it, null) != null }.map { it.removePrefix("e:") }.sorted()
     }
 
+    /** 22.11.2026: то же, что [spec], но не Composable (для списка на RecyclerView): читает [ver], значит подписка на изменения сохраняется при чтении из snapshotFlow. */
+    fun specNow(c: Context, key: String): Spec? { ver.let { }; return resolve(c, raw(c, key)) }
+
+    /** 22.11.2026: то же, что [specFor], но не Composable. */
+    fun specForNow(c: Context, ext: String, localPath: String?, cat: FCat, fileOnly: Boolean = false): Spec? {
+        ver.let { }
+        val sp = sp(c)
+        if (sp.all.isEmpty()) return null
+        val own = if (localPath != null) resolve(c, sp.getString("p:$localPath", null)) else null
+        if (fileOnly) return own
+        return own ?: resolve(c, sp.getString("e:$ext", null)) ?: resolve(c, sp.getString("c:" + cat.name, null))
+    }
+
     @Composable
     fun spec(key: String): Spec? {
         ver.let { }
@@ -108,13 +121,15 @@ object CustomIcons {
 
     /** Значок для файла: по полному пути (один файл), затем по расширению, затем по категории. */
     @Composable
-    fun specFor(ext: String, localPath: String?, cat: FCat): Spec? {
+    fun specFor(ext: String, localPath: String?, cat: FCat, fileOnly: Boolean = false): Spec? {
         ver.let { }
         val c = LocalContext.current
         val sp = sp(c)
         if (sp.all.isEmpty()) return null
-        return (if (localPath != null) resolve(c, sp.getString("p:$localPath", null)) else null)
-            ?: resolve(c, sp.getString("e:$ext", null)) ?: resolve(c, sp.getString("c:" + cat.name, null))
+        val own = if (localPath != null) resolve(c, sp.getString("p:$localPath", null)) else null
+        // 16.3: у .apk при включённом «значок у .apk» свой значок для ВСЕГО типа/расширения не перекрывает значок приложения; остаётся только значок, заданный этому файлу
+        if (fileOnly) return own
+        return own ?: resolve(c, sp.getString("e:$ext", null)) ?: resolve(c, sp.getString("c:" + cat.name, null))
     }
 
     /** Копирует выбранное изображение в files/icons (128x128 по центру) и возвращает значение «i:имя». */

@@ -8,9 +8,13 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -127,13 +131,13 @@ class InstRun {
     var index by mutableIntStateOf(0)
     var total by mutableIntStateOf(0)
     var name by mutableStateOf("")
-    /** 0 подготовка, 1 передача файла, 2 установка, 3 копирование OBB. */
+    /** 0 подготовка, 1 передача файла, 2 установка, 3 копирование OBB, 4 (сессия системного установщика) ожидается ответ в системном окне. */
     var phase by mutableIntStateOf(0)
     /** 20.11.2026 (правило владелицы по полоскам): общий ход 0..1 без бегущей анимации: по файлам, внутри файла передача по байтам (до 90%), установка системой держит 90% до конца файла. */
     val overall: Float get() {
         if (finished) return 1f
         val n = total.coerceAtLeast(1)
-        val stage = if (phase == 2) 0.9f else if (all > 0) (done.toFloat() / all).coerceIn(0f, 1f) * 0.9f else 0f
+        val stage = if (phase == 2 || phase == 4) 0.9f else if (all > 0) (done.toFloat() / all).coerceIn(0f, 1f) * 0.9f else 0f
         return ((index.coerceAtLeast(1) - 1 + stage) / n).coerceIn(0f, 1f)
     }
     var done by mutableLongStateOf(0L)
@@ -167,11 +171,11 @@ private fun sigShort(set: Set<String>): String = if (set.isEmpty()) "—" else s
 
 /** Строка таблицы «параметр | установлено | новое»: изменившееся значение подсвечено (старое красным, новое зелёным или янтарным, если стало хуже). */
 @Composable
-private fun CmpRow(caption: String, cur: String, new: String, changed: Boolean, newCol: Color) {
+private fun CmpRow(caption: String, cur: String, new: String, changed: Boolean, newCol: Color, onClick: (() -> Unit)? = null) {
     val t = LocalTh.current
     // 12.0 (владелица, окно «Установка»): текст крупнее (11 -> 13sp), но строки плотнее — явный lineHeight вместо унаследованного
     // от диалога (там ~20sp на 11sp шрифт, отсюда и был лишний пустой зазор между строками при мелком тексте).
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it }, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
         Text(caption, color = t.hint, fontSize = 13.sp, lineHeight = 15.sp, modifier = Modifier.weight(1.2f))
         Text(cur, color = if (changed) badCol(t.dark) else t.sub, fontSize = 13.sp, lineHeight = 15.sp, modifier = Modifier.weight(1f))
         Text(new, color = if (changed) newCol else t.sub, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = if (changed) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
@@ -184,7 +188,7 @@ private fun CmpRow(caption: String, cur: String, new: String, changed: Boolean, 
  * Android), явное предупреждение о другой подписи, при [full] ещё списки разрешений (новые и убранные).
  */
 @Composable
-fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Modifier) {
+fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Modifier, twoCol: Boolean = false, extraLeft: (@Composable () -> Unit)? = null) {
     val t = LocalTh.current
     val sizeText = sizeLabel(f.size)
     if (m == null) {
@@ -200,18 +204,19 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
     val ok = okCol(t.dark); val bad = badCol(t.dark); val warn = warnCol(t.dark)
     val kindCol = when (kind) { ApkMeta.Kind.NEW, ApkMeta.Kind.UPDATE -> ok; ApkMeta.Kind.SAME -> t.sub; ApkMeta.Kind.DOWNGRADE -> warn }
     val kindText = stringResource(when (kind) { ApkMeta.Kind.NEW -> R.string.ii_new; ApkMeta.Kind.UPDATE -> R.string.ii_update; ApkMeta.Kind.SAME -> R.string.ii_same; ApkMeta.Kind.DOWNGRADE -> R.string.ii_down })
-    Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (m.icon != null) Image(m.icon, null, Modifier.size(40.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    // 22.11.2026 (владелица): в ландшафте окно «Установка» в две колонки: слева значок, название, пакет, вид установки; справа таблица версий и разрешения
+    val head: @Composable ColumnScope.() -> Unit = {
             Text(m.label, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val parts = f.parts?.size
             // 17.0: на крупном шрифте подпись не обрезается: пакет, число частей и имя файла отдельными строками, до двух строк каждая
-            Text(m.pkg, color = t.hint, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (parts != null && !f.folderSet) Text(stringResource(R.string.ii_parts, parts), color = t.hint, fontSize = 11.sp)
+            // 22.11.2026: пакет и число частей в одной строке (окно ниже, меньше прокрутки)
+            Text(m.pkg + (if (parts != null && !f.folderSet) " · " + stringResource(R.string.ii_parts, parts) else ""), color = t.hint, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (f.folderSet) Text(stringResource(R.string.ii_set_note, parts ?: 0), color = t.hint, fontSize = 11.sp, maxLines = 2)
             if (!full) Text(f.name, color = t.hint, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (f.missLang != null) Text(stringResource(R.string.ii_lang_missing, f.missLang), color = warn, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(kindText, color = kindCol, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+    val body: @Composable ColumnScope.() -> Unit = {
             val newBytes = if (f.size > 0) f.size else m.size
             val newSizeText = sizeLabel(newBytes)
             if (m.curName == null) {
@@ -231,7 +236,13 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
                 CmpRow(stringResource(R.string.ii_row_ver), m.curName, m.verName, m.curName != m.verName, newCol)
                 CmpRow(stringResource(R.string.ii_row_code), m.curCode.toString(), m.verCode.toString(), m.curCode != m.verCode, newCol)
                 val sigCh = m.sigDiffers
-                CmpRow(stringResource(R.string.ii_row_sig), sigShort(m.curSigs), if (m.sigSame) stringResource(R.string.ii_sig_same_short) else sigShort(m.sigs), sigCh, if (sigCh) bad else ok)
+                // 22.11.2026 (владелица): подпись обрезана до 6 знаков; по нажатию на строку показываются полные отпечатки SHA-256 (можно выделить и скопировать)
+                val sigOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                CmpRow(stringResource(R.string.ii_row_sig) + (if (sigOpen.value) " ▴" else " ▾"), sigShort(m.curSigs), if (m.sigSame) stringResource(R.string.ii_sig_same_short) else sigShort(m.sigs), sigCh, if (sigCh) bad else ok, onClick = { sigOpen.value = !sigOpen.value })
+                if (sigOpen.value) {
+                    Text(stringResource(R.string.ii_col_cur) + ": " + (m.curSigs.sorted().joinToString("\n").ifEmpty { "—" }), color = t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    Text(stringResource(R.string.ii_col_new) + ": " + (if (m.sigSame) stringResource(R.string.ii_sig_same_short) else m.sigs.sorted().joinToString("\n").ifEmpty { "—" }), color = if (sigCh) bad else t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                }
                 val curSizeText = sizeLabel(m.curSize)
                 CmpRow(stringResource(R.string.ii_row_size), curSizeText, newSizeText, curSizeText != newSizeText, t.text)
                 CmpRow(stringResource(R.string.ii_row_sdk), m.curMinSdk.toString(), m.minSdk.toString(), m.curMinSdk != m.minSdk, if (m.minSdk > m.curMinSdk) warn else ok)
@@ -248,6 +259,17 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
                 PermList(R.string.ii_perms_added, m.addedPerms, "+ ", ok)
                 PermList(R.string.ii_perms_removed, m.removedPerms, "− ", bad)
             }
+    }
+    if (twoCol && full && m.curName != null) {
+        Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (m.icon != null) Image(m.icon, null, Modifier.size(40.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) { head(); extraLeft?.invoke() }
+            Column(Modifier.weight(1.5f), verticalArrangement = Arrangement.spacedBy(1.dp)) { body() }
+        }
+    } else {
+        Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (m.icon != null) Image(m.icon, null, Modifier.size(40.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) { head(); body() }
         }
     }
 }
@@ -290,10 +312,12 @@ fun InstProgressView(run: InstRun) {
             ThemedProgress({ run.overall }, Modifier.fillMaxWidth().height(6.dp), t.accent)
             if (run.name.isNotEmpty()) Text(run.name, color = t.text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                stringResource(when (run.phase) { 1 -> R.string.ii_ph_upload; 2 -> R.string.ii_ph_install; 3 -> R.string.ii_ph_obb; else -> R.string.ii_ph_prepare }) +
+                stringResource(when (run.phase) { 1 -> R.string.ii_ph_upload; 2 -> R.string.ii_ph_install; 3 -> R.string.ii_ph_obb; 4 -> R.string.ii_ph_system; else -> R.string.ii_ph_prepare }) +
                     (if (run.all > 1) "  " + stringResource(R.string.ii_mb, sizeLabel(run.done), sizeLabel(run.all)) else ""),
                 color = t.hint, fontSize = 11.sp,
             )
+            // 22.11.2026: системное окно подтверждения уже открыто: что делать, повторно запускать не нужно
+            if (run.phase == 4) Text(stringResource(R.string.ii_ph_system_hint), color = t.sub, fontSize = 12.sp, lineHeight = 15.sp)
         }
     }
 }
@@ -364,7 +388,7 @@ private suspend fun keepDataDowngrade(ctx: Context, pkg: String, apk: File): Str
 }
 
 /** Установка с отчётом о ходе: файл за файлом; понижение версии идёт через безопасный путь (копия текущей версии, возврат при неудаче). */
-suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<String, ApkMeta?>, run: InstRun, wipe: Boolean = false): Pair<Int, Int> =
+suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<String, ApkMeta?>, run: InstRun, wipe: Boolean = false, notify: Boolean = true): Pair<Int, Int> =
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         run.ok = 0; run.bad = 0; run.fails.clear(); run.okItems.clear(); run.finished = false; run.running = true
         run.total = files.size; run.index = 0; run.done = 0L; run.phase = 0
@@ -378,6 +402,8 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                 val sz = f0.size.coerceAtLeast(1L)
                 var reason: String? = null
                 var raw = ""
+                // 22.11.2026 (18.0): уведомление Android с полосой хода и итогом (на ТВ и при выключенных уведомлениях не создаётся)
+                val nt = if (notify) InstallNotify.begin(ctx, "adb:" + (meta?.pkg ?: f0.name) + "|" + i, meta?.label ?: f0.name, meta?.verName, meta?.pkg) else null
                 try {
                     if (meta != null && meta.sigDiffers) throw IllegalStateException(ctx.getString(R.string.ii_sig_fail))
                     if (meta != null && meta.kind == ApkMeta.Kind.DOWNGRADE && meta.curPlainSystem) throw IllegalStateException(ctx.getString(R.string.ii_down_system))
@@ -385,10 +411,10 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                     val parts = f0.parts
                     if (parts != null) {
                         val partsTotal = parts.sumOf { it.length() }.coerceAtLeast(1L)
-                        Adb.onInstallBytes = { n -> run.done = base + n.coerceAtMost(partsTotal); if (n >= partsTotal) run.phase = 2 }
+                        Adb.onInstallBytes = { n -> run.done = base + n.coerceAtMost(partsTotal); if (n >= partsTotal) { run.phase = 2; nt?.step(2, n, partsTotal) } else nt?.step(1, n, partsTotal) }
                         run.phase = if (f0.obb.isNotEmpty()) 3 else 1
                         Bundles.lastRaw = ""
-                        val ok = Bundles.installAdb(ctx, f0, if (meta?.kind == ApkMeta.Kind.DOWNGRADE) "-r -d" else "-r") { ph -> run.phase = ph }
+                        val ok = Bundles.installAdb(ctx, f0, if (meta?.kind == ApkMeta.Kind.DOWNGRADE) "-r -d" else "-r") { ph -> run.phase = ph; if (ph == 2) nt?.step(2, 0L, 1L) }
                         raw = Bundles.lastRaw
                         if (!ok) reason = if (raw.isNotBlank()) friendlyReason(ctx, raw) else ctx.getString(R.string.ii_fail_generic)
                     } else {
@@ -399,7 +425,7 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                             }
                         } else null
                         val total = (local?.length() ?: f.size).coerceAtLeast(1L)
-                        Adb.onInstallBytes = { n -> run.done = base + n.coerceAtMost(total); if (n >= total) run.phase = 2 }
+                        Adb.onInstallBytes = { n -> run.done = base + n.coerceAtMost(total); if (n >= total) { run.phase = 2; nt?.step(2, n, total) } else nt?.step(1, n, total) }
                         run.phase = 1
                         val out: String = if (meta != null && meta.downgradeNeedsWipe && wipe && local != null) {
                             wipeDowngrade(ctx, meta.pkg, local)
@@ -419,6 +445,7 @@ suspend fun installWithProgress(ctx: Context, files: List<ApkFile>, metas: Map<S
                     reason = if (m.contains("Not connected", true)) ctx.getString(R.string.shz_err_no_adb) else m.take(140)
                 }
                 Adb.onInstallBytes = null
+                nt?.finish(SessionInstall.Result(if (reason == null) 0 else -2, reason.orEmpty()))
                 InstLog.result(if (Adb.isRoot) "root" else "adb", meta?.pkg ?: f0.pkg ?: (f0.parts?.firstOrNull() ?: f0.file ?: f0.uri.path?.let { java.io.File(it) })?.let { ApkIconRes.manifestHead(it.path)?.pkg }, meta?.verName, meta?.verCode, f0.parts?.size ?: 1, raw, reason == null)
                 if (reason == null) { run.ok++; run.okItems.add(InstRun.OkItem(meta?.label ?: f0.name, meta?.verName.orEmpty(), meta?.verCode ?: 0L)) }
                 else { run.bad++; run.fails.add(run.name + ": " + reason) }
@@ -452,36 +479,63 @@ fun InstallRunDialog(d: FmDlg.InstallRunDlg, close: () -> Unit) {
 }
 
 /** Подтверждение после выбора ADB-phon установщиком: блок версий (как у App Manager) для каждого пакета и кнопки «Установить» / «Отмена». */
+@kotlin.OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun InstallConfirmDialog(d: FmDlg.InstallConfirm, close: () -> Unit) {
     val t = LocalTh.current
     androidx.compose.runtime.LaunchedEffect(Unit) { InstBg.nextBackground = false }
     val goFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { goFocus.requestFocus() } }
-    LAlertDialog(
-        onDismissRequest = close,
-        title = { Text(stringResource(R.string.ii_confirm_title), maxLines = 1) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                d.files.take(40).forEach { f -> ApkInfoBlock(f, d.metas[f.name], full = d.files.size == 1, modifier = Modifier.fillMaxWidth()) }
-                if (d.files.size > 40) Text(stringResource(R.string.ii_more, d.files.size - 40), color = t.hint, fontSize = 11.sp)
-                // 17.0 (код 85): «Посмотреть в магазине» для одного пакета или набора, если установлен хотя бы один магазин
-                val mp = d.files.singleOrNull()?.let { f -> d.metas[f.name]?.pkg ?: f.pkg }
-                if (mp != null && ApkInstall.installedStores(androidx.compose.ui.platform.LocalContext.current).isNotEmpty())
-                    TextButton({ ApkInstall.openMarketPkg(mp) }) { Text(stringResource(R.string.inst_market), fontSize = 13.sp) }
+    // 22.11.2026: ландшафт и один пакет: широкое окно, сведения в две колонки
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val twoCol = cfg.screenWidthDp > cfg.screenHeightDp && d.files.size == 1
+    val titleC: @Composable () -> Unit = { Text(stringResource(R.string.ii_confirm_title), maxLines = 1) }
+    val bodyC: @Composable () -> Unit = {
+        // 22.11.2026 (владелица, Galaxy A7): окно ниже и плотнее; кнопки закреплены под прокручиваемым содержимым (AlertDialog), высота содержимого не больше ~60% экрана
+        val maxContent = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * (if (twoCol) 0.55f else 0.6f)).dp.coerceIn(160.dp, 520.dp)
+        val mp = d.files.singleOrNull()?.let { f -> d.metas[f.name]?.pkg ?: f.pkg }
+        val hasStore = mp != null && ApkInstall.installedStores(androidx.compose.ui.platform.LocalContext.current).isNotEmpty()
+        val marketBtn: @Composable () -> Unit = { if (hasStore && mp != null) TextButton({ ApkInstall.openMarketPkg(mp) }) { Text(stringResource(R.string.inst_market), fontSize = 13.sp) } }
+        Column(Modifier.heightIn(max = maxContent).barScroll(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            d.files.take(40).forEach { f -> ApkInfoBlock(f, d.metas[f.name], full = d.files.size == 1, modifier = Modifier.fillMaxWidth(), twoCol = twoCol, extraLeft = if (twoCol) marketBtn else null) }
+            if (d.files.size > 40) Text(stringResource(R.string.ii_more, d.files.size - 40), color = t.hint, fontSize = 11.sp)
+            // 17.0 (код 85): «Посмотреть в магазине» для одного пакета или набора, если установлен хотя бы один магазин
+            if (!twoCol) marketBtn()
+        }
+    }
+    val confirmC: @Composable () -> Unit = {
+        val one = d.files.singleOrNull()?.let { d.metas[it.name] }
+        when {
+            one != null && one.curPlainSystem && one.kind == ApkMeta.Kind.DOWNGRADE -> {}
+            one != null && one.downgradeNeedsWipe -> TextButton({ close(); d.go(true) }) { Text(stringResource(if (one.downgradeKeepsData) R.string.ii_confirm_keep else R.string.ii_confirm_wipe)) }
+            else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
+                TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
             }
-        },
-        confirmButton = {
-            val one = d.files.singleOrNull()?.let { d.metas[it.name] }
-            when {
-                one != null && one.curPlainSystem && one.kind == ApkMeta.Kind.DOWNGRADE -> {}
-                one != null && one.downgradeNeedsWipe -> TextButton({ close(); d.go(true) }) { Text(stringResource(if (one.downgradeKeepsData) R.string.ii_confirm_keep else R.string.ii_confirm_wipe)) }
-                else -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
-                    TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
+        }
+    }
+    val cancelC: @Composable () -> Unit = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } }
+    // 22.11.2026 (владелица): и в портрете, и в ландшафте свой компактный каркас (у AlertDialog большие поля под кнопками и свой порядок кнопок);
+    // порядок кнопок: Установить, Отмена, В фоне; если не помещаются в строку, переносятся
+    LDialog(onDismissRequest = close, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(if (twoCol) 0.94f else 0.92f),
+        ) {
+            Column(Modifier.padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                androidx.compose.material3.ProvideTextStyle(androidx.compose.material3.MaterialTheme.typography.titleLarge) { titleC() }
+                bodyC()
+                val one = d.files.singleOrNull()?.let { d.metas[it.name] }
+                val normal = !(one != null && ((one.curPlainSystem && one.kind == ApkMeta.Kind.DOWNGRADE) || one.downgradeNeedsWipe))
+                androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                    if (normal) {
+                        TextButton({ close(); d.go(false) }, Modifier.focusRequester(goFocus)) { Text(stringResource(R.string.ii_confirm_go)) }
+                        cancelC()
+                        TextButton({ close(); InstBg.nextBackground = true; d.go(false) }) { Text(stringResource(R.string.ii_bg)) }
+                    } else { cancelC(); confirmC() }
                 }
             }
-        },
-        dismissButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },
-    )
+        }
+    }
 }

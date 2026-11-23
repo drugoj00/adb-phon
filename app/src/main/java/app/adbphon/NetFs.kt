@@ -167,7 +167,9 @@ class SftpFs(private val host: String, private val port: Int, private val user: 
         }
     }
 
-    override suspend fun copyTo(path: String, dest: File) { withContext(Dispatchers.IO) { use { c -> dest.outputStream().use { c.get(path, it) } } } }
+    override suspend fun copyTo(path: String, dest: File) = copyTo(path, dest, null)
+    /** 22.11.2026: SFTP читается через поток jsch (c.get(path) без монитора), общий цикл с ходом работы и отменой. */
+    override suspend fun copyTo(path: String, dest: File, j: OpProgress?) { withContext(Dispatchers.IO) { use { c -> c.get(path).use { i -> Pump.toFile(i, dest, j) } } } }
     override suspend fun head(path: String, n: Int): ByteArray = withContext(Dispatchers.IO) { use { c -> c.get(path).use { cut(n, it) } } }
     override val rangeRead get() = true
     override suspend fun openAt(path: String, offset: Long): InputStream = withContext(Dispatchers.IO) {
@@ -259,11 +261,12 @@ class DavFs(private val url: String, private val user: String, private val pass:
         return out.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     }
 
-    override suspend fun copyTo(path: String, dest: File) {
+    override suspend fun copyTo(path: String, dest: File) = copyTo(path, dest, null)
+    override suspend fun copyTo(path: String, dest: File, j: OpProgress?) {
         withContext(Dispatchers.IO) {
             client.newCall(req(path).get().build()).execute().use { resp ->
                 if (resp.code !in 200..299) error("HTTP ${resp.code}")
-                resp.body!!.byteStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+                resp.body!!.byteStream().use { i -> Pump.toFile(i, dest, j) }
             }
         }
     }
@@ -435,13 +438,15 @@ class FtpFs(private val host: String, private val port: Int, private val user: S
         return FsEntry(w.groupValues[4], join(dir, w.groupValues[4]), isDir, if (isDir) 0L else w.groupValues[3].toLongOrNull() ?: 0L, FmDates.ofMillis(FmDates.dosMillis(w.groupValues[1], w.groupValues[2])))
     }
 
-    override suspend fun copyTo(path: String, dest: File) {
+    override suspend fun copyTo(path: String, dest: File) = copyTo(path, dest, null)
+    override suspend fun copyTo(path: String, dest: File, j: OpProgress?) {
         withContext(Dispatchers.IO) {
             session { c ->
                 val d0 = dataSocket(c)
                 val (code, t) = cmd(c, "RETR $path"); if (code !in 100..199) error("FTP: $t".take(200))
                 val d = secure(c, d0)
-                d.getInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }; d.close(); reply(c)
+                try { d.getInputStream().use { i -> Pump.toFile(i, dest, j) } } catch (e: LocalOps.Cancelled) { runCatching { d.close() }; throw e }
+                d.close(); reply(c)
             }
         }
     }

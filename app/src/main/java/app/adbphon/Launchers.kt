@@ -44,8 +44,6 @@ object Launchers {
     }
 
     private const val LATEST = "https://api.github.com/repos/drugoj00/app-menu/releases/latest"
-    /** Прямая ссылка на выпуск 2.1: запасная, если список выпусков GitHub не ответил. */
-    private const val FALLBACK = "https://github.com/drugoj00/app-menu/releases/download/v2.1/AppMenu-2.1.apk"
 
     private fun open(url: String): HttpURLConnection {
         val c = URL(url).openConnection() as HttpURLConnection
@@ -58,7 +56,7 @@ object Launchers {
 
     /**
      * Ссылка на APK последнего выпуска Меню приложений. Блокирующий вызов. 16.0 код 77: если API GitHub не ответил (лимит, 403/429, сбой, непонятный ответ),
-     * берётся лента выпусков и страница файлов без API (GhFeed); совсем не вышло: старая прямая ссылка.
+     * берётся лента выпусков и страница файлов без API (GhFeed); совсем не вышло: ошибка (вызывающий код покажет «не удалось скачать»; прямой ссылки на старый выпуск нет, v2.1 удалён).
      */
     private fun latestUrl(): String = runCatching {
         val c = open(GhFeed.map(LATEST))
@@ -75,7 +73,7 @@ object Launchers {
     }.recoverCatching { e ->
         AppLog.w("Launchers", "API GitHub (Меню): ${e.message}; запасной путь через ленту выпусков")
         GhFeed.latestApkUrls("drugoj00/app-menu").firstOrNull() ?: error("в ленте нет APK")
-    }.getOrElse { AppLog.w("Launchers", "последний выпуск Меню не найден: ${it.message}; прямая ссылка"); FALLBACK }
+    }.getOrElse { AppLog.w("Launchers", "последний выпуск Меню не найден: ${it.message}"); throw it }
 
     /** Скачивает Меню приложений с GitHub и ставит на подключённое устройство. Возвращает итоговое сообщение. */
     suspend fun installMenu(ctx: Context, via: InstOpt? = null): String {

@@ -93,19 +93,23 @@ object NameWrap {
     fun fmt(name: String): String {
         val s = if (name.length > MAX) shortMiddle(name, MAX) else name
         val dot = s.lastIndexOf('.')
-        val sb = StringBuilder(s.length + 8)
+        // расширение (.apk, .zip, .json...) никогда не разрывается: между его буквами невидимый «склеиватель» U+2060; перед точкой расширения разрыв разрешён
+        val hasExt = dot > 0 && dot < s.length - 1 && s.length - dot <= 9 && s.substring(dot + 1).none { it == ' ' || it == '.' }
+        val sb = StringBuilder(s.length * 2 + 8)
         for (i in s.indices) {
             val c = s[i]
             sb.append(c)
             if (i == s.lastIndex) break
+            if (hasExt && i >= dot) { sb.append('⁠'); continue }      // внутри расширения и сразу после точки: без разрыва
             val n = s[i + 1]
+            if (hasExt && i + 1 == dot) { sb.append('​'); continue }   // перед «.расширением» можно перенести строку
             val brk = when {
-                c == '_' || c == '(' || c == '[' || c == ')' || c == ']' || c == '+' || c == ',' -> true
-                c == '.' -> i != dot && !(i > 0 && s[i - 1].isDigit() && n.isDigit())
+                c == '_' || c == '-' || c == '(' || c == '[' || c == ')' || c == ']' || c == '+' || c == ',' || c == '/' -> true
+                c == '.' -> !(i > 0 && s[i - 1].isDigit() && n.isDigit())
                 c.isLowerCase() && n.isUpperCase() -> true
                 else -> false
             }
-            if (brk && i + 1 != dot) sb.append('\u200B')
+            if (brk) sb.append('​')
         }
         return sb.toString()
     }

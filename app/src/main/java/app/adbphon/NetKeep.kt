@@ -218,7 +218,8 @@ class KeepFs(private val make: () -> RemoteFs) : RemoteFs {
             }
         }
     }
-    override suspend fun copyTo(path: String, dest: File) = call(path.substringBeforeLast('/', ""), big = true, what = "копирование") { it.copyTo(path, dest) }
+    override suspend fun copyTo(path: String, dest: File) = copyTo(path, dest, null)
+    override suspend fun copyTo(path: String, dest: File, j: OpProgress?) = call(path.substringBeforeLast('/', ""), big = true, what = "копирование") { it.copyTo(path, dest, j) }
     override suspend fun head(path: String, n: Int): ByteArray = call(path.substringBeforeLast('/', ""), what = "чтение файла") { it.head(path, n) }
     override val rangeRead get() = inner.rangeRead
     /** 10.1: поток с позиции для плеера; открытие без общего лимита по времени (у клиентов свои таймауты сокета), повтор на новом соединении при обрыве. */

@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Properties
@@ -15,6 +17,22 @@ data class FsEntry(val name: String, val path: String, val isDir: Boolean, val s
 interface Fs {
     suspend fun list(path: String): List<FsEntry>
     suspend fun copyTo(path: String, dest: File)
+    /**
+     * 22.11.2026 (18.0): скачивание с ходом работы ([OpProgress]: байты, отмена). SMB, WebDAV, FTP и SFTP переопределяют (свой цикл с буфером 512 КБ и отменой);
+     * остальные источники (ADB, телефон, ПК, облако, архив) качают как раньше, а ход берётся по размеру растущего файла назначения раз в ~200 мс;
+     * отмена у них срабатывает после окончания текущего файла.
+     */
+    suspend fun copyTo(path: String, dest: File, j: OpProgress?) {
+        if (j == null) { copyTo(path, dest); return }
+        kotlinx.coroutines.coroutineScope {
+            val w = launch(Dispatchers.IO) {
+                var last = 0L
+                while (true) { delay(200); val n = dest.length(); if (n > last) { j.bytes(n - last); last = n } }
+            }
+            try { copyTo(path, dest) } finally { w.cancel() }
+        }
+        if (j.cancelled) { runCatching { dest.delete() }; throw LocalOps.Cancelled() }
+    }
     fun parent(path: String): String?
     /** Быстрые места: подпись и путь. */
     suspend fun roots(): List<Pair<String, String>>
@@ -183,9 +201,11 @@ class SmbFs(private val host: String, private val user: String, private val pass
         }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
     } }
 
-    override suspend fun copyTo(path: String, dest: File) {
+    override suspend fun copyTo(path: String, dest: File) = copyTo(path, dest, null)
+    /** 22.11.2026: буфер 512 КБ вместо 8 КБ, два потока (чтение/запись), ход работы и отмена; недокачанный файл удаляется. */
+    override suspend fun copyTo(path: String, dest: File, j: OpProgress?) {
         guard { withContext(Dispatchers.IO) {
-            jcifs.smb.SmbFile(path, ctx).inputStream.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            jcifs.smb.SmbFile(path, ctx).inputStream.use { i -> Pump.toFile(i, dest, j) }
         } }
     }
 

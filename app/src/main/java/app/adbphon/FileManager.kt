@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -163,6 +164,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -826,6 +828,22 @@ object Fm {
 
     fun shown(p: FmPane): List<FmItem> = sortList(p, p.path, if (showHidden) p.items else p.items.filter { !it.hidden })
 
+    /**
+     * 22.11.2026 (18.0, тормоза раскрытия): отсортированное содержимое раскрытой папки дерева. Раньше сортировка (с таблицами тегов/цифр/цветов на каждый вызов)
+     * шла в главном потоке при каждой пересборке плоского списка дерева (раскрытие папки в 3000 файлов: кадр ~370 мс на приставке S905X, прокрутка ~10 кадров/с).
+     * Теперь результат запоминается по (панель, путь) и признакам: тот же список, «скрытые», настройка сортировки, [sortTick]; первый раз считается в фоне сразу после чтения папки ([loadKids]).
+     */
+    private class SortedKids(val src: List<FmItem>, val hidden: Boolean, val cfg: SortCfg, val tick: Int, val out: List<FmItem>)
+    private val kidsSorted = java.util.concurrent.ConcurrentHashMap<String, SortedKids>()
+    fun sortedKids(p: FmPane, path: String, k: List<FmItem>): List<FmItem> {
+        val cfg = treeCfg(p, path); val key = p.id.toString() + "|" + path; val hid = showHidden; val tick = sortTick
+        kidsSorted[key]?.let { c -> if (c.src === k && c.hidden == hid && c.cfg == cfg && c.tick == tick) return c.out }
+        val out = sortList(p, path, if (hid) k else k.filter { !it.hidden }, cfg)
+        if (kidsSorted.size > 64) kidsSorted.clear()
+        kidsSorted[key] = SortedKids(k, hid, cfg, tick, out)
+        return out
+    }
+
     /** Сортировка списка папки [dir] по группам (папки, файлы, фото, видео, музыка, документы), у каждой группы свой критерий. */
     fun sortList(p: FmPane, dir: String, base: List<FmItem>, cfg0: SortCfg? = null): List<FmItem> {
         val cfg = cfg0 ?: cfgFor(p, dir)
@@ -848,11 +866,24 @@ object Fm {
     private fun saveExpanded(p: FmPane) { prefs().edit().putString("exp_p${p.id}", p.expanded.takeLast(200).joinToString("\n")).apply() }
 
     /** Подгрузить содержимое раскрытой папки (подпапки подгружаются только при раскрытии). */
+    /** 22.11.2026: папки, читающиеся сейчас (панель + путь): пока список идёт по сети, повторные нажатия не запускают второе чтение той же папки. */
+    private val kidsLoading = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     suspend fun loadKids(p: FmPane, path: String) {
         if (p.kids.containsKey(path)) return
-        val list = runCatching { FmIo.list(p, path) }.getOrNull()
-        if (list == null) return      // временная ошибка (доступ, сеть): раскрытие остаётся в памяти, подгрузится при следующем обновлении
-        p.kids[path] = list
+        val key = p.id.toString() + "|" + path
+        if (kidsLoading.putIfAbsent(key, true) != null) return
+        try {
+            val t0 = System.nanoTime()
+            val list = runCatching { FmIo.list(p, path) }.getOrNull()
+            if (AppLog.enabled) AppLog.i("ADBphon", "Раскрытие папки [${p.src}] $path: ${list?.size ?: -1} эл., чтение списка ${(System.nanoTime() - t0) / 1_000_000} мс")
+            if (list == null) return      // временная ошибка (доступ, сеть): раскрытие остаётся в памяти, подгрузится при следующем обновлении
+            // папку свернули, пока список читался: в память не кладём (при новом раскрытии прочитается заново)
+            if (path in p.expanded) {
+                // сортировка большой папки заранее и в фоне: плоский список дерева берёт готовый результат ([sortedKids]) и не сортирует в главном потоке
+                if (list.size > 200) withContext(Dispatchers.Default) { sortedKids(p, path, list) }
+                if (path in p.expanded) p.kids[path] = list
+            }
+        } finally { kidsLoading.remove(key) }
     }
 
     fun toggleExpand(p: FmPane, path: String) {
@@ -906,16 +937,62 @@ object Fm {
     /** Локальный файл по имени в панели: свой файл или копия из сетевого источника/архива во временной папке. */
     private suspend fun localFileOf(p: FmPane, name: String): java.io.File? = when (p.src) {
         "local" -> java.io.File(join(p.path, name))
-        "smb" -> withContext(Dispatchers.IO) {
+        "smb" -> {
+            lastFetchMsg = null
             val t = java.io.File(arcTmp(), "open_" + System.nanoTime().toString(36) + "_" + name.substringAfterLast('/'))
-            runCatching { p.smb!!.copyTo(join(p.path, name), t) }.map { t }.getOrNull()
+            if (fetchWithProgress(p, join(p.path, name), name.substringAfterLast('/'), sizeInPane(p, name), t)) t else null
         }
         else -> null
     }
 
+    /** Размер файла из уже показанных списков панели (для полоски загрузки); -1: неизвестен. */
+    private fun sizeInPane(p: FmPane, name: String): Long {
+        val n = name.substringAfterLast('/')
+        p.items.firstOrNull { it.name == name || it.name == n }?.let { if (!it.isDir) return it.size }
+        p.kids[p.path.trimEnd('/')]?.firstOrNull { it.name == n }?.let { if (!it.isDir) return it.size }
+        return -1L
+    }
+
+    /** Пояснение, почему файл не получен (отмена, ошибка сети, уже загружается); null: источник не поддерживается. */
+    @Volatile private var lastFetchMsg: String? = null
+    private fun failMsg(): String { val m = lastFetchMsg; lastFetchMsg = null; return m ?: str(R.string.fm_err_unsupported) }
+    /** Загрузки из сети, идущие сейчас (источник + путь): повторный клик по тому же файлу не запускает вторую копию. */
+    private val fetching = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * 22.11.2026 (18.0, тормоза LAN): скачивание файла из сети во временную копию с видимым ходом: карточка в панели операций
+     * (имя, %, скорость, остаток, «Отмена»), не блокирует экран; повторный клик по тому же файлу, пока он грузится, игнорируется.
+     * true: файл готов ([dest]); false: ошибка или отмена (текст в [lastFetchMsg], недокачанный файл удалён).
+     */
+    suspend fun fetchWithProgress(p: FmPane, path: String, title: String, size: Long, dest: java.io.File): Boolean {
+        val key = System.identityHashCode(p.smb).toString() + "|" + path
+        if (fetching.putIfAbsent(key, true) != null) { lastFetchMsg = str(R.string.fm_already_loading); say(lastFetchMsg!!); return false }
+        val j = FmJob(str(R.string.fm_downloading), 1, true)
+        j.queued = false; j.current = title; j.totalUnits = size
+        jobs.add(j); jobSeq++
+        FmOpService.start(sctx)
+        val t0 = System.currentTimeMillis()
+        var ok = false; var err: String? = null
+        try {
+            withContext(Dispatchers.IO) { p.smb!!.copyTo(path, dest, j) }
+            ok = true; j.publish(true)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: LocalOps.Cancelled) { lastFetchMsg = str(R.string.fm_cancelled)
+        } catch (e: Throwable) { err = FmIo.nice(e); lastFetchMsg = str(R.string.fm_error, err!!) }
+        finally {
+            fetching.remove(key)
+            if (!ok) runCatching { dest.delete() }
+            j.error = err; j.finished = true
+            if (j.cancelled || (!ok && err == null)) jobs.remove(j) else scope.launch { delay(if (err != null) 4000 else 800); jobs.remove(j) }
+            AppLog.i("ADBphon", "Загрузка из сети: $title ${if (ok) "готово" else "не вышло"} за ${System.currentTimeMillis() - t0} мс, ${j.doneUnits} Б")
+        }
+        if (j.cancelled && !ok) lastFetchMsg = str(R.string.fm_cancelled)
+        return ok
+    }
+
     /** Открыть архив как папку в панели. */
     fun openArchive(p: FmPane, name: String): kotlinx.coroutines.Job = scope.launch {
-        val file = localFileOf(p, name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        val file = localFileOf(p, name) ?: run { say(failMsg()); return@launch }
         val a = ArchiveFs(file, name, ArchiveFs.PrevState(p.src, p.smb, p.net, p.path, name), arcTmp())
         arcPass[file.absolutePath]?.let { a.password = it }
         try { withContext(Dispatchers.IO) { a.reader() } }
@@ -934,7 +1011,7 @@ object Fm {
     fun extractArc(p: FmPane, name: String, mode: Int, policy: Int = -1): kotlinx.coroutines.Job = scope.launch {
         val dstPane = if (mode == 2) other else p
         if (dstPane.src != "local") { say(str(R.string.fm_err_unsupported)); return@launch }
-        val file = localFileOf(p, name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        val file = localFileOf(p, name) ?: run { say(failMsg()); return@launch }
         val destDir = java.io.File(if (mode == 1) join(dstPane.path, name.substringBeforeLast('.').removeSuffix(".tar")) else dstPane.path)
         val rd = try { withContext(Dispatchers.IO) { Arc.open(file, null, arcPass[file.absolutePath]) } }
         catch (e: ArcNeedPassword) { dlg = FmDlg.ArcPass(file, null) { extractArc(p, name, mode, policy) }; return@launch }
@@ -956,7 +1033,7 @@ object Fm {
 
     /** Проверка целостности архива. */
     fun testArc(p: FmPane, name: String): kotlinx.coroutines.Job = scope.launch {
-        val file = localFileOf(p, name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        val file = localFileOf(p, name) ?: run { say(failMsg()); return@launch }
         val rd = try { withContext(Dispatchers.IO) { Arc.open(file, null, arcPass[file.absolutePath]) } }
         catch (e: ArcNeedPassword) { dlg = FmDlg.ArcPass(file, null) { testArc(p, name) }; return@launch }
         catch (e: Throwable) { say(str(R.string.fm_error, FmIo.nice(e))); return@launch }
@@ -1520,8 +1597,8 @@ object Fm {
             "smb" -> {
                 // 10.1: видео и музыка из сети играют сразу (потоковая отдача по Range), без копирования целиком; остальное и источники без Range: копия во временную папку
                 viewStream(p, it, f, pkg, mime)?.let { r -> return r }
-                say(str(R.string.fm_open_copying))
-                val tmp = tmpCopy(p, it.name); val ok = withContext(Dispatchers.IO) { runCatching { p.smb!!.copyTo(f, tmp) }.isSuccess }; ok && viewLocal(tmp, it.ext, pkg, mime)
+                lastFetchMsg = null
+                val tmp = tmpCopy(p, it.name); val ok = fetchWithProgress(p, f, it.name, it.size, tmp); ok && viewLocal(tmp, it.ext, pkg, mime)
             }
             else -> false
         }
@@ -1537,7 +1614,7 @@ object Fm {
         val silent = quiet && Adb.isConnected && !FmIo.remote
         if (!silent && !confirmed) {
             // 10.2: без ADB и root то же окно «Установка» со сведениями о версиях, затем сессия с подтверждением системы
-            val srcC = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+            val srcC = fileForInstall(p, it.name) ?: run { say(failMsg()); return@launch }
             val listC = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(srcC)) }.getOrDefault(emptyList()) }
             if (listC.isEmpty()) { dlg = FmDlg.InstallFail(str(R.string.inst_failed)); return@launch }
             val metasC = withContext(Dispatchers.IO) { listC.associate { a -> a.name to runCatching { ApkInfo.readFor(sctx, a) }.getOrNull() } }
@@ -1547,7 +1624,7 @@ object Fm {
         if (!silent && !ensureInstallPermission { installBundleViaAdb(p, it, quiet, confirmed = true) }) return@launch
         if (silent) {
             // тихая установка по ADB/root: сначала подтверждение с версиями, потом окно с полоской хода (части и OBB, «n из N»), итог внутри окна
-            val srcF = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+            val srcF = fileForInstall(p, it.name) ?: run { say(failMsg()); return@launch }
             val list = withContext(Dispatchers.IO) { runCatching { Archives.extractApks(sctx, android.net.Uri.fromFile(srcF)) }.getOrDefault(emptyList()) }
             if (list.isEmpty()) { dlg = FmDlg.InstallFail(str(R.string.inst_failed)); return@launch }
             val metas = withContext(Dispatchers.IO) { list.associate { a -> a.name to runCatching { ApkInfo.readFor(sctx, a) }.getOrNull() } }
@@ -1562,7 +1639,7 @@ object Fm {
         }
         say(str(R.string.inst_installing))
         var last: SessionInstall.Result? = null
-        val srcF2 = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        val srcF2 = fileForInstall(p, it.name) ?: run { say(failMsg()); return@launch }
         val ok = withContext(Dispatchers.IO) {
             runCatching {
                 val f = srcF2
@@ -1581,6 +1658,7 @@ object Fm {
         val r = last
         if (ok) say(str(R.string.fm_installed))
         else if (r != null && r.cancelled) say(str(R.string.fm_cancelled))
+        else if (r != null && r.busy) say(str(R.string.ii_busy))   // 22.11.2026: тот же пакет уже устанавливается, второе окно не открывается
         else dlg = FmDlg.InstallFail(r?.message.orEmpty())
     }
 
@@ -1613,18 +1691,42 @@ object Fm {
     }
 
     /** Установка набора APK собственной сессией (без ADB/root): при необходимости сначала выдаётся разрешение, затем системное подтверждение. */
-    fun installFilesViaSession(files: List<java.io.File>) {
-        scope.launch {
-            if (!ensureInstallPermission { installFilesViaSession(files) }) return@launch
-            reportSession(SessionInstall.install(sctx, files))
-        }
-    }
+    /** Наборы файлов, для которых сессионная установка уже запущена (до конца установки): повторный вызов игнорируется сразу, без ожидания. */
+    private val sessionStarting = java.util.Collections.synchronizedSet(HashSet<String>())
 
-    private fun reportSession(r: SessionInstall.Result) {
-        when {
-            r.ok -> say(str(R.string.fm_installed))
-            r.cancelled -> say(str(R.string.fm_cancelled))
-            else -> dlg = FmDlg.InstallFail(r.message)
+    fun installFilesViaSession(files: List<java.io.File>) {
+        if (files.isEmpty()) return
+        val fk = files.joinToString("|") { it.path }
+        if (!sessionStarting.add(fk)) { say(str(R.string.ii_busy)); return }
+        scope.launch {
+          try {
+            if (!ensureInstallPermission { installFilesViaSession(files) }) return@launch
+            // 22.11.2026 (18.0): тот же пакет и файл уже устанавливается: второй сессии и второго системного окна «Установить» нет
+            val key = withContext(Dispatchers.IO) { SessionInstall.guardKey(sctx, files) }
+            if (InstallGuard.isActive(key)) { say(str(R.string.ii_busy)); return@launch }
+            // сразу окно хода «Идёт установка…» (передача файла, ожидание ответа в системном окне, итог): повторно нажимать не нужно
+            val run = InstRun()
+            run.total = 1; run.index = 1; run.running = true; run.phase = 1
+            run.all = files.sumOf { it.length() }.coerceAtLeast(1L)
+            run.name = withContext(Dispatchers.IO) {
+                runCatching {
+                    val pm = sctx.packageManager
+                    val ai = pm.getPackageArchiveInfo(files.first().path, 0)?.applicationInfo?.also { it.sourceDir = files.first().path; it.publicSourceDir = files.first().path }
+                    ai?.let { pm.getApplicationLabel(it).toString() }
+                }.getOrNull()
+            } ?: files.first().name
+            InstBg.launch(sctx, run) { dlg = FmDlg.InstallRunDlg(it) }
+            val r = SessionInstall.install(sctx, files) { ph, d, a -> run.phase = ph; run.done = d; run.all = a.coerceAtLeast(1L) }
+            if (r.busy) { if (dlg is FmDlg.InstallRunDlg && (dlg as FmDlg.InstallRunDlg).run === run) dlg = null; run.finished = true; run.running = false; say(str(R.string.ii_busy)); return@launch }
+            if (r.ok) {
+                // 23.11.2026 (18.0): итог с названием и версией (раньше у установки сессией версии не было)
+                val vi = withContext(Dispatchers.IO) { runCatching { sctx.packageManager.getPackageArchiveInfo(files.first().path, 0) }.getOrNull() }
+                val vc = vi?.let { if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else @Suppress("DEPRECATION") it.versionCode.toLong() } ?: 0L
+                run.ok = 1; run.okItems.add(InstRun.OkItem(run.name, vi?.versionName.orEmpty(), vc))
+            }
+            else { run.bad = 1; run.fails.add(run.name + ": " + (if (r.cancelled) str(R.string.fm_cancelled) else r.message)) }
+            run.done = run.all; run.running = false; run.finished = true
+          } finally { sessionStarting.remove(fk) }
         }
     }
 
@@ -1650,8 +1752,8 @@ object Fm {
             return@launch
         }
         // сеть, облако, архив, оболочка ADB: файл забирается во временную папку, дальше то же окно «Установка» с версиями и ход установки
-        say(str(R.string.inst_installing))
-        val file = fileForInstall(p, it.name) ?: run { say(str(R.string.fm_err_unsupported)); return@launch }
+        if (p.src != "smb") say(str(R.string.inst_installing))   // из сети карточка «Загрузка» с процентами сама появляется
+        val file = fileForInstall(p, it.name) ?: run { say(failMsg()); return@launch }
         val af = ApkFile(it.name, android.net.Uri.fromFile(file), file.length(), file)
         val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(sctx, af) }.getOrNull() }
         dlg = FmDlg.InstallConfirm(listOf(af), mapOf(af.name to meta)) { wipe ->
@@ -2760,8 +2862,18 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
     val prim = MaterialTheme.colorScheme.primary
     val sameSpot = p.scrollPath == p.path
     val state = rememberLazyListState(if (sameSpot) p.scrollIdx else 0, if (sameSpot) p.scrollOff else 0)
+    val rvSt = remember { RvState() }
+    val rvOn = FmPaneRv.ON
+    fun curFirst() = if (rvOn) rvSt.first else state.firstVisibleItemIndex
+    fun curOff() = if (rvOn) rvSt.firstOffset else state.firstVisibleItemScrollOffset
+    suspend fun goTo(i: Int, o: Int = 0) { if (rvOn) rvSt.scrollToItem(i, o) else state.scrollToItem(i, o) }
+    if (rvOn) LaunchedEffect(Unit) {
+        var t = 0
+        while (t < 20 && (rvSt.rv?.adapter?.itemCount ?: 0) == 0) { androidx.compose.runtime.withFrameNanos { }; t++ }
+        if (sameSpot) rvSt.scrollToItem(p.scrollIdx, p.scrollOff)
+    }
     LaunchedEffect(state) {
-        androidx.compose.runtime.snapshotFlow { Triple(p.path, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }.collect { (pa, i, o) ->
+        (if (rvOn) kotlinx.coroutines.flow.flow { while (true) { emit(Triple(p.path, rvSt.first, rvSt.firstOffset)); delay(150) } }.distinctUntilChanged() else androidx.compose.runtime.snapshotFlow { Triple(p.path, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }).collect { (pa, i, o) ->
             if (pa != p.scrollPath) { p.scrollPath = pa; p.scrollIdx = 0; p.scrollOff = 0 } else { p.scrollIdx = i; p.scrollOff = o }
         }
     }
@@ -2792,7 +2904,16 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
     // 14.0: плоский список дерева и строки считаются один раз на изменение раскрытых папок, их содержимого, сортировки и скрытых; раньше flattenTree (с сортировкой каждой раскрытой папки)
     // и buildRows выполнялись на каждую перекомпоновку панели (каждая галочка, каждая пачка цифр папок)
     val treeModeNow = Fm.treeMode
-    val nodes by remember(p, items, treeModeNow) { androidx.compose.runtime.derivedStateOf { val t = Fm.sortTick; if (treeModeNow && t >= 0) flattenTree(p, items) else null } }
+    // 23.11.2026 (владелица: «фоновая сборка строк как у X-plore»): плоский список дерева, строки и строки списка (PaneRvItem) собираются в фоновом потоке по версии состояний (раскрытые папки, их содержимое, сортировка);
+    // на главный поток попадает готовый результат. Пока результат для этой папки и настроек ещё не готов (вход в папку, смена сортировки), строки один раз собираются сразу, как раньше.
+    val pcState = androidx.compose.runtime.produceState<PaneComputed?>(null, p, items, treeModeNow, cfgNow) {
+        androidx.compose.runtime.snapshotFlow { runCatching { computePane(p, items, treeModeNow, cfgNow) }.getOrElse { e -> android.util.Log.w("PaneCompute", "фоновая сборка списка: " + e.javaClass.simpleName + " " + e.message); PaneComputed(p, p.path, treeModeNow, cfgNow, null, emptyList(), emptyList(), true) } }.flowOn(Dispatchers.Default).collect { value = it }
+    }
+    val pcA = pcState.value
+    val pcOk = pcA != null && !pcA.failed && pcA.pane === p && pcA.path == p.path && pcA.tree == treeModeNow && pcA.cfg == cfgNow
+    val pcTracked = remember(p, items, treeModeNow, cfgNow) { androidx.compose.runtime.derivedStateOf { computePane(p, items, treeModeNow, cfgNow) } }   // запасной путь на случай сбоя фоновой сборки: как раньше, в главном потоке
+    val pcSync = if (pcOk || pcA?.failed == true) null else remember(items, p.path, treeModeNow, cfgNow) { androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { computePane(p, items, treeModeNow, cfgNow) } }
+    val comp: PaneComputed = if (pcOk) pcA!! else if (pcA?.failed == true) pcTracked.value else pcSync!!
     val tctx = LocalContext.current
     val cloudTop = Fm.cloudRoot(p)
     val view = if (cloudTop) p.cloudView else "drive"
@@ -2811,15 +2932,14 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
             p.trashLoading = false
         }
     }
-    val builtRows by remember(p, items, nodes, cfgNow) { androidx.compose.runtime.derivedStateOf { buildRows(p, items, nodes, cfgNow) } }
     val rows: List<PRow> = when (view) {
         "top" -> listOf<PRow>(TrashRow(), DriveRow())
         "trash" -> if (p.trashItems.isEmpty()) listOf<PRow>(MsgRow(if (p.trashLoading) tctx.getString(R.string.tr_counting) else p.trashErr.ifEmpty { tctx.getString(R.string.tr_empty) })) else p.trashItems.map<CloudTrash.TItem, PRow> { TItemRow(it) }
-        else -> builtRows
+        else -> comp.rows
     }
     // список у самого верха: после дочитывания тегов он остаётся у верха (иначе строка, вставшая выше, оказалась бы за краем экрана)
-    val topAtTick = remember(tick) { androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0 } }
-    LaunchedEffect(tick) { if (topAtTick) state.scrollToItem(0) }
+    val topAtTick = remember(tick) { androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { curFirst() == 0 && curOff() == 0 } }
+    LaunchedEffect(tick) { if (topAtTick) goTo(0) }
     // после смены настроек сортировки список показывается с начала или с выбранного элемента (при дочитывании тегов положение не меняется)
     // положение списка запоминается для каждой папки каждой панели: при возврате в папку (и после перезапуска) список стоит там же
     val sctx = LocalContext.current
@@ -2831,11 +2951,11 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
         // 19.11.2026: список уже создан с живой позицией (sameSpot) — не перематывать на сохранённую с задержкой 400 мс, иначе при переходе на панель список «дёргается»
         if (sameSpot && (p.scrollIdx != 0 || p.scrollOff != 0)) { posReady[0] = true; return@LaunchedEffect }
         val saved = ScrollMem.getFolder(sctx, p.id, p.src, p.path)
-        state.scrollToItem(saved?.first ?: 0, saved?.second ?: 0)
+        goTo(saved?.first ?: 0, saved?.second ?: 0)
         posReady[0] = true
     }
     LaunchedEffect(p.path, p.src) {
-        snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }.collectLatest { (a, b) ->
+        (if (rvOn) kotlinx.coroutines.flow.flow { while (true) { emit(rvSt.first to rvSt.firstOffset); delay(200) } }.distinctUntilChanged() else snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }).collectLatest { (a, b) ->
             delay(400); if (posReady[0]) ScrollMem.putFolder(sctx, p.id, p.src, p.path, a, b)
         }
     }
@@ -2845,7 +2965,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
         if (seenPath[0] != p.path) { seenPath[0] = p.path; return@LaunchedEffect }
         val sel = p.selected.firstOrNull()
         val i = if (sel != null) rows.indexOfFirst { it is ItemRow && it.item.name == sel } else 0
-        state.scrollToItem(maxOf(i, 0))
+        goTo(maxOf(i, 0))
     }
     LaunchedEffect(p.scrollToName, rows) {
         val n = p.scrollToName
@@ -2856,7 +2976,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
                 val g = items.firstOrNull { it.name == n }?.let { cfgNow.groupOf(it.isDir, it.ext).ch.toString() }
                 if (g != null && g in p.collapsed) { p.collapsed.remove(g); return@LaunchedEffect }
             }
-            if (i >= 0) state.scrollToItem(i); p.selected = setOf(n); p.scrollToName = null
+            if (i >= 0) goTo(i); p.selected = setOf(n); p.scrollToName = null
         }
     }
     // 18.11.2026 (владелица: «на приставке анимация переходов не работает»): на приставке/в ландшафте обе панели показаны разом,
@@ -2908,6 +3028,10 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
         p.tagNote?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1) }
         val emptyKey = "\u0000empty"
         if (p.menuFor == emptyKey) LDropdownMenu(true, { p.menuFor = null }) { CreateMenu(p, p.path) { p.menuFor = null } }
+        if (p.parked == null && !(p.src == "local" && !Fm.granted) && FmPaneRv.ON) {
+            val rvItems = if (view != "top" && view != "trash") comp.rv else remember(rows) { rowsToRv(p, rows) }
+            FmPaneRvList(p, rvItems, Marq.tv, rvSt, { it2 -> FmItemMenu(p, it2.item!!, it2.node as TNode?) }, { Fm.active = p.id; p.menuFor = emptyKey }, Modifier.weight(1f).fillMaxWidth())
+        } else
         if (p.parked == null && !(p.src == "local" && !Fm.granted)) Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().combinedClickable(onClick = {}, onLongClick = { Fm.active = p.id; p.menuFor = emptyKey }).verticalScrollbar(state), state = state, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (Marq.tv) 3.dp else 0.dp)) {
             items(rows, key = { it.key }) { r ->
                 when (r) {
@@ -3023,6 +3147,42 @@ private class MsgRow(val text: String) : PRow { override val key = "MSGROW" }
 private class TItemRow(val ti: CloudTrash.TItem) : PRow { override val key = "Ti:" + ti.id }
 private class ItemRow(val item: FmItem, val node: TNode?) : PRow { override val key = node?.path ?: item.name }
 
+/** 23.11.2026: результат фоновой сборки списка панели: плоский список дерева, строки и строки RecyclerView. */
+private class PaneComputed(val pane: FmPane, val path: String, val tree: Boolean, val cfg: SortCfg, val nodes: List<TNode>?, val rows: List<PRow>, val rv: List<PaneRvItem>, val failed: Boolean = false)
+
+private fun computePane(p: FmPane, items: List<FmItem>, tree: Boolean, cfg: SortCfg): PaneComputed {
+    val t = Fm.sortTick
+    val nodes = if (tree && t >= 0) flattenTree(p, items) else null
+    val rows = buildRows(p, items, nodes, cfg)
+    return PaneComputed(p, p.path, tree, cfg, nodes, rows, rowsToRv(p, rows))
+}
+
+private fun rowsToRv(p: FmPane, rows: List<PRow>): List<PaneRvItem> {
+    // блок (фон, контур, тень) только у «листовых» раскрытых папок вместе с их строками, как в X-plore
+    val grps = IntArray(rows.size)
+    val openF = BooleanArray(rows.size) { ix -> val r = rows[ix]; r is ItemRow && r.node != null && r.item.isDir && r.node.path in p.expanded }
+    for (ix in rows.indices) {
+        if (!openF[ix]) continue
+        val d = (rows[ix] as ItemRow).node!!.depth
+        var e = ix + 1; var leaf = true
+        while (e < rows.size) { val rr = rows[e]; if (rr !is ItemRow || rr.node == null || rr.node.depth <= d) break; if (openF[e]) { leaf = false; break }; e++ }
+        if (!leaf) continue
+        for (j in ix until e) grps[j] = 1
+    }
+    return rows.mapIndexed { ix, r -> when (r) {
+    is ItemRow -> PaneRvItem(r.key, r.item, r.node, r.node?.depth ?: 0, r.node?.path ?: "", r.node?.last ?: emptyList(), null).also { x ->
+        val g = grps[ix]; x.grp = g
+        val pg = if (ix > 0) grps[ix - 1] else 0; val ng = if (ix + 1 < grps.size) grps[ix + 1] else 0
+        x.gTop = if (g > 0 && pg == 0) 2 else 0; x.gBot = if (g > 0 && ng == 0) 2 else 0 }
+    is HeadRow -> PaneRvItem(r.key, null, null, 0, "", emptyList()) { FmGroupHeader(r.g, r.count, r.closed) { val c = r.g.ch.toString(); if (c in p.collapsed) p.collapsed.remove(c) else p.collapsed.add(c) } }
+    is TrashRow -> PaneRvItem(r.key, null, null, 0, "", emptyList()) { FmTrashRow(p) }
+    is DriveRow -> PaneRvItem(r.key, null, null, 0, "", emptyList()) { FmDriveRow(p) }
+    is MsgRow -> PaneRvItem(r.key, null, null, 0, "", emptyList()) { Text(r.text, Modifier.padding(12.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
+    is TItemRow -> PaneRvItem(r.key, null, null, 0, "", emptyList()) { FmTrashItemRow(p, r.ti) }
+    else -> PaneRvItem(r.key, null, null, 0, "", emptyList(), null)
+            } }
+}
+
 private fun buildRows(p: FmPane, items: List<FmItem>, nodes: List<TNode>?, cfg: SortCfg): List<PRow> {
     val base: List<PRow> = nodes?.map { ItemRow(it.item, it) } ?: items.map { ItemRow(it, null) }
     if (!cfg.grouped) return base
@@ -3059,7 +3219,7 @@ private fun flattenTree(p: FmPane, top: List<FmItem>): List<TNode> {
             val path = FmIo.join(dir, f.name)
             val chain = anc + (i == list.lastIndex)
             out.add(TNode(f, path, depth, chain))
-            if (f.isDir && path in p.expanded && depth < 12) p.kids[path]?.let { k -> walk(path, Fm.sortList(p, path, if (Fm.showHidden) k else k.filter { !it.hidden }, Fm.treeCfg(p, path)), depth + 1, chain) }
+            if (f.isDir && path in p.expanded && depth < 12) p.kids[path]?.let { k -> walk(path, Fm.sortedKids(p, path, k), depth + 1, chain) }
         }
     }
     walk(p.path, top, 0, listOf(true))

@@ -363,3 +363,6 @@ fun TabColumn(key: String, modifier: Modifier = Modifier.fillMaxSize(), contentP
         ScrollbarHandle(st, Modifier.align(if (left) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd), enabled = inside)
     }
 }
+
+/** 22.11.2026: полоса прокрутки для списка не на LazyListState (RecyclerView): метрики (смещение, высота окна, высота содержимого) даёт вызывающий. */
+fun Modifier.verticalScrollbarFor(state: ScrollableState, metrics: (Float) -> Triple<Float, Float, Float>?): Modifier = sbar(state, false, metrics)

@@ -322,9 +322,9 @@ object FmIo {
             var tmp: File? = null
             val local: File = if (src.src == "local") File(sp) else File(tmpDir, System.nanoTime().toString(36) + "_" + name.replace(Regex("[^\\w.\\- ]"), "_")).also { tmp = it }
             try {
-                if (tmp != null) { if (src.smb is ArchiveFs) (src.smb as ArchiveFs).extractTo(sp, tmp!!, null) else src.smb!!.copyTo(sp, tmp!!) }
+                if (tmp != null) { if (src.smb is ArchiveFs) (src.smb as ArchiveFs).extractTo(sp, tmp!!, null) else src.smb!!.copyTo(sp, tmp!!, if (j == null) null else Pump.Half(j)) }   // 22.11.2026: скачивание с ходом (половина полосы, вторая половина: загрузка)
                 if (j?.cancelled == true) throw LocalOps.Cancelled()
-                fs.upload(local, dp, true, j)
+                fs.upload(local, dp, true, if (j != null && tmp != null) Pump.Half(j) else j)
             } finally { tmp?.delete() }
             j?.item()
         }
@@ -345,7 +345,9 @@ object FmIo {
 
     private fun smbToLocal(smb: RemoteFs, url: String, isDir: Boolean, dest: File, j: OpProgress? = null) {
         if (smb is ArchiveFs) { smb.extractTo(url, dest, j); return }
-        if (!isDir) { dest.parentFile?.mkdirs(); kotlinx.coroutines.runBlocking { smb.copyTo(url, dest) }; return }
+        if (j?.cancelled == true) throw LocalOps.Cancelled()
+        // 22.11.2026: файл качается с ходом работы (имя, байты, отмена) и буфером 512 КБ; раньше j игнорировался, полоска стояла на 0 до конца
+        if (!isDir) { j?.file(dest.name); dest.parentFile?.mkdirs(); kotlinx.coroutines.runBlocking { smb.copyTo(url, dest, j) }; j?.item(); return }
         dest.mkdirs()
         for (e in kotlinx.coroutines.runBlocking { smb.list(url) }) smbToLocal(smb, e.path, e.isDir, File(dest, e.name), j)
     }

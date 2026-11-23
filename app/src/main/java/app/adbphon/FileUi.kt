@@ -711,7 +711,7 @@ class RemoteApk(val key: String, val size: Long, val allowFetch: Boolean, val de
 
 @Composable
 fun FileTypeIcon(name: String, ext: String, localPath: String?, size: Dp, modifier: Modifier = Modifier, remote: RemoteApk? = null) {
-    val customSpec = CustomIcons.specFor(ext, localPath, fileCat(ext))
+    val customSpec = CustomIcons.specFor(ext, localPath, fileCat(ext), fileOnly = fileCat(ext) == FCat.APK && UiPrefs.apkIcons)
     if (customSpec != null) {
         if (fileCat(ext) == FCat.APK) LaunchedEffect(name) { Thumbs.apkBranch(name, localPath, "свой значок для типа/расширения (CustomIcons), значок из APK не запрашивается") }
         CustomIconView(customSpec, size, modifier); return

@@ -111,12 +111,12 @@ class InstallService : Service() {
                         delay(700)
                     }
                 }
-                val r = installWithProgress(app, listOf(af), mapOf(af.name to meta), run)
+                val r = installWithProgress(app, listOf(af), mapOf(af.name to meta), run, notify = false)
                 poll.cancel()
                 ok = r.second == 0 && r.first > 0
                 if (!ok) msg = run.fails.joinToString("; ")
             } else {
-                val r = SessionInstall.install(app, listOf(f))
+                val r = SessionInstall.install(app, listOf(f), notify = false)
                 ok = r.ok; msg = r.message
                 if (r.cancelled) { win(4, label, info.first, infoText, meta?.icon); reply(R_CANCELLED, "cancelled", info.first, info.second, msg); return }
             }

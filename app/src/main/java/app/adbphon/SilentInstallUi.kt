@@ -27,11 +27,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -47,6 +45,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+/** 23.11.2026: форма как у Material3 по умолчанию (вид окна не меняется), без прямых импортов Button/TextButton (ButtonStyleTest). */
+private val PILL_SHAPE = androidx.compose.foundation.shape.CircleShape
+private val PILL_TEXT_SHAPE = androidx.compose.foundation.shape.CircleShape
 
 /**
  * 15.0 код 75 (правило владелицы «никаких тихих установок нигде»): состояние окна установки по просьбе другой нашей программы (Меню приложений, Pulsar, Vision и др.).
@@ -125,9 +127,9 @@ private fun SilentScreen(close: () -> Unit) {
                 if (d.stage >= 2) {
                     val launch = if (d.stage == 2) ctx.packageManager.getLaunchIntentForPackage(d.pkg) else null
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(close) { Text(stringResource(R.string.ii_close)) }
+                        TextButton(close, shape = PILL_TEXT_SHAPE) { Text(stringResource(R.string.ii_close)) }
                         // «Открыть» только по нажатию
-                        if (launch != null) Button({ runCatching { ctx.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; close() }) { Text(stringResource(R.string.fm_open)) }
+                        if (launch != null) Button({ runCatching { ctx.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; close() }, shape = PILL_SHAPE) { Text(stringResource(R.string.fm_open)) }
                     }
                 }
             }

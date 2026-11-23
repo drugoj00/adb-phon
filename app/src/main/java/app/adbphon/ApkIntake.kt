@@ -95,19 +95,36 @@ object ApkIntake {
  */
 object InstallGate {
     var confirm by mutableStateOf<FmDlg.InstallConfirm?>(null)
+    /** Наборы файлов, для которых окно «Установка» уже готовится или показано: повторный вызов (второе нажатие, пока на слабом устройстве читаются сведения) второе окно не открывает. */
+    private val preparing = java.util.Collections.synchronizedSet(HashSet<String>())
+    private fun fileKey(files: List<File>) = files.joinToString("|") { it.path }
+
+    /** Окно закрыто («Отмена», касание вне окна, «Назад»): те же файлы можно открыть снова. */
+    fun dismiss() { confirm = null; preparing.clear() }
 
     fun sessionWithInfo(ctx: Context, files: List<File>) {
         if (files.isEmpty()) return
+        val fk = fileKey(files)
+        // 22.11.2026 (для 18.0): повторный вызов для тех же файлов игнорируется; раньше второй вызов подменял окно уже нажатой «Установить» новым таким же окном
+        if (!preparing.add(fk)) return
         Fm.scope.launch {
-            val app = ctx.applicationContext
-            val afs = files.map { ApkFile(it.name, Uri.fromFile(it), it.length(), it) }
-            val metas = withContext(Dispatchers.IO) { afs.associate { a -> a.name to runCatching { ApkInfo.readFor(app, a) }.getOrNull() } }
-            confirm = FmDlg.InstallConfirm(afs, metas) { _ -> confirm = null; Fm.installFilesViaSession(files) }
+            var shown = false
+            try {
+                val app = ctx.applicationContext
+                val key = withContext(Dispatchers.IO) { SessionInstall.guardKey(app, files) }
+                if (InstallGuard.isActive(key)) { Fm.say(Fm.str(R.string.ii_busy)); return@launch }
+                if (InstallGuard.recentSuccess(app, listOf(key)) != null) { Fm.say(Fm.str(R.string.ii_already_short)); return@launch }
+                val afs = files.map { ApkFile(it.name, Uri.fromFile(it), it.length(), it) }
+                val metas = withContext(Dispatchers.IO) { afs.associate { a -> a.name to runCatching { ApkInfo.readFor(app, a) }.getOrNull() } }
+                if (confirm != null) return@launch
+                confirm = FmDlg.InstallConfirm(afs, metas) { _ -> confirm = null; preparing.remove(fk); Fm.installFilesViaSession(files) }
+                shown = true
+            } finally { if (!shown) preparing.remove(fk) }
         }
     }
 }
 
 @androidx.compose.runtime.Composable
-fun InstallGateHost() { InstallGate.confirm?.let { d -> InstallConfirmDialog(d) { InstallGate.confirm = null } } }
+fun InstallGateHost() { InstallGate.confirm?.let { d -> InstallConfirmDialog(d) { InstallGate.dismiss() } } }
 
 // ApkIntakeActivity (11.0, код 60) перенесена в ApkIntakeUi.kt: компактное окно вместо перехода в главный экран.
