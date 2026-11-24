@@ -15,7 +15,7 @@
     <string name="conn_port">Порт підключення (якщо не знайдено само)</string>
     <string name="btn_pair">Сполучення</string>
     <string name="btn_connect">Підключитись</string>
-    <string name="conn_title_tcp">Android 8–10: ADB по мережі</string>
+    <string name="conn_title_tcp">Android 8-10: ADB по мережі</string>
     <string name="conn_steps_tcp">Один раз з комп’ютера по USB: adb tcpip 5555 (у програмі «Телефон у вікні зі звуком» для цього є кнопка). Потім натисни кнопку нижче й дозволь налагодження на телефоні. Після перезавантаження телефона команду повторити.</string>
     <string name="btn_connect_tcp">Підключитись до %1$s:5555</string>
     <string name="btn_disconnect">Відключитись</string>
@@ -551,6 +551,8 @@
     <string name="fm_search_in">Шукали в: %1$s (з вкладеними теками)</string>
     <string name="fm_free_of">вільно %1$s із %2$s</string>
     <string name="fm_hidden">Приховані</string>
+    <string name="fm_hidden_on">Приховані файли: показано</string>
+    <string name="fm_hidden_off">Приховані файли: не показано</string>
     <string name="fm_hist_empty">Історія порожня</string>
     <string name="fm_history">Історія</string>
     <string name="fm_install">Встановити</string>
@@ -1045,7 +1047,7 @@
     <string name="cf_legend_merge">злиття тек</string>
     <string name="cf_delete_title">Видалити вибране: %1$d</string>
     <string name="cf_delete_sub">Це неможливо скасувати.</string>
-    <string name="fm_same_folder">Джерело й призначення — та сама тека</string>
+    <string name="fm_same_folder">Джерело й призначення - та сама тека</string>
     <string name="fm_into_itself">Теку не можна копіювати всередину самої себе</string>
     <string name="fm_nothing_to_do">Нічого копіювати: усе пропущено</string>
     <string name="cf_b_replace">Замінити</string>
@@ -1119,7 +1121,7 @@
     <string name="ap_no_apk">Файл APK недоступний</string>
     <string name="ap_no_launch">У застосунку немає екрана запуску</string>
     <string name="ap_no_data">Тека даних недоступна без ADB</string>
-    <string name="ap_warn_system">%1$s — системний застосунок. Видалення для цього користувача може порушити роботу телефона; повернути можна пунктом «Встановити знову» в теці «Видалені». Продовжити?</string>
+    <string name="ap_warn_system">%1$s - системний застосунок. Видалення для цього користувача може порушити роботу телефона; повернути можна пунктом «Встановити знову» в теці «Видалені». Продовжити?</string>
     <string name="rt_tree">Дерево на домику</string>
     <string name="rt_loading">Завантаження…</string>
     <string name="fm_play_folder">Грати теку</string>
@@ -1130,7 +1132,7 @@
     <string name="ap_clear_data_q">Видалити УСІ дані застосунку %1$s (налаштування, облікові записи, збережені файли)? Це неможливо скасувати.</string>
     <string name="ap_cache_part">Зовнішній кеш очищено. Внутрішній кеш очищується лише з root.</string>
     <string name="ap_export">Експорт APK</string>
-    <string name="ap_batch_q">%1$s: застосунків — %2$d?</string>
+    <string name="ap_batch_q">%1$s: застосунків - %2$d?</string>
     <string name="ap_batch_more">…і ще %1$d</string>
     <string name="ap_batch_run">%1$d з %2$d…</string>
     <string name="ap_batch_result">Виконано: %1$d з %2$d</string>
@@ -1316,7 +1318,7 @@
     <string name="ft_m2g">2 ГБ</string>
     <string name="ft_space_hint">Видалене займає місце, доки кошик не очищено.</string>
     <string name="acc_title">Дозвольте доступ до файлів</string>
-    <string name="acc_text">Без доступу до файлів кошик і видалення не працюють. Натисни «Відкрити налаштування» і дозволь. На Android 11 і новіше це «Доступ до всіх файлів», на Android 8–10 дозвіл на пам\'ять.</string>
+    <string name="acc_text">Без доступу до файлів кошик і видалення не працюють. Натисни «Відкрити налаштування» і дозволь. На Android 11 і новіше це «Доступ до всіх файлів», на Android 8-10 дозвіл на пам\'ять.</string>
     <string name="acc_open">Відкрити налаштування</string>
     <string name="nt_drive">Мережевий диск</string>
     <string name="nt_none">Тут видаляти не можна: у записі підключення не вказано спільний ресурс (шару).</string>
@@ -1749,7 +1751,7 @@
     <string name="pc_screen">Екран</string>
     <string name="pc_add_title">Комп’ютер з Windows</string>
     <string name="pc_name">Назва</string>
-    <string name="pc_add_hint">На ПК: «Телефон у вікні зі звуком» → значок у треї → «Доступ до цього екрана: увімк». Код програми — у списку «Люди» на тому ПК. Файли й екран ідуть через Tailscale.</string>
+    <string name="pc_add_hint">На ПК: «Телефон у вікні зі звуком» → значок у треї → «Доступ до цього екрана: увімк». Код програми - у списку «Люди» на тому ПК. Файли й екран ідуть через Tailscale.</string>
     <string name="pc_busy">На ПК відкрито забагато файлових сеансів.</string>
     <string name="dev_files">Файли пристрою</string>
     <string name="dev_video">Відеовікно</string>
