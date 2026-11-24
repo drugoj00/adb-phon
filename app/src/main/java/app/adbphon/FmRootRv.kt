@@ -949,7 +949,7 @@ internal fun FmRootRvList(p: FmPane, model: RootModel, tv: Boolean, st: RvState,
         }
         // перерисовка видимых строк, когда меняются состояния, от которых они зависят (отметки, цифры папок, выбранная строка, язык дат)
         LaunchedEffect(adapter) {
-            snapshotFlow { DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) }      // 24.11.2026: новый объект каждый раз, иначе snapshotFlow (distinctUntilChanged) молча пропускал повторный такой же список строк: отметка менялась через раз
+            snapshotFlow { tick.intValue; DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) }      // 24.11.2026: новый объект каждый раз, иначе snapshotFlow (distinctUntilChanged) молча пропускал повторный такой же список строк: отметка менялась через раз
         }
         // фокус пульта: запрос на строку по ключу (после возврата, после запуска)
         LaunchedEffect(FocusRestore.key) { val k = FocusRestore.key ?: return@LaunchedEffect; rvFocusKey(st, adapter, k, { FocusRestore.key == k }) { FocusRestore.key = null } }

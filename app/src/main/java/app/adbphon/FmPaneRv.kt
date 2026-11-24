@@ -291,7 +291,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
         title.applyStyle(e, if (dense) 15f else 14f, if (dense) 17f else 18f, 700, e.content)
         if (mm.sub.isNotEmpty()) { sub.visibility = VISIBLE; sub.text = mm.sub; sub.applyStyle(e, if (dense) 11f else 10f, if (dense) 13f else 12f, 600, e.alpha(e.content, .6f)) } else sub.visibility = GONE
         chk.layoutParams = LinearLayout.LayoutParams(e.dp(if (tv) 40 else 34).toInt(), e.dp(if (tv) 40 else 34).toInt()).also { it2 -> it2.marginStart = e.dp(4).toInt(); it2.marginEnd = e.dp(4).toInt() }
-        chk.on = mm.sel; chk.part = mm.part; chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.prim = e.prim; chk.onSurface = e.onSurface; chk.onPrimary = e.onPrimary
+        chk.on = mm.sel; chk.part = mm.part; chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.prim = e.prim; chk.onSurface = e.onSurface; chk.onPrimary = e.onPrimary; chk.invalidate()      // 24.11.2026: без этого галочка не перерисовывалась при смене отметки (жалоба wad72)
         (zone.layoutParams as LayoutParams).width = e.dp(if (tv) 76 else 64).toInt()
         val ck = countKey(p, f, fullOf(p, it))
         if (ck != null && mm.cnt == null && !FolderCounts.has(ck)) {
@@ -505,7 +505,8 @@ internal fun FmPaneRvList(p: FmPane, items: List<PaneRvItem>, tv: Boolean, st: R
                 st.rv = rv
             },
         )
-        LaunchedEffect(adapter) { snapshotFlow { DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) } }
+        // 24.11.2026: tick (раскладка и прокрутка) будит подписку: при первом запуске строк ещё нет, ни одно состояние не читалось, и поток больше не просыпался (галочки не рисовались)
+        LaunchedEffect(adapter) { snapshotFlow { tick.intValue; DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) } }
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.offset { IntOffset(menuX, menuY) }.size(with(density) { menuW.toDp() }, with(density) { menuH.toDp() })) {
             val mk = p.menuFor
             if (mk != null) { val it = items.firstOrNull { x -> x.item != null && x.menuKey == mk }; if (it != null) menuContent(it) }
