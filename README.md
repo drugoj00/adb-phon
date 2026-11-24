@@ -16,15 +16,17 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 18.0.** [ADB-phon-18.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 19.0.** [ADB-phon-19.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `4cede94ed2e569c2a77582c61962d49adeae43ff4ae95bb17709ad3feaecd59e`
+SHA-256: `65b835fee418d3bf9432d8c6f7e8d867e91349d85607a1b0ff010e7bc6617302`
 
-## What's new in 18.0
+## What's new in 19.0
 
-- Smooth folder expanding and scrolling in Files
-- The app icon of an .apk is not covered by the file type icon
-- Faster response
+- Fixed: selection check marks were not shown in the right Files pane on some boxes
+- Fixed: the Hidden button did nothing in the Files tree; its icon and colour now show the state, with a message
+- Remote: focus on the properties dot of a row (Left, OK); side panel buttons scroll to the end before focus moves to More
+- The pane switch arrow is bolder; the home icon is larger
+- The pane header shows the path of the selected or focused item instead of the word Sources
 - Bug fixes
 
 **Requirements and limits**
@@ -93,7 +95,7 @@ SHA-256: `4cede94ed2e569c2a77582c61962d49adeae43ff4ae95bb17709ad3feaecd59e`
 
 ## Quick start
 
-1. Download ADB-phon-18.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-19.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8-10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
