@@ -129,6 +129,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -284,7 +285,7 @@ sealed class FmDlg {
     class Bookmarks : FmDlg()
     class History : FmDlg()
     class Tree : FmDlg()
-    /** 9.3: «Куда?» — когда копирование или перенос начаты с корневого экрана, а другая панель тоже корень: выбор локальной папки-приёмника. */
+    /** 9.3: «Куда?» - когда копирование или перенос начаты с корневого экрана, а другая панель тоже корень: выбор локальной папки-приёмника. */
     /** 20.11.2026 (владелица: «когда нажимаю «Копировать», копируется сразу без вопросов»): подтверждение копирования и переноса: откуда, куда, сколько, галочка «Переместить», что делать с совпадающими именами. [go] получает итоговое «перенос?» и выбор для совпадений (null: спрашивать). */
     class TransferConfirm(val move: Boolean, val from: String, val to: String, val count: Int, val names: List<String>, val sizeBytes: Long, val dst: FmPane?, val src: FmPane?, val go: (Boolean, CAct?) -> Unit) : FmDlg()
     /** 20.11.2026: «⋯» на боковой панели: список кнопок, которых сейчас нет на панели; нажатие добавляет кнопку. */
@@ -311,7 +312,7 @@ sealed class FmDlg {
     class CloudAll : FmDlg()
     /** confirm: сразу показать подтверждение (пусто: очистка всей корзины, иначе id элемента). */
     class Trash(val c: NetConn, val confirm: String? = null) : FmDlg()
-    /** Мастер «Свой ключ»; [step] — с какого шага открыть (шаг «Опубликовать приложение» у Google: [OwnKeyWizard.PUBLISH_STEP]). */
+    /** Мастер «Свой ключ»; [step] - с какого шага открыть (шаг «Опубликовать приложение» у Google: [OwnKeyWizard.PUBLISH_STEP]). */
     class OwnKey(val type: String, val step: Int = 0, val sharedClosed: Boolean = false) : FmDlg()
     class OwnKeyPick : FmDlg()
     class EditNet(val conn: NetConn) : FmDlg()
@@ -346,7 +347,7 @@ object Fm {
     var showHidden by mutableStateOf(false)
     /** Нажатие на папку в режиме «Дерево»: true раскрывает в списке, false входит в папку. */
     var dirTapExpand by mutableStateOf(true)
-    /** 12.0: «Держать раскрытой только одну папку» (по умолчанию включено): раскрыл другую — прежняя сворачивается, а её список выгружается из памяти. */
+    /** 12.0: «Держать раскрытой только одну папку» (по умолчанию включено): раскрыл другую - прежняя сворачивается, а её список выгружается из памяти. */
     var treeOne by mutableStateOf(true)
     var dense by mutableStateOf(true)        // «Плотно» по умолчанию, как список в «Софте»
     var showSize by mutableStateOf(true)     // размер файлов под названием (по умолчанию включено)
@@ -375,7 +376,7 @@ object Fm {
     private val opLock = kotlinx.coroutines.sync.Mutex()
     var note by mutableStateOf<String?>(null)
     var inited by mutableStateOf(false)
-    /** Есть ли доступ ко всем файлам (Android 11+) или к памяти (Android 6–10). */
+    /** Есть ли доступ ко всем файлам (Android 11+) или к памяти (Android 6-10). */
     var granted by mutableStateOf(true)
     /** Запрос прав на старых версиях Android (ставится из экрана). */
     var askLegacy: (() -> Unit)? = null
@@ -399,7 +400,7 @@ object Fm {
         if (android.os.Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
         else ctx.checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-    /** Можно ли записывать и удалять в общей памяти: Android 11+ «доступ ко всем файлам», Android 8–10 обычное разрешение на запись. */
+    /** Можно ли записывать и удалять в общей памяти: Android 11+ «доступ ко всем файлам», Android 8-10 обычное разрешение на запись. */
     fun hasWrite(ctx: Context): Boolean =
         if (android.os.Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
         else ctx.checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE") == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -824,7 +825,12 @@ object Fm {
      * Раньше вложенные уровни брали общую настройку панели, и при «Только эта папка» верхний уровень и раскрытые папки сортировались по-разному.
      */
     fun treeCfg(p: FmPane, dir: String): SortCfg = SortStore.folder(p, dir) ?: if (SortEngine.isInside(p.path, dir) || dir.trimEnd('/') == p.path.trimEnd('/')) cfgFor(p, p.path) else p.sortCfg
-    fun setHidden(v: Boolean) { showHidden = v; prefs().edit().putBoolean("hidden", v).apply() }
+    fun setHidden(v: Boolean) {
+        showHidden = v; prefs().edit().putBoolean("hidden", v).apply()
+        // дерево «Источники» кеширует списки папок: пересобрать, иначе показ скрытых никак не виден
+        if (panes.any { it.root }) runCatching { FmRootCfg.refreshAll(sctx) }
+        scope.launch { delay(1300); say(str(if (v) R.string.fm_hidden_on else R.string.fm_hidden_off)) }    // после «Обновлено» от пересборки дерева
+    }
 
     fun shown(p: FmPane): List<FmItem> = sortList(p, p.path, if (showHidden) p.items else p.items.filter { !it.hidden })
 
@@ -2059,11 +2065,11 @@ fun iconFor(it: FmItem): ImageVector = if (it.isDir) Icons.Filled.Folder else wh
  */
 /**
  * 18.11.2026 (владелица): системная настройка «Масштаб анимации» у неё урезана (`animator_duration_scale`), и Compose по умолчанию
- * её слушает — обычный `tween`/`AnimatedContent` в таком случае доигрывает почти мгновенно. Переключение панелей «Файлов» оказалось
+ * её слушает - обычный `tween`/`AnimatedContent` в таком случае доигрывает почти мгновенно. Переключение панелей «Файлов» оказалось
  * слишком похоже на «эффекта нет» именно из-за этого (другие переходы в программе тяжелее по отрисовке, поэтому там смена кадра всё
- * равно заметна даже при урезанном масштабе). [FmFullMotion] — фиксированный масштаб 1 (игнорирует системную настройку), используется
- * через `withContext(FmFullMotion) { ... }` вокруг вызова `animateTo` — трогает только эту конкретную анимацию, не весь телефон.
- * Не private: тот же приём понадобился и для других переходов программы (не только «Файлов») — см. MainActivity.kt, FmRoot.kt.
+ * равно заметна даже при урезанном масштабе). [FmFullMotion] - фиксированный масштаб 1 (игнорирует системную настройку), используется
+ * через `withContext(FmFullMotion) { ... }` вокруг вызова `animateTo` - трогает только эту конкретную анимацию, не весь телефон.
+ * Не private: тот же приём понадобился и для других переходов программы (не только «Файлов») - см. MainActivity.kt, FmRoot.kt.
  */
 object FmFullMotion : androidx.compose.ui.MotionDurationScale {
     override val scaleFactor: Float = 1f
@@ -2133,7 +2139,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
         val land = isLandscapeBox(maxWidth, maxHeight)
         val actions = rememberFmActions()
         if (land) {
-            // 12.0 (владелица, 18.11.2026): «сделай так, как на приставке, полностью» — ландшафт телефона теперь один в один раскладка
+            // 12.0 (владелица, 18.11.2026): «сделай так, как на приставке, полностью» - ландшафт телефона теперь один в один раскладка
             // приставки (сетка кнопок в два столбца, тот же FmNarrow, тот же расчёт размера), без отдельной реализации FmSideColumn.
             Row(Modifier.fillMaxSize().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 // колонка кнопок всегда посередине между окнами, настройка «Справа/Слева» не действует (как раньше было на приставке)
@@ -2145,18 +2151,18 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                     val fitRows = ((maxHeight.value - 39f) / (44f * scaleF)).toInt().coerceAtLeast(1)
                     val mainAll = actions.size
                     val maxMain = 2 * fitRows - 1
-                    val gridRows = (mainAll + 1 + 1) / 2   // кнопки панели и «⋯», по две в ряд
+                    val gridRows = (mainAll + 1) / 2 + 1   // кнопки панели по две в ряд и «Ещё» отдельным рядом на две колонки (24.11.2026, слово владелицы)
                     // 20.11.2026: кнопки не мельчают ниже обычного размера (до 8 рядов, как на приставке по умолчанию): если кнопок больше, панель прокручивается, «⋯» закреплена внизу
                     val maxRows = minOf(fitRows, 8)
                     val moreInGrid = gridRows <= maxRows
                     val rows = if (moreInGrid) gridRows else maxRows   // размер кнопок считается по полному набору: скрытые кнопки не растягивают остальные
                     val cap = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.07f).dp
                     // 18.11.2026 (владелица, телефон-ландшафт обрезало низ сетки и терялась «Ещё»): точный расчёт вместо прежней
-                    // оценки под приставку — переключатель (своя высота sz) + отступ 3dp + rows рядов сетки по sz + зазоры 4dp между
+                    // оценки под приставку - переключатель (своя высота sz) + отступ 3dp + rows рядов сетки по sz + зазоры 4dp между
                     // ними должны ровно уместиться в доступную высоту ЭТОГО экрана, какие бы ни были пропорции (не приставки).
                     val sz = ((maxHeight - 3.dp - 4.dp * (rows - 1)) / (rows + 1)).coerceIn(40.dp, 78.dp * scaleF).let { if (it > cap * scaleF) cap * scaleF else it }
-                    // 18.11.2026 (владелица: «кнопки должны быть одинаковыми, а не маленькими — можно менять размер кнопки со стрелкой»):
-                    // высота переключателя больше не часть той же формулы — она просто донимает остаток места под сеткой (с полом,
+                    // 18.11.2026 (владелица: «кнопки должны быть одинаковыми, а не маленькими - можно менять размер кнопки со стрелкой»):
+                    // высота переключателя больше не часть той же формулы - она просто донимает остаток места под сеткой (с полом,
                     // чтобы не исчезла), а сама сетка всегда получает честный sz, даже если из-за crop/min он не совпал бы с «остатком».
                     val gridH = sz * rows + 4.dp * (rows - 1)
                     val switchH = (maxHeight - 3.dp - gridH).coerceAtLeast(32.dp)
@@ -2167,22 +2173,22 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
         } else {
             // портрет: на экране одна панель; вкладки сверху и узкая полоса слева переключают панели мгновенно, свайп по списку тоже
             Column(Modifier.fillMaxSize().padding(horizontal = FmMetrics.OUTER_PAD), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                // 12.0 (владелица, 18.11.2026): убрана отдельная верхняя строка «окошко + стрелка» — окно «Источники» (его собственная
+                // 12.0 (владелица, 18.11.2026): убрана отдельная верхняя строка «окошко + стрелка» - окно «Источники» (его собственная
                 // шапка в FmPaneView) поднято до самого верха экрана, а кнопка-стрелка переехала в бок-панель FmStrip сверху.
-                // 10.0 (fm1, владелица): в портрете колонка кнопок у края активной панели: правая панель — справа, левая — слева (на приставке как было, слева);
+                // 10.0 (fm1, владелица): в портрете колонка кнопок у края активной панели: правая панель - справа, левая - слева (на приставке как было, слева);
                 // у края справа отступ от системного жеста «назад»
                 val stripRight = !Marq.tv && Fm.active == 0   // 10.2 (слово владелицы): зеркально, активно левое окно: колонка справа, активно правое: слева
                 // 19.11.2026: свайп влево/вправо переключает панели из ЛЮБОГО места ряда (список, «Источники», боковая полоса), а не только с
-                // обычного списка файлов (раньше с экрана «Источники» свайпа не было — «обратно только кнопкой, а она наверху»). Порядок «панель/полоса»
-                // меняется через key(): полоса переезжает на другую сторону без пересоздания; отступ справа постоянный — ширина панели не прыгает.
+                // обычного списка файлов (раньше с экрана «Источники» свайпа не было - «обратно только кнопкой, а она наверху»). Порядок «панель/полоса»
+                // меняется через key(): полоса переезжает на другую сторону без пересоздания; отступ справа постоянный - ширина панели не прыгает.
                 Row(Modifier.weight(1f).fillMaxWidth().padding(end = FmMetrics.STRIP_END).fmPaneSwipe(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     (if (stripRight) listOf(0, 1) else listOf(1, 0)).forEach { slot ->
                         androidx.compose.runtime.key(slot) {
                             if (slot == 1) FmStripBox(actions, Modifier.fillMaxHeight()) else {
                     run {
                         // 19.11.2026: обе панели существуют ВСЕГДА, каждая на своём фиксированном месте (key): состояние (прокрутка, список, фокус)
-                        // не теряется и ничто не пересоздаётся при переключении — раньше после конца анимации панель создавалась заново и «передёргивалась».
-                        // Скрытая панель уезжает за край (touch и рисование ей не достаются); при переходе — прежняя анимация переезда.
+                        // не теряется и ничто не пересоздаётся при переключении - раньше после конца анимации панель создавалась заново и «передёргивалась».
+                        // Скрытая панель уезжает за край (touch и рисование ей не достаются); при переходе - прежняя анимация переезда.
                         var shown by remember { mutableStateOf(Fm.active) }
                         var incoming by remember { mutableStateOf(Fm.active) }
                         var slideToRight by remember { mutableStateOf(true) }
@@ -2191,7 +2197,7 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                             if (Fm.active != shown) {
                                 incoming = Fm.active
                                 slideToRight = Fm.active > shown
-                                // 18.11.2026 (владелица): общий выключатель «Анимация переходов» — выключен, переход мгновенный, без анимации вообще.
+                                // 18.11.2026 (владелица): общий выключатель «Анимация переходов» - выключен, переход мгновенный, без анимации вообще.
                                 if (UiAnim.on) kotlinx.coroutines.withContext(FmFullMotion) {
                                     progress.snapTo(0f)
                                     progress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
@@ -2245,7 +2251,7 @@ object FmButtons {
     var hidden by mutableStateOf(setOf<String>())
     private var loaded = false
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)
-    // 18.11.2026: ручной размер кнопок боковой колонки (sideSize/sideDp) убран — везде (портрет, ландшафт, приставка) размер
+    // 18.11.2026: ручной размер кнопок боковой колонки (sideSize/sideDp) убран - везде (портрет, ландшафт, приставка) размер
     // считается автоматически по месту, как было на приставке.
     fun load(ctx: Context) { if (loaded) return; loaded = true; hidden = sp(ctx).getStringSet("hidden_btns", emptySet())?.toSet() ?: emptySet(); loadOrder(ctx); migrate = !sp(ctx).getBoolean("panel_v69", false) }
     /**
@@ -2404,7 +2410,7 @@ fun rememberFmActionsAll(): List<FmAction> {
         FmAction(Icons.Filled.FilterAlt, R.string.fm_select_mask) { Fm.dlg = FmDlg.Mask() },
         FmAction(Icons.Filled.Sort, R.string.fm_sort) { Fm.dlg = FmDlg.View() },
         FmAction(Icons.Filled.SwapVert, R.string.sort_title) { Fm.active = p.id; Fm.dlg = FmDlg.Sort(p) },
-        FmAction(Icons.Filled.Visibility, R.string.fm_hidden) { Fm.setHidden(!Fm.showHidden) },
+        FmAction(if (Fm.showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff, R.string.fm_hidden, tint = if (Fm.showHidden) Color(0xFF2E9E4F) else Color(0xFFF57C00)) { Fm.setHidden(!Fm.showHidden) },
         FmAction(Icons.Filled.Search, R.string.fm_search) { Fm.dlg = FmDlg.Search() },
         FmAction(Icons.Filled.Bookmarks, R.string.fm_bookmarks) { Fm.dlg = FmDlg.Bookmarks() },
         FmAction(Icons.Filled.History, R.string.fm_history) { Fm.dlg = FmDlg.History() },
@@ -2466,9 +2472,10 @@ private val fmMainLabelsCache = arrayOfNulls<Set<Int>>(2)
 private val fmMainLabels: Set<Int> get() = fmMainLabelsCache[if (Marq.tv) 1 else 0] ?: ((setOf(R.string.fm_up, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
     R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage) -
     // 9.2: на приставке шапка панели в три строки, поэтому «Перенести» и «Места» уходят в «Ещё» (функции остаются там)
-    (if (Marq.tv) setOf(R.string.fm_b_move, R.string.fm_storage) else emptySet())) +
+    (if (Marq.tv) setOf(R.string.fm_b_move, R.string.fm_storage, R.string.fm_b_copy) else emptySet())) +
+    // 24.11.2026: по умолчанию на приставке 14 кнопок + «Ещё» на всю ширину = 8 рядов без прокрутки (Копия, ZIP-архив и Инверсия остаются в «Ещё»: слово владелицы про Копию)
     // на приставке экран высокий и колонка внизу пустовала: добавляем ещё две частые кнопки (семь рядов помещаются без прокрутки)
-    (if (Marq.tv) setOf(R.string.fm_refresh, R.string.fm_new_zip, R.string.fm_play, R.string.fm_wifi_server, R.string.fm_select_none, R.string.fm_select_invert) else emptySet())).also { fmMainLabelsCache[if (Marq.tv) 1 else 0] = it }
+    (if (Marq.tv) setOf(R.string.fm_refresh, R.string.fm_play, R.string.fm_wifi_server, R.string.fm_hidden, R.string.sort_title, R.string.fm_select_none) else emptySet())).also { fmMainLabelsCache[if (Marq.tv) 1 else 0] = it }
 
 /** Телефон (не ТВ) в ландшафте: места мало, поэтому всё уплотняется. */
 @Composable
@@ -2478,15 +2485,15 @@ fun rememberLandPhone(): Boolean {
 }
 
 /**
- * 12.0 (владелица: «сложно переключаться между панелями в ландшафте и на приставке, иконка маленькая, нет кнопки») — одна крупная
+ * 12.0 (владелица: «сложно переключаться между панелями в ландшафте и на приставке, иконка маленькая, нет кнопки») - одна крупная
  * кнопка-переключатель активной панели вместо текста с названием панели и числами («Левая/Правая», «Объектов», «Выбрано» убраны отовсюду,
- * это дублировало рамку вокруг активной панели). Стрелка разворачивается туда, куда переключит нажатие; подложка — нейтральная, чуть темнее фона.
+ * это дублировало рамку вокруг активной панели). Стрелка разворачивается туда, куда переключит нажатие; подложка - нейтральная, чуть темнее фона.
  */
 @Composable
 internal fun FmSwitchPaneButton(modifier: Modifier = Modifier, iconSize: androidx.compose.ui.unit.Dp = 21.dp) {
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
-    // не .luminance() — в Port.kt своя приватная версия того же имени, компилятор путает её с androidx; считаем яркость сами той же формулой
+    // не .luminance() - в Port.kt своя приватная версия того же имени, компилятор путает её с androidx; считаем яркость сами той же формулой
     val bg = MaterialTheme.colorScheme.background
     val dark = (0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue) < 0.5f
     val purple = if (dark) Color(0xFFC4B5FD) else Color(0xFF6D28D9)
@@ -2501,11 +2508,21 @@ internal fun FmSwitchPaneButton(modifier: Modifier = Modifier, iconSize: android
             .semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(if (Fm.active == 0) Icons.Filled.ArrowForward else Icons.Filled.ArrowBack, null, Modifier.size(iconSize), tint = purple)
+        // 24.11.2026 (владелица: «сделай стрелку жирнее, а то сильно тонкая»): стрелка рисуется сама, штрих в 14% размера (у значка Material около 8%)
+        val toRight = Fm.active == 0
+        androidx.compose.foundation.Canvas(Modifier.size(iconSize)) {
+            val w = size.width; val h = size.height; val sw = w * 0.15f; val cy = h / 2f
+            val tail = if (toRight) w * 0.10f else w * 0.90f
+            val tip = if (toRight) w * 0.90f else w * 0.10f
+            val back = if (toRight) -w * 0.34f else w * 0.34f
+            drawLine(purple, androidx.compose.ui.geometry.Offset(tail, cy), androidx.compose.ui.geometry.Offset(tip, cy), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawLine(purple, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy - h * 0.34f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawLine(purple, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy + h * 0.34f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
     }
 }
 
-/** 18.11.2026: FmSideColumn удалён — ландшафт телефона теперь использует FmNarrow (как на приставке), см. вызов isLandscapeBox выше. */
+/** 18.11.2026: FmSideColumn удалён - ландшафт телефона теперь использует FmNarrow (как на приставке), см. вызов isLandscapeBox выше. */
 
 /** Квадратная кнопка действия: значок по центру, подпись под ним (до двух строк, узкий шрифт) внутри квадрата. На ТВ у фокуса рамка. */
 @Composable
@@ -2515,7 +2532,7 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
     val hovered by hover.collectIsHoveredAsState()
     var focused by remember { mutableStateOf(false) }
     // 18.11.2026 (владелица: «на приставке норм, на телефоне сильно скруглённые»): радиус был фиксированным (10dp) независимо
-    // от размера кнопки — на крупной кнопке приставки (~85dp) это выглядело тонко, на мелкой телефонной (~48dp) непропорционально
+    // от размера кнопки - на крупной кнопке приставки (~85dp) это выглядело тонко, на мелкой телефонной (~48dp) непропорционально
     // круглым. Радиус теперь в доле от стороны кнопки, той же пропорции, что уже хорошо смотрелась на приставке (10/85 ≈ 12%).
     val sh = RoundedCornerShape(size * 0.12f)
     val bctx = androidx.compose.ui.platform.LocalContext.current
@@ -2606,7 +2623,7 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
             val minFs = fs * (if (tvNow) 0.3f else 0.6f)   // 20.11.2026: при шрифте 1,3 «Текстовый» рвался посреди слова: нижняя граница ниже
             while (fs > minFs && words.any { w -> measurer.measure(androidx.compose.ui.text.AnnotatedString(w), baseStyle.copy(fontSize = fs.sp, fontFamily = CondFont)).size.width > availPx * (if (tvNow) 0.8f else 0.9f) }) fs -= 0.25f
             // 18.11.2026 (владелица): предыдущая правка межстрочного интервала убрала некрасивый зазор, но при переносе в 2 строки («Wi-Fi
-            // сервер» и подобные) нижняя строка физически обрезалась квадратной кнопкой (у неё свой clip) — ширинного подбора fs было
+            // сервер» и подобные) нижняя строка физически обрезалась квадратной кнопкой (у неё свой clip) - ширинного подбора fs было
             // недостаточно, нужна ещё проверка по ВЫСОТЕ: значок + обе строки подписи должны реально поместиться в кнопку.
             val vBudgetPx = with(dens) { (size - 4.dp).toPx() }
             val iconPx = with(dens) { icon.toPx() }
@@ -2736,32 +2753,35 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androi
     val ctx0n = androidx.compose.ui.platform.LocalContext.current
     // 20.11.2026 (4PDA, wad72: «не лучше ли оставить боковую панель с прокруткой?»): настройка «Боковая панель: прокрутка / «Ещё»»; при прокрутке все кнопки в колонке, «Ещё» нет
     val nShow = actions.size
-    val main = actions
+    val main = actions   // 24.11.2026: «Сортировка» стоит внизу рядом с «Ещё» (заполняет пустую клетку)
     val rest = emptyList<FmAction>()
     androidx.compose.runtime.SideEffect { FmButtons.shownCount = nShow; FmButtons.stripKeys = actions.map { FmButtons.key(ctx0n, it.label) } }
     val moreAct = FmAction(Icons.Filled.MoreHoriz, R.string.fm_more) { Fm.dlg = FmDlg.AddButton() }
     val items = if (moreInGrid) main + moreAct else main   // кнопок немного и всё влезает: «⋯» стоит в сетке следом за ними; иначе закреплена внизу
     val narrowScroll = androidx.compose.foundation.rememberScrollState()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        // 12.0 (владелица, приставка/пульт): вместо текстовой шапки «Левая/Правая», «Объектов», «Выбрано» — крупная кнопка-переключатель.
+        // 12.0 (владелица, приставка/пульт): вместо текстовой шапки «Левая/Правая», «Объектов», «Выбрано» - крупная кнопка-переключатель.
         // Владелица уточнила: кнопка ОТДЕЛЬНЫЙ зафиксированный элемент сверху, не часть прокручиваемой колонки ниже (не должна ехать
-        // вместе с кнопками при прокрутке). 18.11.2026: высота кнопки больше НЕ привязана жёстко к размеру обычных кнопок — её может
+        // вместе с кнопками при прокрутке). 18.11.2026: высота кнопки больше НЕ привязана жёстко к размеру обычных кнопок - её может
         // подвинуть вызывающая сторона (switchH), чтобы сетка обычных квадратных кнопок не мельчала ради неё.
         val switchSize = tvSize ?: if (Marq.tv) 72.dp else 78.dp
         val switchIcon = tvSize?.let { it * 0.46f } ?: if (Marq.tv) 34.dp else 37.dp
         FmSwitchPaneButton(Modifier.width(switchSize * 2 + 4.dp).height(switchH ?: switchSize), iconSize = switchIcon)
-        // 18.11.2026 (владелица): без прокрутки вообще (ни полосой, ни свайпом/колесом) — лишние кнопки уходят только через «Ещё»,
+        // 18.11.2026 (владелица): без прокрутки вообще (ни полосой, ни свайпом/колесом) - лишние кнопки уходят только через «Ещё»,
         // колонка статична; размер sz (tvSize) подобран снаружи так, чтобы вся сетка без остатка заполняла высоту.
         Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(narrowScroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items.chunked(2).forEach { r ->
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { val rk = if (a.label == R.string.fm_more) null else (main + rest).map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; if (tvSize != null) FmSquareButton(a, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, reorderKeys = rk, cols = 2) else if (Marq.tv) FmSquareButton(a, 72.dp, 34.dp, 11.5.sp, reorderKeys = rk, cols = 2) else FmSquareButton(a, 78.dp, 37.dp, 12.sp, reorderKeys = rk, cols = 2) } } }
+            (if (moreInGrid) main.chunked(2) + listOf(listOf(moreAct)) else main.chunked(2)).forEach { r ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.forEach { a -> androidx.compose.runtime.key(FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label)) { val rk = if (a.label == R.string.fm_more) null else (main + rest).map { FmButtons.key(androidx.compose.ui.platform.LocalContext.current, it.label) }; val wide = r.size == 1 && a.label == R.string.fm_more   /* 24.11.2026: «Ещё» одна в последнем ряду сетки на приставке растянута на две колонки; телефон без изменений */
+                    if (tvSize != null) FmSquareButton(a, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, if (wide) Modifier.width(tvSize * 2 + 4.dp) else Modifier, reorderKeys = rk, cols = 2) else if (Marq.tv) FmSquareButton(a, 72.dp, 34.dp, 11.5.sp, if (wide) Modifier.width(148.dp) else Modifier, reorderKeys = rk, cols = 2) else FmSquareButton(a, 78.dp, 37.dp, 12.sp, reorderKeys = rk, cols = 2) } } }
             }
           }
           // 20.11.2026: «⋯» (добавить кнопку) закреплена под прокручиваемыми кнопками и всегда видна
-          if (!moreInGrid) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-              if (tvSize != null) FmSquareButton(moreAct, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, reorderKeys = null, cols = 2)
-              else if (Marq.tv) FmSquareButton(moreAct, 72.dp, 34.dp, 11.5.sp, reorderKeys = null, cols = 2)
+          // 24.11.2026 (владелица: «как прокручивать пультом кнопки, не переходя на «Ещё»? переходить только когда прокрутил до конца»): закреплённая «Ещё» получает фокус, только когда список кнопок уже прокручен до конца
+          if (!moreInGrid) Row(Modifier.focusProperties { canFocus = !narrowScroll.canScrollForward }, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+              // 24.11.2026 (владелица): на приставке закреплённая «Ещё» растянута на две колонки, без пустой клетки рядом; на телефоне как была
+              if (tvSize != null) FmSquareButton(moreAct, tvSize, tvSize * 0.46f, (tvSize.value * 0.165f).coerceIn(9f, 12f).sp, Modifier.width(tvSize * 2 + 4.dp), reorderKeys = null, cols = 2)
+              else if (Marq.tv) FmSquareButton(moreAct, 72.dp, 34.dp, 11.5.sp, Modifier.width(148.dp), reorderKeys = null, cols = 2)
               else FmSquareButton(moreAct, 78.dp, 37.dp, 12.sp, reorderKeys = null, cols = 2)
           }
         }
@@ -2776,7 +2796,7 @@ private fun FmChip(text: String, click: () -> Unit) {
 
 /**
  * Портрет: узкая полоса действий (справа или слева по настройке «Панели управления») и активная панель. 18.11.2026 (владелица,
- * «сделай как на приставке»): без прокрутки вообще (ни полосой, ни свайпом/колесом) — лишние кнопки уходят только через «Ещё»;
+ * «сделай как на приставке»): без прокрутки вообще (ни полосой, ни свайпом/колесом) - лишние кнопки уходят только через «Ещё»;
  * кнопки квадратные и заполняют колонку без остатка (размер [sz] считается снаружи, в [FmStripBox], по доступной высоте);
  * кнопка-переключатель панели отдельным зафиксированным элементом сверху, высотой в две обычные кнопки (с тем же шагом).
  * Выбор набора кнопок (показывать/скрывать) и перестановка перетаскиванием не тронуты: actions уже отфильтрован и упорядочен
@@ -2816,12 +2836,12 @@ private fun FmStripBox(actions: List<FmAction>, modifier: Modifier) {
         val scaleF = FmSideScale.factor()
         val fitRows = ((maxHeight.value - 84f) / (44f * scaleF)).toInt().coerceAtLeast(1)
         val onPanel = rememberFmActions().count { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }
-        val rows = minOf(onPanel + 1, fitRows, 11)   // +1 «⋯»; один столбец — без деления на 2; больше 11 кнопок: прокрутка (размер кнопок не мельчает)
+        val rows = minOf(onPanel + 1, fitRows, 11)   // +1 «⋯»; один столбец - без деления на 2; больше 11 кнопок: прокрутка (размер кнопок не мельчает)
         val gap = 4.dp
         // высота = переключатель (2×sz + gap) + отступ + rows×sz + (rows-1) gap, без остатка снизу
         val sz = ((maxHeight - gap * (rows + 1)) / (rows + 2)).coerceIn(40.dp, if (UiPrefs.compactTree && UiPrefs.sideScale == 0) 72.dp else 64.dp * scaleF)
-        // 18.11.2026 (владелица: «кнопки должны быть одинаковыми, не мелкими — можно менять кнопку со стрелкой»): высота
-        // переключателя — честный остаток места (обычно ровно 2×sz+gap, как просила владелица), а не жёсткая формула, из-за
+        // 18.11.2026 (владелица: «кнопки должны быть одинаковыми, не мелкими - можно менять кнопку со стрелкой»): высота
+        // переключателя - честный остаток места (обычно ровно 2×sz+gap, как просила владелица), а не жёсткая формула, из-за
         // которой sz пришлось бы ужимать, если арифметика где-то не сойдётся день в день.
         val gridH = sz * rows + gap * (rows - 1)
         val switchH = (maxHeight - gap - gridH).coerceAtLeast(sz)
@@ -2846,7 +2866,7 @@ internal fun HintArrow(sizeDp: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Свайп влево/вправо переключает панели: влево — вторая, вправо — первая; не мешает вертикальной прокрутке и нажатиям (работает, пока дочерние элементы не забрали жест). */
+/** Свайп влево/вправо переключает панели: влево - вторая, вправо - первая; не мешает вертикальной прокрутке и нажатиям (работает, пока дочерние элементы не забрали жест). */
 private fun Modifier.fmPaneSwipe(): Modifier = this.pointerInput(Unit) {
     var drag = 0f
     detectHorizontalDragGestures(
@@ -2948,7 +2968,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
     LaunchedEffect(p.path, p.src, hasItems) {
         // пока содержимое не загружено, ничего не восстанавливается и не записывается (иначе перезапишется сохранённое положение)
         if (!hasItems) { posReady[0] = false; return@LaunchedEffect }
-        // 19.11.2026: список уже создан с живой позицией (sameSpot) — не перематывать на сохранённую с задержкой 400 мс, иначе при переходе на панель список «дёргается»
+        // 19.11.2026: список уже создан с живой позицией (sameSpot) - не перематывать на сохранённую с задержкой 400 мс, иначе при переходе на панель список «дёргается»
         if (sameSpot && (p.scrollIdx != 0 || p.scrollOff != 0)) { posReady[0] = true; return@LaunchedEffect }
         val saved = ScrollMem.getFolder(sctx, p.id, p.src, p.path)
         goTo(saved?.first ?: 0, saved?.second ?: 0)
@@ -2980,7 +3000,7 @@ private fun FmPaneView(p: FmPane, modifier: Modifier, volsRow: Boolean = true) {
         }
     }
     // 18.11.2026 (владелица: «на приставке анимация переходов не работает»): на приставке/в ландшафте обе панели показаны разом,
-    // переключение не подменяет содержимое (подменять там нечего) — единственное, что видно при переключении, это рамка активной
+    // переключение не подменяет содержимое (подменять там нечего) - единственное, что видно при переключении, это рамка активной
     // панели, и она раньше просто щёлкала мгновенно. Теперь рамка (толщина и цвет) плавно переезжает тем же способом (своя анимация,
     // не зависит от системного масштаба, слушает общий выключатель «Анимация переходов»).
     val activeProgress = remember { androidx.compose.animation.core.Animatable(if (active) 1f else 0f) }
@@ -3103,10 +3123,11 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
     val fs = if (Fm.dense) 15.sp else 14.sp
     val fw = if (Fm.dense) FontWeight.Medium else FontWeight.Normal
     // 9.0: полоса выше, «домик» и «обновить» крупнее (размер строится от значка «домика», а не от текста), всё растёт вместе с «Размером элементов и значков»
+    val selText = if (!p.root && p.selected.isNotEmpty()) { val ks = p.selected.sorted(); val base = p.path.trimEnd('/'); (if (base.isEmpty() && !p.path.contains("://")) "/" + ks.first() else base + "/" + ks.first()) + (if (ks.size > 1) "  (+" + (ks.size - 1) + ")" else "") } else null
     val h = if (Marq.tv) 48.dp else 40.dp
     Row(Modifier.fillMaxWidth().height(h).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 46.dp).clickable { Fm.active = p.id; fmHome(p) }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Home, stringResource(R.string.fm_root_title), Modifier.size(if (Marq.tv) 30.dp else 26.dp), tint = if (p.root) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxHeight().widthIn(min = 52.dp).clickable { Fm.active = p.id; fmHome(p) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Home, stringResource(R.string.fm_root_title), Modifier.size(if (Marq.tv) 36.dp else 31.dp), tint = if (p.root) prim else MaterialTheme.colorScheme.onSurface.copy(alpha = .75f))
         }
         p.net?.takeIf { p.src == "smb" && !p.root }?.let { NetBrandIcon(it, if (Marq.tv) 24.dp else 20.dp, Modifier.padding(end = 4.dp)) }
         val pkc = p.parked?.takeIf { !p.root }
@@ -3114,9 +3135,18 @@ private fun FmCrumbs(p: FmPane, compact: Boolean = false) {
         if (p.src != "local" && !p.root) Text((if (p.src == "smb" && p.net?.kind == "cloud") (p.net?.let { CloudIcons.serviceCaption(LocalContext.current, it) } ?: "cloud") else if (p.src == "smb") p.smb?.label?.substringBefore("://") ?: "smb" else p.src).uppercase(), Modifier.padding(end = 4.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 5.dp, vertical = 0.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onTertiaryContainer)
         (p.smb as? KeepFs)?.takeIf { p.src == "smb" && !p.root }?.let { NetDot(it) }
         // заголовок корня: статичный, по центру всей ширины справа от кнопки «дом»; обычный Text без бегущей строки и без реакции на нажатие и фокус
-        if (p.root) androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Text(stringResource(R.string.fm_root_title), Modifier.fillMaxWidth(), fontSize = fs, fontWeight = fw, fontFamily = UiPrefs.listFont, color = prim, maxLines = 1, softWrap = false, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (p.root) {
+            // 24.11.2026 (владелица): вместо слова «Источники» путь отмеченного элемента или строки под фокусом (как в X-plore); пока пути нет, остаётся «Источники»
+            val hp = FmRootCfg.headText(p.id)
+            if (hp.isEmpty()) androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.Text(stringResource(R.string.fm_root_title), Modifier.fillMaxWidth(), fontSize = fs, fontWeight = fw, fontFamily = UiPrefs.listFont, color = prim, maxLines = 1, softWrap = false, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            } else {
+                LaunchedEffect(hp) { scroll.scrollTo(scroll.maxValue) }
+                Row(Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) { Text(hp, fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurface) }
+            }
         }
+        // 24.11.2026 (владелица: «отметил папку F, а вверху путь не такой»): в обычной панели при отмеченном элементе вверху его полный путь, а не путь панели
+        else if (selText != null) { LaunchedEffect(selText) { scroll.scrollTo(scroll.maxValue) }; Row(Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) { Text(selText, fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, maxLines = 1, softWrap = false) } }
         else if (pkc != null) Row(Modifier.weight(1f).horizontalScroll(scroll)) { Text(pkc.path.ifBlank { pkc.conn.title }, fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, maxLines = 1) }
         else if (p.src == "smb") Row(Modifier.weight(1f).horizontalScroll(scroll)) { Text(p.path, fontFamily = UiPrefs.listFont, fontSize = fs, fontWeight = fw, maxLines = 1) }
         else Row(Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) {
@@ -3439,7 +3469,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 val arrowCol = treeArrowColor()
                 val nonEmpty = cntNow == null || cntNow.first + cntNow.second > 0
                 if (f.isDir && nonEmpty) Box(Modifier.size(TreeDim.fmArrow.dp).onGloballyPositioned { c -> TreeLog.measured("список «Файлов» (дерево)", depth, tlDm.density, tlDm.fontScale, "поле стрелки", c.positionInParent().x, c.size.width.toFloat()) }
-                    .tapOnly { Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, contentAlignment = Alignment.CenterStart) {   // 14.0: стрелка без узла семантики и ряби (tapOnly), как в «Источниках»; 16.0 код 79: треугольник с отступом слева, промежутки точка–стрелка и стрелка–значок равны
+                    .tapOnly { Fm.active = p.id; Fm.toggleExpand(p, nodePath) }, contentAlignment = Alignment.CenterStart) {   // 14.0: стрелка без узла семантики и ряби (tapOnly), как в «Источниках»; 16.0 код 79: треугольник с отступом слева, промежутки точка-стрелка и стрелка-значок равны
                     androidx.compose.foundation.Canvas(Modifier.padding(start = TreeDim.paneArrowInk(isOpen).dp).size(12.dp)) {
                         val c = arrowCol
                         val path = androidx.compose.ui.graphics.Path().apply {

@@ -125,7 +125,8 @@ internal fun drawBlockFrame(c: Canvas, e: RvEnv, p: Paint, grp: Int, gTop: Int, 
 internal fun isDarkTheme(onSurface: Int): Boolean = (0.2126f * ((onSurface shr 16 and 255) / 255f) + 0.7152f * ((onSurface shr 8 and 255) / 255f) + 0.0722f * ((onSurface and 255) / 255f)) > 0.5f
 
 internal class RvState {
-    var rv: RecyclerView? = null
+    /** 24.11.2026: состояние Compose, а не обычное поле. Подписка «перерисовать видимые строки при смене отметок» (snapshotFlow в LaunchedEffect) на медленной приставке стартовала раньше, чем список появлялся (rv был null), ничего не читала и больше не просыпалась: отметки в такой панели не показывались. */
+    var rv: RecyclerView? by mutableStateOf<RecyclerView?>(null)
     private val lm get() = rv?.layoutManager as? LinearLayoutManager
     val first: Int get() = lm?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
     val last: Int get() = lm?.findLastVisibleItemPosition() ?: -1
@@ -454,6 +455,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
     private val linePaint = Paint().apply { isAntiAlias = false }
     private val rect = RectF()
     private var dotDown = false
+    private var dotFocus = false
     private var zoneFocused = false
     private var hadFocus = false
 
@@ -481,12 +483,12 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         tri.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         setOnClickListener {
             val rr = r ?: return@setOnClickListener; val e = env0()
-            if (flipArrow(rr)) postDelayed({ rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) } }, 20)   // стрелка меняется сразу, тяжёлая перестройка списка — следующим кадром
+            if (flipArrow(rr)) postDelayed({ rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) } }, 20)   // стрелка меняется сразу, тяжёлая перестройка списка - следующим кадром
             else rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) }
         }
         setOnLongClickListener { val rr = r ?: return@setOnLongClickListener false; val e = env0(); Fm.active = e.p.id; e.p.rootSel = rr.key; hostKeys.openMenu(this, rr); true }
         setOnContextClickListener { val rr = r ?: return@setOnContextClickListener false; val e = env0(); Fm.active = e.p.id; e.p.rootSel = rr.key; hostKeys.openMenu(this, rr); true }
-        setOnFocusChangeListener { _, f -> hadFocus = f; val rr = r; if (f && rr != null) FmRootCfg.noteRow(env0().p.id, rr.key, rootRowNode(rr), true); invalidate() }
+        setOnFocusChangeListener { _, f -> hadFocus = f; if (!f) dotFocus = false; val rr = r; if (f && rr != null) { FmRootCfg.noteRow(env0().p.id, rr.key, rootRowNode(rr), true); if (rr.header == 0) { val hp = rr.selE?.takeIf { it.path.isNotBlank() }?.let { FmRootCfg.shownPath(it) } ?: rr.path ?: ""; if (hp.isNotBlank()) FmRootCfg.headPath[env0().p.id] = hp } }; invalidate() }
         zone.setOnClickListener { chkClick() }
         zone.setOnLongClickListener { val rr = r ?: return@setOnLongClickListener false; val e = env0(); Fm.active = e.p.id; e.p.rootSel = rr.key; hostKeys.openMenu(this, rr); true }
         zone.setOnFocusChangeListener { _, f -> zoneFocused = f; invalidate() }
@@ -513,6 +515,13 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
     private fun onKey(v: View, code: Int, ev: KeyEvent): Boolean {
         val rr = r ?: return false; val e = env0()
         if (ev.action != KeyEvent.ACTION_DOWN) return false
+        // 24.11.2026 (владелица: «почему пультом я не могу фокус на точку?»): точка «свойства» слева берёт фокус стрелкой влево, ОК открывает свойства, вправо возвращает на строку
+        if (dotFocus && v !== zone) {
+            val dotE = rr.selE
+            if ((code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER) && dotE != null) { dotFocus = false; invalidate(); openDotProps(rr, e, dotE); return true }
+            if (code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_LEFT) { dotFocus = false; invalidate(); return true }
+            dotFocus = false; invalidate()
+        }
         if (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_UP) {
             // стрелки вверх и вниз держат столбец: со строки на строку, с галочки на галочку (стандартный поиск фокуса путал их)
             val rv = parent as? RecyclerView
@@ -537,10 +546,15 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         if (code == KeyEvent.KEYCODE_DPAD_DOWN && FmRootCfg.sel.isNotEmpty() && rr.key == FmRootCfg.lastVisKey) return runCatching { FmRootCfg.barFocus.requestFocus() }.isSuccess
         val hasChk = m?.hasChk == true
         if (code == KeyEvent.KEYCODE_DPAD_RIGHT && hasChk && (id == null || !FmRootCfg.treeOn || id in e.p.rootOpen)) return zone.requestFocus()
-        if (id == null || !FmRootCfg.treeOn) return false
+        if (id == null || !FmRootCfg.treeOn) return leftToDot(code, rr)
         if (code == KeyEvent.KEYCODE_DPAD_RIGHT && id !in e.p.rootOpen) { rootTreeToggle(e.p, rr.key, e.ctx, id); return true }
         if (code == KeyEvent.KEYCODE_DPAD_LEFT && id in e.p.rootOpen) { rootTreeToggle(e.p, rr.key, e.ctx, id); return true }
-        return false
+        return leftToDot(code, rr)
+    }
+
+    private fun leftToDot(code: Int, rr: RR): Boolean {
+        if (code != KeyEvent.KEYCODE_DPAD_LEFT || rr.selE == null || rr.header != 0) return false
+        dotFocus = true; invalidate(); return true
     }
 
     /**
@@ -603,7 +617,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
             if (spinner == null) { spinner = android.widget.ProgressBar(context).also { content.addView(it, content.indexOfChild(iconImg)) } }
             spinner!!.visibility = VISIBLE; spinner!!.layoutParams = LinearLayout.LayoutParams(e.dp(14).toInt(), e.dp(14).toInt()).also { it.marginEnd = gap }
         } else spinner?.visibility = GONE
-        // значок: обычная папка и значок типа файла — готовая картинка; остальное (миниатюры, значки приложений, свои значки, значки групп) — Compose
+        // значок: обычная папка и значок типа файла - готовая картинка; остальное (миниатюры, значки приложений, свои значки, значки групп) - Compose
         val si = if (model.iconKey != null) (model.si ?: staticIcon(e, rr, model.open)) else null
         if (si != null) {
             val px = e.dp(if (tv) 32 else 28).toInt()
@@ -739,7 +753,13 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         val bw = e.dp(if (e.tv) 3 else 2)
         bgPaint.style = Paint.Style.STROKE; bgPaint.strokeWidth = bw; bgPaint.color = e.prim
         if (isFocused) { rect.set(bw / 2, bw / 2, width - bw / 2, height - bw / 2); c.drawRoundRect(rect, e.dp(8f), e.dp(8f), bgPaint) }
+        if (dotFocus && isFocused) { val dw = e.dp(TreeDim.dotW); val dh = e.dp(32); rect.set(bw / 2, (height - dh) / 2, dw + e.dp(TreeDim.pad), (height + dh) / 2); c.drawRoundRect(rect, e.dp(8f), e.dp(8f), bgPaint) }
         if (zoneFocused) { val zw = zone.width.toFloat(); rect.set(width - zw + bw / 2, bw / 2, width - bw / 2, height - bw / 2); c.drawRoundRect(rect, e.dp(8f), e.dp(8f), bgPaint) }
+    }
+
+    /** Свойства строки по точке слева: касанием и (24.11.2026) пультом: стрелка влево на строке, затем ОК. */
+    private fun openDotProps(rr: RR, e: RvEnv, e0: FmRootCfg.SelE) {
+        Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "-" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "-") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "-"))
     }
 
     /** Нажатие на точку «свойства» у левого края (отдельное от нажатия на строку). */
@@ -750,7 +770,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
             val inDot = ev.x >= 0 && ev.x <= dw && ev.y >= (height - dh) / 2 && ev.y <= (height + dh) / 2
             if (ev.actionMasked == MotionEvent.ACTION_DOWN && inDot) { dotDown = true; return true }
             if (dotDown) {
-                if (ev.actionMasked == MotionEvent.ACTION_UP) { dotDown = false; if (inDot) { Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "—" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "—") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "—")) } }
+                if (ev.actionMasked == MotionEvent.ACTION_UP) { dotDown = false; if (inDot) openDotProps(rr, e, e0) }
                 else if (ev.actionMasked == MotionEvent.ACTION_CANCEL) dotDown = false
                 return true
             }

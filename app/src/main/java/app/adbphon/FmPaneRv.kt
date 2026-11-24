@@ -145,6 +145,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect = RectF()
     private var zoneFocused = false
+    private var dotFocus = false      // 24.11.2026: точка «свойства» слева берёт фокус пульта (стрелка влево), ОК открывает свойства
     private var ptrDownAt = 0L
     private var prevTapAt = 0L
     private var longKey = false
@@ -174,7 +175,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
         zone.setOnClickListener { val i = item ?: return@setOnClickListener; val e = env0(); Fm.active = e.p.id; Fm.toggleSel(e.p, selKeyOf(e.p, i)) }
         zone.setOnLongClickListener { openMenu(); true }
         zone.setOnFocusChangeListener { _, f -> zoneFocused = f; invalidate() }
-        setOnFocusChangeListener { _, f -> hadFocus = f; val i = item; if (f && i != null && i.depth == 0) env0().p.lastName = i.item?.name; invalidate() }
+        setOnFocusChangeListener { _, f -> hadFocus = f; if (!f) dotFocus = false; val i = item; if (f && i != null && i.depth == 0) env0().p.lastName = i.item?.name; invalidate() }
         val kl = OnKeyListener { v, code, ev -> onKey(v, code, ev) }
         setOnKeyListener(kl); zone.setOnKeyListener(kl)
     }
@@ -207,6 +208,11 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
     private fun onKey(v: View, code: Int, ev: KeyEvent): Boolean {
         val i = item ?: return false; val e = env0(); val p = e.p; val f = i.item ?: return false
         if (ev.action != KeyEvent.ACTION_DOWN) return false
+        if (dotFocus && v !== zone) {
+            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER) { dotFocus = false; invalidate(); Fm.active = p.id; Fm.props(p, listOf(selKeyOf(p, i))); return true }
+            if (code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_LEFT) { dotFocus = false; invalidate(); return true }
+            dotFocus = false; invalidate()
+        }
         if (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_UP) {
             val rv = parent as? RecyclerView; val pos = rv?.getChildAdapterPosition(this) ?: -1
             if (rv != null && pos >= 0) {
@@ -231,6 +237,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
             if (code == KeyEvent.KEYCODE_DPAD_RIGHT) { Fm.expand(p, i.nodePath); return true }
             if (code == KeyEvent.KEYCODE_DPAD_LEFT && open) { Fm.collapse(p, i.nodePath); return true }
         }
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT) { dotFocus = true; invalidate(); return true }
         return false
     }
 
@@ -337,6 +344,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
     private fun drawFocus(c: Canvas) {
         val e = env0()
         if (isFocused) { paint.style = Paint.Style.FILL; paint.color = e.alpha(e.prim, .16f); c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint) }
+        if (dotFocus && isFocused) { val bw0 = e.dp(if (e.tv) 3 else 2); val dh = e.dp(32); paint.style = Paint.Style.STROKE; paint.strokeWidth = bw0; paint.color = e.prim; rect.set(bw0 / 2, (height - dh) / 2, e.dp(TreeDim.dotW) + e.dp(TreeDim.pad), (height + dh) / 2); c.drawRoundRect(rect, e.dp(8f), e.dp(8f), paint) }
         if (zoneFocused) { val bw = e.dp(if (e.tv) 3 else 2); paint.style = Paint.Style.STROKE; paint.strokeWidth = bw; paint.color = e.prim; rect.set(width - zone.width + bw / 2, bw / 2, width - bw / 2, height - bw / 2); c.drawRoundRect(rect, e.dp(8f), e.dp(8f), paint) }
     }
 
