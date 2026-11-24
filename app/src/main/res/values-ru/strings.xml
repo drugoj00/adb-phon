@@ -15,7 +15,7 @@
     <string name="conn_port">Порт подключения (если не найден сам)</string>
     <string name="btn_pair">Сопряжение</string>
     <string name="btn_connect">Подключиться</string>
-    <string name="conn_title_tcp">Android 8–10: ADB по сети</string>
+    <string name="conn_title_tcp">Android 8-10: ADB по сети</string>
     <string name="conn_steps_tcp">Один раз с компьютера по USB: adb tcpip 5555 (в программе «Телефон в окне со звуком» для этого есть кнопка). Потом нажми кнопку ниже и разреши отладку на телефоне. После перезагрузки телефона команду повторить.</string>
     <string name="btn_connect_tcp">Подключиться к %1$s:5555</string>
     <string name="btn_disconnect">Отключиться</string>
@@ -551,6 +551,8 @@
     <string name="fm_search_in">Искали в: %1$s (с вложенными папками)</string>
     <string name="fm_free_of">свободно %1$s из %2$s</string>
     <string name="fm_hidden">Скрытые</string>
+    <string name="fm_hidden_on">Скрытые файлы: показаны</string>
+    <string name="fm_hidden_off">Скрытые файлы: не показаны</string>
     <string name="fm_hist_empty">История пуста</string>
     <string name="fm_history">История</string>
     <string name="fm_install">Установить</string>
@@ -1045,7 +1047,7 @@
     <string name="cf_legend_merge">слияние папок</string>
     <string name="cf_delete_title">Удалить выбранное: %1$d</string>
     <string name="cf_delete_sub">Это нельзя отменить.</string>
-    <string name="fm_same_folder">Источник и приёмник — одна и та же папка</string>
+    <string name="fm_same_folder">Источник и приёмник - одна и та же папка</string>
     <string name="fm_into_itself">Папку нельзя копировать внутрь самой себя</string>
     <string name="fm_nothing_to_do">Нечего копировать: всё пропущено</string>
     <string name="cf_b_replace">Заменить</string>
@@ -1119,7 +1121,7 @@
     <string name="ap_no_apk">Файл APK недоступен</string>
     <string name="ap_no_launch">У приложения нет экрана запуска</string>
     <string name="ap_no_data">Папка данных недоступна без ADB</string>
-    <string name="ap_warn_system">%1$s — системное приложение. Удаление для этого пользователя может нарушить работу телефона; вернуть можно пунктом «Установить заново» в папке «Удалённые». Продолжить?</string>
+    <string name="ap_warn_system">%1$s - системное приложение. Удаление для этого пользователя может нарушить работу телефона; вернуть можно пунктом «Установить заново» в папке «Удалённые». Продолжить?</string>
     <string name="rt_tree">Дерево на домике</string>
     <string name="rt_loading">Загрузка…</string>
     <string name="fm_play_folder">Играть папку</string>
@@ -1130,7 +1132,7 @@
     <string name="ap_clear_data_q">Удалить ВСЕ данные приложения %1$s (настройки, учётные записи, сохранённые файлы)? Это нельзя отменить.</string>
     <string name="ap_cache_part">Внешний кэш очищен. Внутренний кэш очищается только с root.</string>
     <string name="ap_export">Экспорт APK</string>
-    <string name="ap_batch_q">%1$s: приложений — %2$d?</string>
+    <string name="ap_batch_q">%1$s: приложений - %2$d?</string>
     <string name="ap_batch_more">…и ещё %1$d</string>
     <string name="ap_batch_run">%1$d из %2$d…</string>
     <string name="ap_batch_result">Выполнено: %1$d из %2$d</string>
@@ -1316,7 +1318,7 @@
     <string name="ft_m2g">2 ГБ</string>
     <string name="ft_space_hint">Удалённое занимает место, пока корзина не очищена.</string>
     <string name="acc_title">Разрешите доступ к файлам</string>
-    <string name="acc_text">Без доступа к файлам корзина и удаление не работают. Нажми «Открыть настройки» и разреши. На Android 11 и новее это «Доступ ко всем файлам», на Android 8–10 разрешение на память.</string>
+    <string name="acc_text">Без доступа к файлам корзина и удаление не работают. Нажми «Открыть настройки» и разреши. На Android 11 и новее это «Доступ ко всем файлам», на Android 8-10 разрешение на память.</string>
     <string name="acc_open">Открыть настройки</string>
     <string name="nt_drive">Сетевой диск</string>
     <string name="nt_none">Здесь удалять нельзя: в записи подключения не указан общий ресурс (шара).</string>
@@ -1749,7 +1751,7 @@
     <string name="pc_screen">Экран</string>
     <string name="pc_add_title">Компьютер с Windows</string>
     <string name="pc_name">Название</string>
-    <string name="pc_add_hint">На ПК: «Телефон в окне со звуком» → значок в трее → «Доступ к этому экрану: вкл». Код программы — в списке «Люди» на том ПК. Файлы и экран идут по Tailscale.</string>
+    <string name="pc_add_hint">На ПК: «Телефон в окне со звуком» → значок в трее → «Доступ к этому экрану: вкл». Код программы - в списке «Люди» на том ПК. Файлы и экран идут по Tailscale.</string>
     <string name="pc_busy">На ПК открыто слишком много файловых сеансов.</string>
     <string name="dev_files">Файлы устройства</string>
     <string name="dev_video">Видеоокно</string>
