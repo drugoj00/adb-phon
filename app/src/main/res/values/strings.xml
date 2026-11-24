@@ -16,7 +16,7 @@
     <string name="conn_port">Connection port (if not found automatically)</string>
     <string name="btn_pair">Pair</string>
     <string name="btn_connect">Connect</string>
-    <string name="conn_title_tcp">Android 8–10: ADB over network</string>
+    <string name="conn_title_tcp">Android 8-10: ADB over network</string>
     <string name="conn_steps_tcp">Once, from a computer with USB debugging: adb tcpip 5555 (the program \"Phone in Window with Sound\" has a button for it). Then press the button below and allow debugging on the phone. After a reboot repeat the command.</string>
     <string name="btn_connect_tcp">Connect to %1$s:5555</string>
     <string name="btn_disconnect">Disconnect</string>
@@ -552,6 +552,8 @@
     <string name="fm_search_in">Searched in: %1$s (with subfolders)</string>
     <string name="fm_free_of">%1$s free of %2$s</string>
     <string name="fm_hidden">Hidden</string>
+    <string name="fm_hidden_on">Hidden files: shown</string>
+    <string name="fm_hidden_off">Hidden files: hidden</string>
     <string name="fm_hist_empty">History is empty</string>
     <string name="fm_history">History</string>
     <string name="fm_install">Install</string>
