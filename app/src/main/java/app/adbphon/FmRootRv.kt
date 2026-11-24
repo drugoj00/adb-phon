@@ -124,6 +124,9 @@ internal fun drawBlockFrame(c: Canvas, e: RvEnv, p: Paint, grp: Int, gTop: Int, 
 
 internal fun isDarkTheme(onSurface: Int): Boolean = (0.2126f * ((onSurface shr 16 and 255) / 255f) + 0.7152f * ((onSurface shr 8 and 255) / 255f) + 0.0722f * ((onSurface and 255) / 255f)) > 0.5f
 
+/** Список строк на перерисовку: обычный класс без equals, чтобы каждое вычисление считалось новым значением потока. */
+internal class DirtyRows(val list: List<Int>)
+
 internal class RvState {
     /** 24.11.2026: состояние Compose, а не обычное поле. Подписка «перерисовать видимые строки при смене отметок» (snapshotFlow в LaunchedEffect) на медленной приставке стартовала раньше, чем список появлялся (rv был null), ничего не читала и больше не просыпалась: отметки в такой панели не показывались. */
     var rv: RecyclerView? by mutableStateOf<RecyclerView?>(null)
@@ -862,7 +865,7 @@ internal class RvAdapter(var env: RvEnv, val host: RvHost) : RecyclerView.Adapte
         val a = lm.findFirstVisibleItemPosition(); val b = lm.findLastVisibleItemPosition()
         if (a < 0) return emptyList()
         var out: ArrayList<Int>? = null
-        for (i in a..minOf(b, rows.size - 1)) { val r = rows[i]; val old = bound[r.key]; if (old != null && old != rowModel(env, r)) (out ?: ArrayList<Int>().also { out = it }).add(i) }
+        for (i in a..minOf(b, rows.size - 1)) { val r = rows[i]; val old = bound[r.key]; val cur = rowModel(env, r); if (old != null && old != cur) (out ?: ArrayList<Int>().also { out = it }).add(i) }
         return out ?: emptyList()
     }
     fun clearBound() = bound.clear()
@@ -946,7 +949,7 @@ internal fun FmRootRvList(p: FmPane, model: RootModel, tv: Boolean, st: RvState,
         }
         // перерисовка видимых строк, когда меняются состояния, от которых они зависят (отметки, цифры папок, выбранная строка, язык дат)
         LaunchedEffect(adapter) {
-            snapshotFlow { st.rv?.let { adapter.dirty(it) } ?: emptyList() }.collect { l -> for (i in l) adapter.notifyItemChanged(i) }
+            snapshotFlow { DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) }      // 24.11.2026: новый объект каждый раз, иначе snapshotFlow (distinctUntilChanged) молча пропускал повторный такой же список строк: отметка менялась через раз
         }
         // фокус пульта: запрос на строку по ключу (после возврата, после запуска)
         LaunchedEffect(FocusRestore.key) { val k = FocusRestore.key ?: return@LaunchedEffect; rvFocusKey(st, adapter, k, { FocusRestore.key == k }) { FocusRestore.key = null } }

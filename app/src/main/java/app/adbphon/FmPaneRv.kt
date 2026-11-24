@@ -399,7 +399,7 @@ internal class PaneAdapter(var env: RvEnv, val host: PaneHost) : RecyclerView.Ad
         val a = lm.findFirstVisibleItemPosition(); val b = lm.findLastVisibleItemPosition()
         if (a < 0) return emptyList()
         var out: ArrayList<Int>? = null
-        for (i in a..minOf(b, items.size - 1)) { val it = items[i]; if (it.item == null) continue; val old = bound[it.key]; if (old != null && old != paneModel(env, it)) (out ?: ArrayList<Int>().also { out = it }).add(i) }
+        for (i in a..minOf(b, items.size - 1)) { val it = items[i]; if (it.item == null) continue; val old = bound[it.key]; val cur = paneModel(env, it); if (old != null && old != cur) (out ?: ArrayList<Int>().also { out = it }).add(i) }
         return out ?: emptyList()
     }
     fun clearBound() = bound.clear()
@@ -505,7 +505,7 @@ internal fun FmPaneRvList(p: FmPane, items: List<PaneRvItem>, tv: Boolean, st: R
                 st.rv = rv
             },
         )
-        LaunchedEffect(adapter) { snapshotFlow { st.rv?.let { adapter.dirty(it) } ?: emptyList() }.collect { l -> for (i in l) adapter.notifyItemChanged(i) } }
+        LaunchedEffect(adapter) { snapshotFlow { DirtyRows(st.rv?.let { adapter.dirty(it) } ?: emptyList()) }.collect { d -> for (i in d.list) adapter.notifyItemChanged(i) } }
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.offset { IntOffset(menuX, menuY) }.size(with(density) { menuW.toDp() }, with(density) { menuH.toDp() })) {
             val mk = p.menuFor
             if (mk != null) { val it = items.firstOrNull { x -> x.item != null && x.menuKey == mk }; if (it != null) menuContent(it) }
