@@ -16,7 +16,7 @@
     <string name="conn_port">Connection port (if not found automatically)</string>
     <string name="btn_pair">Pair</string>
     <string name="btn_connect">Connect</string>
-    <string name="conn_title_tcp">Android 8-10: ADB over network</string>
+    <string name="conn_title_tcp">Android 8–10: ADB over network</string>
     <string name="conn_steps_tcp">Once, from a computer with USB debugging: adb tcpip 5555 (the program \"Phone in Window with Sound\" has a button for it). Then press the button below and allow debugging on the phone. After a reboot repeat the command.</string>
     <string name="btn_connect_tcp">Connect to %1$s:5555</string>
     <string name="btn_disconnect">Disconnect</string>
@@ -884,7 +884,7 @@
     <string name="ed_not_found">Not found.</string>
     <string name="ed_replaced">Replaced: %1$d</string>
     <string name="ed_backup">Keep a .bak copy when saving</string>
-    <string name="ed_readonly">Read-only: the file is on a network source or larger than 8 MB (first 1 MB shown).</string>
+    <string name="ed_readonly">Read-only: the file is on a network source or larger than 16 MB (the first 16 MB are shown).</string>
     <string name="doc_open_failed">Could not open: %1$s</string>
     <string name="doc_readonly_office">View only: text, tables and sheets. Editing of Office files is not available yet.</string>
     <string name="doc_empty">(empty)</string>
