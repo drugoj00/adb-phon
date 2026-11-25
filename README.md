@@ -16,17 +16,17 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 19.0.** [ADB-phon-19.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 20.0.** [ADB-phon-20.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `5cc0e7845628878225b90ccac0df2a68c56c1b9f4c79fe0970362b761e70b1b6`
+SHA-256: `4e20b857165c077829b5bf73a573c9cd6ff863d869ad1f58baae71c2cb622869`
 
-## What's new in 19.0
+## What's new in 20.0
 
-- Fixed: selection check marks were not shown in the right Files pane on some boxes
-- Fixed: the Hidden button did nothing in the Files tree; its icon and colour now show the state, with a message
-- Remote: focus on the properties dot of a row (Left, OK); side panel buttons scroll to the end before focus moves to More
-- The pane switch arrow is bolder; the home icon is larger
-- The pane header shows the path of the selected or focused item instead of the word Sources
+- Large fb2 and text files open without freezing
+- “Open with…”: reader apps are listed, clear app names
+- “Remember for…”: checkbox above the list, Reset button, crash fixed
+- Restoring a backup keeps the side panel button set
+- Active buttons are filled turquoise
 - Bug fixes
 
 **Requirements and limits**
@@ -95,7 +95,7 @@ SHA-256: `5cc0e7845628878225b90ccac0df2a68c56c1b9f4c79fe0970362b761e70b1b6`
 
 ## Quick start
 
-1. Download ADB-phon-19.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-20.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8-10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
