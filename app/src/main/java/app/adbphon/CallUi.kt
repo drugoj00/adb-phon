@@ -232,7 +232,7 @@ fun RingtoneDialog(close: () -> Unit) {
                         if (withFile) DropdownMenuItem({ Text(stringResource(R.string.ring_file), fontSize = 14.sp) }, { open = false; stopPreview(); pickKind = kind; picker.launch("audio/*") })
                     }
                 }
-                TextButton({ preview(kind) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(stringResource(if (prev == kind) R.string.ring_stop else R.string.ring_preview), fontSize = 12.sp) }
+                StateButton(prev == kind, { preview(kind) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(stringResource(if (prev == kind) R.string.ring_stop else R.string.ring_preview), fontSize = 12.sp) }
             }
         }
     }

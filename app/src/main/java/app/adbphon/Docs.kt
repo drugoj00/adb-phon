@@ -62,7 +62,7 @@ import java.util.zip.ZipFile
 
 /** Встроенные TXT-редактор, просмотр PDF и просмотр Office (docx, xlsx, pptx, odt, ods, odp) из «Файлов». */
 object DocKind {
-    val TEXT = setOf("txt", "log", "md", "json", "xml", "html", "htm", "csv", "ini", "cfg", "conf", "yml", "yaml", "kt", "java", "py", "js", "css", "sh", "bat", "properties", "c", "cpp", "h", "gradle", "kts", "toml", "srt", "vtt")
+    val TEXT = setOf("txt", "log", "md", "json", "xml", "html", "htm", "csv", "ini", "cfg", "conf", "yml", "yaml", "kt", "java", "py", "js", "css", "sh", "bat", "properties", "c", "cpp", "h", "gradle", "kts", "toml", "srt", "vtt", "fb2")
     val OFFICE = setOf("docx", "xlsx", "pptx", "odt", "ods", "odp")
     fun of(ext: String): String? = when { ext in TEXT -> "text"; ext == "pdf" -> "pdf"; ext in OFFICE -> "office"; else -> null }
 }
@@ -91,17 +91,69 @@ class TextEditorActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) { Surface(Modifier.fillMaxSize()) { TextEditor { finish() } } } }
+        setContent { MaterialTheme(colorScheme = AppColors.scheme(androidx.compose.foundation.isSystemInDarkTheme(), androidx.compose.ui.platform.LocalContext.current)) { Surface(Modifier.fillMaxSize()) { TextEditor { finish() } } } }
     }
 }
 
 private val CHARSETS = listOf("UTF-8", "windows-1251", "IBM866")
-private const val EDIT_LIMIT = 8L * 1024 * 1024
+/** Больше этого читается только начало (файл читается и разбирается в фоне, окно не виснет). */
+private const val VIEW_LIMIT = 16L * 1024 * 1024
+/** 24.11.2026: правка в поле ввода только до этого числа знаков. Поле Compose выкладывает весь текст одним куском: уже около 200 КБ высота выходит за предел (18 бит) и программа падает, а раньше замедление начиналось ещё на десятках КБ. Больше: просмотр частями (LazyColumn), только чтение. */
+private const val EDIT_TEXT_LIMIT = 64 * 1024
+/** Размер одного куска текста в просмотре больших файлов (знаков): кусок = один элемент списка, длинная строка делится по пробелам. */
+private const val BLOCK_CHARS = 4000
 
 private fun detect(b: ByteArray): String {
-    val dec = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-    return if (runCatching { dec.decode(java.nio.ByteBuffer.wrap(b)) }.isSuccess) "UTF-8" else "windows-1251"
+    // обрезанный на конце файл (читали только начало) мог разорвать последний знак UTF-8: пробуем без 1-3 последних байтов
+    for (cut in 0..3) {
+        if (b.size - cut <= 0) break
+        val dec = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        if (runCatching { dec.decode(java.nio.ByteBuffer.wrap(b, 0, b.size - cut)) }.isSuccess) return "UTF-8"
+    }
+    return "windows-1251"
 }
+
+/** Начала кусков текста для просмотра: конец куска по возможности на переводе строки, иначе на пробеле, иначе жёстко. [tick] вызывается регулярно (проверка отмены). */
+private fun blockStarts(s: String, tick: () -> Unit): IntArray {
+    val out = ArrayList<Int>(s.length / 2000 + 4)
+    var a = 0
+    var n = 0
+    while (a < s.length) {
+        out.add(a)
+        if (++n % 2048 == 0) tick()
+        var e = minOf(a + BLOCK_CHARS, s.length)
+        if (e < s.length) {
+            val nl = s.lastIndexOf('\n', e - 1)
+            if (nl >= a) e = nl + 1
+            else {
+                val sp = s.lastIndexOf(' ', e - 1)
+                if (sp > a) e = sp + 1
+            }
+        }
+        a = e
+    }
+    if (out.isEmpty()) out.add(0)
+    return out.toIntArray()
+}
+
+/** Читает файл в фоне кусками по 256 КБ с проверкой отмены; не больше [VIEW_LIMIT] байт. */
+private fun readCancellable(x: File, tick: () -> Unit): ByteArray {
+    val total = minOf(x.length(), VIEW_LIMIT).toInt()
+    if (total <= 0) return x.inputStream().use { it.readBytes() }   // служебные файлы с нулевой длиной читаются потоком до конца
+    val buf = ByteArray(total)
+    x.inputStream().use { i ->
+        var off = 0
+        while (off < total) {
+            tick()
+            val n = i.read(buf, off, minOf(256 * 1024, total - off))
+            if (n <= 0) break
+            off += n
+        }
+        return if (off == total) buf else buf.copyOf(off)
+    }
+}
+
+private class BigText(val s: String, val starts: IntArray)
 
 @Composable
 fun TextEditor(onClose: () -> Unit) {
@@ -121,6 +173,11 @@ fun TextEditor(onClose: () -> Unit) {
     var backup by remember { mutableStateOf(true) }
     var tv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
     var failed by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf<String?>(null) }
+    var big by remember { mutableStateOf<BigText?>(null) }   // 24.11.2026: большой файл показывается частями, только чтение
+    var truncated by remember { mutableStateOf(false) }
+    var bigPos by remember { mutableStateOf(0) }
+    val listState = rememberLazyListState()
     var privPath by remember { mutableStateOf<String?>(null) }   // 9.0: файл взят через root/ADB, сохранение пишет обратно тем же способом
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -132,8 +189,11 @@ fun TextEditor(onClose: () -> Unit) {
                 file = f
                 if (viaAdb) privPath = e.path
                 readOnly = (!MediaSrc.local && MediaSrc.fs !is KeepFs)
-                fun readAll(x: File): ByteArray = x.inputStream().use { i -> if (x.length() > EDIT_LIMIT) { readOnly = true; i.readNBytes(1 shl 20) } else i.readBytes() }
-                var bytes = runCatching { readAll(f) }.getOrElse { ByteArray(0) }
+                // 24.11.2026: чтение кусками в фоне с проверкой отмены (закрыл окно: чтение прекращается); дальше VIEW_LIMIT только начало
+                val job = this.coroutineContext[kotlinx.coroutines.Job]
+                val tick = { if (job?.isActive == false) throw kotlinx.coroutines.CancellationException("cancel") }
+                fun readAll(x: File): ByteArray { if (x.length() > VIEW_LIMIT) { readOnly = true; truncated = true }; return readCancellable(x, tick) }
+                var bytes = runCatching { readAll(f) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; ByteArray(0) }
                 if (bytes.isEmpty() && !viaAdb && MediaSrc.local && !FmIo.remote && FmIo.ensurePriv() == null) {
                     val tmp = File(File(ctx.cacheDir, "play").apply { mkdirs() }, e.name)
                     runCatching { tmp.delete(); Adb.pull(e.path, tmp) }
@@ -144,8 +204,28 @@ fun TextEditor(onClose: () -> Unit) {
             }.onFailure { msg = ctx.getString(R.string.ed_read_failed, it.message ?: ""); failed = true }
         }
     }
-    val text = remember(raw, enc) { raw?.let { String(it, Charset.forName(enc)) } }
+    // 24.11.2026: перекодирование и разбивка на куски в фоне (раньше String(...) считался в главном потоке); смена кодировки отменяет прежний разбор
+    LaunchedEffect(raw, enc) {
+        val r = raw ?: return@LaunchedEffect
+        text = null; big = null
+        val job = this.coroutineContext[kotlinx.coroutines.Job]
+        val res = withContext(Dispatchers.Default) {
+            val str = String(r, Charset.forName(enc))
+            str to (if (str.length > EDIT_TEXT_LIMIT) blockStarts(str) { if (job?.isActive == false) throw kotlinx.coroutines.CancellationException("cancel") } else null)
+        }
+        big = res.second?.let { BigText(res.first, it) }
+        if (big != null) { readOnly = true; bigPos = 0 }
+        text = if (big == null) res.first else ""
+    }
     val edScope = androidx.compose.runtime.rememberCoroutineScope()
+    fun openElsewhere() {
+        val f = file ?: return
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+            val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, FileMime.ofName(e.name, "text/plain")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            ctx.startActivity(Intent.createChooser(i, null))
+        }.onFailure { msg = ctx.getString(R.string.fm_no_app) }
+    }
     fun save() {
         val f = file ?: return
         val pp = privPath
@@ -193,16 +273,32 @@ fun TextEditor(onClose: () -> Unit) {
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             TextButton({ enc = CHARSETS[(CHARSETS.indexOf(enc).coerceAtLeast(0) + 1) % CHARSETS.size] }) { Text(enc, fontSize = 12.sp) }
-            TextButton({ wrap = !wrap; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("ed_wrap", wrap).apply() }) { Text(stringResource(if (wrap) R.string.ed_wrap_on else R.string.ed_wrap_off), fontSize = 12.sp) }
+            StateButton(wrap, { wrap = !wrap; ctx.getSharedPreferences("fm", Context.MODE_PRIVATE).edit().putBoolean("ed_wrap", wrap).apply() }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) { Text(stringResource(if (wrap) R.string.ed_wrap_on else R.string.ed_wrap_off), fontSize = 12.sp) }
             TextButton({ size = (size - 2f).coerceAtLeast(8f) }) { Text("A−", fontSize = 12.sp) }
             TextButton({ size = (size + 2f).coerceAtMost(40f) }) { Text("A+", fontSize = 12.sp) }
             TextButton({ find = true }) { Text(stringResource(R.string.ed_find), fontSize = 12.sp, maxLines = 1, softWrap = false) }
         }
-        if (readOnly) Text(stringResource(R.string.ed_readonly), Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+        val bg = big
+        if (bg != null) {
+            Text(stringResource(R.string.ed_big_view, fmSize(raw?.size?.toLong() ?: 0L), EDIT_TEXT_LIMIT / 1024) + if (truncated) " " + stringResource(R.string.ed_truncated, (VIEW_LIMIT shr 20).toInt()) else "", Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+            TextButton({ openElsewhere() }) { Text(stringResource(R.string.ed_open_other), fontSize = 12.sp, maxLines = 1) }
+        } else if (readOnly) Text(stringResource(R.string.ed_readonly), Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
         msg?.let { Text(it, Modifier.padding(horizontal = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
-        if (text != null) {
+        if (bg != null) {
+            // 24.11.2026: большой файл: куски по BLOCK_CHARS знаков в ленивом списке, выделение и копирование работают; в поле ввода такой текст не помещается (падение по высоте)
+            androidx.compose.foundation.text.selection.SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
+                LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState).then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(start = 8.dp, end = 14.dp), state = listState) {
+                    items(bg.starts.size, key = { it }) { i ->
+                        val a = bg.starts[i]
+                        val b = if (i + 1 < bg.starts.size) bg.starts[i + 1] else bg.s.length
+                        Text(bg.s.substring(a, b).removeSuffix("\n"), fontFamily = FontFamily.Monospace, fontSize = size.sp, softWrap = wrap)
+                    }
+                }
+            }
+        } else if (text != null) {
+            val tx = text ?: ""
             // поле редактора на Compose: надёжная раскладка, прокрутка по вертикали (и по горизонтали без переноса)
-            var tfv by remember(text) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(text)) }
+            var tfv by remember(tx) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(tx)) }
             tv = tfv
             Box(Modifier.fillMaxWidth().weight(1f).barScroll().then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 8.dp)) {
                 androidx.compose.material3.TextField(
@@ -220,14 +316,27 @@ fun TextEditor(onClose: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(q, { q = it }, singleLine = true, label = { Text(stringResource(R.string.ed_find_what), maxLines = 1) })
                     if (!readOnly) OutlinedTextField(r, { r = it }, singleLine = true, label = { Text(stringResource(R.string.ed_replace_with), maxLines = 1) })
-                    androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) { BigCheckbox(backup, { backup = it }); Text(stringResource(R.string.ed_backup), fontSize = 13.sp) }
+                    if (!readOnly) androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) { BigCheckbox(backup, { backup = it }); Text(stringResource(R.string.ed_backup), fontSize = 13.sp) }
                 }
             },
             confirmButton = {
                 Row {
                     TextButton({
-                        val i = tv.text.indexOf(q, tv.selection.end.coerceAtLeast(0)).let { if (it < 0) tv.text.indexOf(q) else it }
-                        if (i >= 0 && q.isNotEmpty()) tv = tv.copy(selection = androidx.compose.ui.text.TextRange(i, i + q.length)) else msg = ctx.getString(R.string.ed_not_found)
+                        val bt = big
+                        if (bt != null) {
+                            // просмотр частями: найденное место показывается началом куска (выделения в таком режиме нет)
+                            val i = if (q.isEmpty()) -1 else bt.s.indexOf(q, bigPos.coerceIn(0, bt.s.length)).let { if (it < 0) bt.s.indexOf(q) else it }
+                            if (i >= 0) {
+                                bigPos = i + q.length
+                                var blk = java.util.Arrays.binarySearch(bt.starts, i); if (blk < 0) blk = -blk - 2
+                                val at = blk.coerceAtLeast(0)
+                                edScope.launch { listState.scrollToItem(at) }
+                                msg = ctx.getString(R.string.ed_found_at, (i * 100L / bt.s.length.coerceAtLeast(1)).toInt())
+                            } else msg = ctx.getString(R.string.ed_not_found)
+                        } else {
+                            val i = tv.text.indexOf(q, tv.selection.end.coerceAtLeast(0)).let { if (it < 0) tv.text.indexOf(q) else it }
+                            if (i >= 0 && q.isNotEmpty()) tv = tv.copy(selection = androidx.compose.ui.text.TextRange(i, i + q.length)) else msg = ctx.getString(R.string.ed_not_found)
+                        }
                         find = false
                     }) { Text(stringResource(R.string.ed_find_next)) }
                     if (!readOnly) TextButton({
@@ -249,7 +358,7 @@ class PdfViewerActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) { Surface(Modifier.fillMaxSize()) { ImeGateHost { PdfViewer { finish() } } } } }
+        setContent { MaterialTheme(colorScheme = AppColors.scheme(androidx.compose.foundation.isSystemInDarkTheme(), androidx.compose.ui.platform.LocalContext.current)) { Surface(Modifier.fillMaxSize()) { ImeGateHost { PdfViewer { finish() } } } } }
     }
 }
 
@@ -320,7 +429,7 @@ class OfficeViewerActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) { Surface(Modifier.fillMaxSize()) { OfficeViewer { finish() } } } }
+        setContent { MaterialTheme(colorScheme = AppColors.scheme(androidx.compose.foundation.isSystemInDarkTheme(), androidx.compose.ui.platform.LocalContext.current)) { Surface(Modifier.fillMaxSize()) { OfficeViewer { finish() } } } }
     }
 }
 

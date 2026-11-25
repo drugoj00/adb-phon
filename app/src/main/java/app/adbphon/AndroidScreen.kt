@@ -502,7 +502,7 @@ internal fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () 
                     DropdownMenuItem({ Text((if (c.quality == "sharp") "✓ " else "") + stringResource(R.string.spc_q_sharp)) }, { c.quality = "sharp"; qMenu = false; c.start() })
                 }
             }
-            OutlinedButton({ c.switchAudio(!c.audioOn) }) { Text(stringResource(if (c.audioOn) R.string.asc_sound_on else R.string.asc_sound_off), fontSize = 12.sp) }
+            StateButton(c.audioOn, { c.switchAudio(!c.audioOn) }) { Text(stringResource(if (c.audioOn) R.string.asc_sound_on else R.string.asc_sound_off), fontSize = 12.sp) }
             if (c.audioOn) NumberSlider(c.volume, { c.changeVolume(it) }, NumberSliderRules.SCREEN_VOL, stringResource(R.string.num_volume), Modifier.width(170.dp))   // 10.0 (num): число громкости справа, нажатие = ввод
             OutlinedButton({ kbd = !kbd }) { Text(stringResource(R.string.spc_keys), fontSize = 12.sp) }
             OutlinedButton({ c.start() }) { Text(stringResource(R.string.asc_restart), fontSize = 12.sp) }

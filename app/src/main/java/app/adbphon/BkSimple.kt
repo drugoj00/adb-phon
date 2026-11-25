@@ -281,7 +281,8 @@ fun BkSimpleRestore(onClose: () -> Unit) {
             dismissButton = { TextButton({ if (!busy) onClose() }, enabled = !busy) { Text(stringResource(R.string.btn_cancel)) } },
         )
         is BsRs.Info -> LAlertDialog(
-            onDismissRequest = onClose,
+            // 24.11.2026: после успешного восстановления закрытие окна тоже перезапускает программу, чтобы все настройки применились
+            onDismissRequest = { if (s.restart) restartApp(ctx) else onClose() },
             title = { Text(stringResource(R.string.set2_hero_restore)) },
             text = {
                 Column(Modifier.heightIn(max = 420.dp).barScroll()) {
@@ -298,7 +299,7 @@ fun BkSimpleRestore(onClose: () -> Unit) {
                 if (s.restart) TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.bk2_restart)) }
                 else TextButton(onClose) { Text(stringResource(R.string.btn_close)) }
             },
-            dismissButton = if (s.restart) ({ TextButton(onClose) { Text(stringResource(R.string.btn_close)) } }) else null,
+            dismissButton = if (s.restart) ({ TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.btn_close)) } }) else null,
         )
     }
 }

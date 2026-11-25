@@ -36,8 +36,8 @@ fun OpenWithDialog(p: FmPane, f: FmItem, close: () -> Unit) {
     val ctx = LocalContext.current
     val key = openKey(f.ext)
     var always by remember { mutableStateOf(false) }
-    val mime = remember(f.ext) { android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.ext) ?: "*/*" }
-    val apps = remember(f.ext) {
+    val mime = remember(f.name) { FileMime.ofName(f.name) }
+    val apps = remember(f.name) {
         runCatching {
             ctx.packageManager.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("file:///x"), mime), 0)
                 .map { it.activityInfo.packageName to it.loadLabel(ctx.packageManager).toString() }.filter { it.first != ctx.packageName }.distinctBy { it.first }.sortedBy { it.second.lowercase() }

@@ -111,16 +111,17 @@ object ApkInstall {
         return if (v.contains(Char(47))) "c:$v" else "i:$v"
     }
 
-    fun mimeFor(ext: String): String = if (ext == "apk") APK_MIME else (android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream")
+    fun mimeFor(ext: String): String = if (ext == "apk") APK_MIME else FileMime.of(ext, "application/octet-stream")
 
     /** Действия (активности) приложений, умеющие открывать этот тип файла: каждая отдельной записью, а не одна на пакет. */
     fun handlers(ctx: Context, ext: String): List<Handler> = runCatching {
         val pm = ctx.packageManager
         val mimes = if (ext == "apk") listOf(APK_MIME) else if (ext == "apks" || ext == "xapk" || ext == "apkm") listOf("application/x-apks", "application/vnd.apkm", "application/xapk-package-archive") else listOf(mimeFor(ext))
         val seen = LinkedHashMap<String, Handler>()
+        // 24.11.2026: проверка идёт с несуществующим расширением: читалки (FBReader) без типа, но с фильтром по расширению (.fb2) раньше попадали во «всеядные» и пропадали из списка
         // 9.3: «всеядные» обработчики (фильтр на */*: Кошелёк, ViewerLauncher и подобные) отзываются даже на несуществующий тип: такие в выборе не показываются
         val catchAll: Set<String> = runCatching {
-            pm.queryIntentActivities(Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://x/installer.$ext"), "application/x-adbphon-no-such-type"), PackageManager.MATCH_ALL)
+            pm.queryIntentActivities(Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://x/installer.adbphon-no-such-ext"), "application/x-adbphon-no-such-type"), PackageManager.MATCH_ALL)
                 .mapNotNull { r -> r.activityInfo?.let { it.packageName + "/" + it.name } }.toSet()
         }.getOrDefault(emptySet())
         // 9.3: у текстовых файлов (.sh, .txt, .log, .conf, .json, .xml и других) предлагаются и установленные текстовые редакторы: просмотр и правка text/plain
@@ -135,7 +136,9 @@ object ApkInstall {
                 // «настоящий» обработчик: фильтр называет конкретный тип (image/*, text/plain), а не «любые файлы» (*/*): такие (Кошелёк, Google ViewerLauncher) открывают не этот тип
                 val f = r.filter
                 val specific = k !in catchAll && !JUNK.any { j -> ai.name.contains(j, true) } && (f == null || (0 until f.countDataTypes()).any { n -> val t = f.getDataType(n); t != "*/*" && t != "*" })
-                if (k !in seen) seen[k] = Handler(ai, runCatching { pm.getApplicationLabel(pm.getApplicationInfo(ai.packageName, 0)).toString() }.getOrDefault(ai.packageName), r.loadLabel(pm).toString(), specific)
+                // 24.11.2026: подпись действия берётся, только если она задана в манифесте приложения; иначе loadLabel отдаёт имя класса («QuickWordDocumentOpenerActivityAlias»), а в списке должно быть название приложения
+                val own = if (ai.labelRes != 0 || ai.nonLocalizedLabel != null) runCatching { r.loadLabel(pm).toString() }.getOrDefault("").takeIf { l -> l != ai.name && l != ai.name.substringAfterLast('.') } ?: "" else ""
+                if (k !in seen) seen[k] = Handler(ai, runCatching { pm.getApplicationLabel(pm.getApplicationInfo(ai.packageName, 0)).toString() }.getOrDefault(ai.packageName), own, specific)
                 else if (specific && seen[k]?.specific == false) seen[k] = Handler(ai, seen[k]!!.appLabel, seen[k]!!.label, true)
             }
         }
@@ -190,8 +193,9 @@ object ApkInstall {
         for (h in cand) {
             val (_, kind) = classify(h)
             val title = if (installGroup || h.label.isBlank() || h.label == h.appLabel) h.appLabel else h.appLabel + " · " + h.label
+            val sameApp = cand.count { it.ai.packageName == h.ai.packageName } > 1
             val tag = when (kind) { "inst" -> ctx.getString(R.string.inst_kind_install); "analyze" -> ctx.getString(R.string.inst_kind_analyze); "explore" -> ctx.getString(R.string.inst_kind_explore); else -> if (installGroup) ctx.getString(R.string.inst_kind_install) else null }
-            val hint = if (installGroup) tag else listOfNotNull(tag, h.ai.name.substringAfterLast(Char(46))).joinToString(" · ")
+            val hint = if (installGroup) tag else listOfNotNull(tag, if (sameApp && h.label.isBlank()) h.ai.name.substringAfterLast(Char(46)) else null).joinToString(" · ").ifBlank { null }
             out += InstOpt("cmp:" + h.ai.packageName + "/" + h.ai.name, title, hint, h.ai.packageName, null, h.ai, if (installGroup) 2 else 5)
         }
         if (Arc.kindOf("x.$ext") != null || ext == "apkm") out += InstOpt("archive", ctx.getString(R.string.arc_open_as_archive), null, null, Icons.Filled.FolderZip, null, 6)
@@ -316,7 +320,7 @@ object ApkInstall {
         val e = item.ext
         if (e == "apk" || isBundle(e)) return false
         val builtin = openCat(e) != null || DocKind.of(e) != null
-        if (!builtin && android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(e) == null) return false
+        if (!builtin && FileMime.known(e) == null) return false
         val out = optionsFor(p, item)
         if (out.filter { it.id != "archive" }.size < 2) return false
         Fm.dlg = FmDlg.InstallPick(p, item, out)
@@ -348,13 +352,26 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
         InstallerDialog(d.opts, d.item.name, onPick = { o, rem -> InstallerStore.afterPick(ctx, o.id, rem); close(); ApkInstall.run(d.pane, d.item, o) }, onDismiss = close)
         return
     }
-    val savedId = remember { ApkInstall.saved(ctx, d.item.ext) }
+    var savedId by remember { mutableStateOf(ApkInstall.saved(ctx, d.item.ext)) }
     var remember by remember { mutableStateOf(savedId != null) }
     val tv = Marq.tv
     LAlertDialog(
         onDismissRequest = close, title = { Text(stringResource(if (d.item.ext == "apk" || d.item.ext == "apks" || d.item.ext == "xapk" || d.item.ext == "apkm") R.string.inst_title else R.string.open_with_title), maxLines = 1) },
         text = {
             Column(Modifier.fillMaxWidth()) {
+                // 24.11.2026: «Запомнить» и текущий запомненный выбор над списком (раньше галочка была под списком, и о ней не догадывались); «Сбросить» снимает запомненное
+                val sid = savedId
+                if (sid != null) {
+                    val savedName = d.opts.firstOrNull { it.id == sid }?.label ?: if (sid == "builtin") stringResource(R.string.oa_builtin) else sid.removePrefix("cmp:").substringBefore(Char(47))
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.inst_saved_now, d.item.ext, savedName), Modifier.weight(1f), fontSize = if (tv) 15.sp else 13.sp, maxLines = 3)
+                        TextButton({ ApkInstall.forget(ctx, d.item.ext); savedId = null; remember = false }) { Text(stringResource(R.string.inst_saved_reset), fontSize = if (tv) 15.sp else 13.sp, maxLines = 1) }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BigCheckbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
+                }
+                Text(stringResource(R.string.inst_remember_note_open), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f), modifier = Modifier.padding(bottom = 6.dp))
                 Column(Modifier.heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val firstEnabled = d.opts.indexOfFirst { it.enabled && it.id != "archive" }
                     val fr = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -373,11 +390,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                         }
                     }
                 }
-                // 9.2: флажок «Запомнить» виден всегда (раньше только при выключенном «Спрашивать», когда окно не показывается); один фокус на всей строке: ОК пультом и касание переключают
-                Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BigCheckbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
-                }
-                Text(stringResource(R.string.inst_remember_note), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                // 9.2: флажок «Запомнить» виден всегда; один фокус на всей строке: ОК пультом и касание переключают (с 24.11.2026 стоит над списком)
             }
         },
         confirmButton = { TextButton(close) { Text(stringResource(R.string.btn_cancel)) } },

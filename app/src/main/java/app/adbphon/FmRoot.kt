@@ -444,7 +444,7 @@ object FmRootCfg {
     }
     val kids = PerKeyMap<String, List<TK>>()
     val kidErr = PerKeyMap<String, String>()
-    /** 12.0 (владелица: «раскрытая папка должна подняться наверх»): узел дерева, который только что раскрыли в панели [p.id] -
+    /** 12.0 (владелица: «раскрытая папка должна подняться наверх»): узел дерева, который только что раскрыли в панели [p.id] —
      * FmRootList прокручивает к нему списком и сам стирает эту метку. */
     val scrollTarget = PerKeyMap<Int, String>()
     /** Тип облака у узла, ошибку которого лечит «свой ключ» (лимит общего ключа, API выключен, не тот scope). */
@@ -866,7 +866,7 @@ internal class RootModel(val p: FmPane, val ctx: Context, prim0: Color, sig0: St
                 val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
                 // «отказано в доступе» (нет root): спокойная подсказка вместо красной ошибки
                 if (er0 == CloudModule.MARK) {
-                    // 12.0: метка MARK не хранит само состояние (OUTDATED/MISSING/WRONG_ABI) - раньше тут всегда писалось «Нужен модуль»,
+                    // 12.0: метка MARK не хранит само состояние (OUTDATED/MISSING/WRONG_ABI) — раньше тут всегда писалось «Нужен модуль»,
                     // даже когда он стоит, но устарел под эту версию программы; теперь текст берётся по актуальному state() заново
                     val cmSt = CloudModule.state(ctx)
                     val cmTitle = CloudModule.missingText(ctx, cmSt)
@@ -1331,7 +1331,7 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
     val rootCtx = LocalContext.current
     // 14.0: один раз на версию программа просит систему скомпилировать свой код (если уже есть root или подключённый ADB), см. SelfCompile
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(40_000); runCatching { SelfCompile.maybe(rootCtx) } }
-    // 14.0: содержимое тома телефона читается заранее, пока список стоит свёрнутым: первое раскрытие после запуска показывает строки из памяти сразу (листинг на FUSE приставки занимает 150-600 мс), а свежий список приходит следом (refresh при раскрытии)
+    // 14.0: содержимое тома телефона читается заранее, пока список стоит свёрнутым: первое раскрытие после запуска показывает строки из памяти сразу (листинг на FUSE приставки занимает 150–600 мс), а свежий список приходит следом (refresh при раскрытии)
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(1200)
         val vid = model.built?.rows?.firstOrNull { it.drive && it.treeId?.startsWith("L|") == true }?.treeId
@@ -1396,14 +1396,14 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         val rootState = rememberSavedTreeList("files.root." + p.id, rows.map { it.key }, FmRootCfg.focusKey[p.id] ?: p.rootSel)   // T3: прокрутка и фокус возвращаются на строку, где был фокус
         // 12.0 (владелица: «раскрытая папка должна подняться наверх, а не прятаться внизу экрана, где анимацию не видно»):
         // сразу после раскрытия узла (treeToggle в FmRootRowView ставит метку) строка самой папки плавно едет к верху списка,
-        // если она и так не рядом с верхом - иначе новые дочерние строки уезжают за экран и кажется, что ничего не произошло
+        // если она и так не рядом с верхом — иначе новые дочерние строки уезжают за экран и кажется, что ничего не произошло
         val scrollTargetId = FmRootCfg.scrollTarget[p.id]
         LaunchedEffect(scrollTargetId, rows) {
             val target = scrollTargetId ?: return@LaunchedEffect
             val idx = rows.indexOfFirst { it.treeId == target }
             if (idx < 0) return@LaunchedEffect
             val vis = rootState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
-            // уже у верха (в пределах ~40dp) - лишний скачок не нужен; иначе едем так, чтобы строка легла к верхнему краю
+            // уже у верха (в пределах ~40dp) — лишний скачок не нужен; иначе едем так, чтобы строка легла к верхнему краю
             val tolerancePx = 40f * rootCtx.resources.displayMetrics.density
             val nearTop = vis != null && vis.offset <= tolerancePx
             if (!nearTop) rootState.scrollToItem(idx, 0)   // 14.0: без плавной прокрутки (каждый кадр прокрутки заново раскладывал строки)
@@ -1426,14 +1426,14 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
         LazyColumn(Modifier.fillMaxWidth().fillMaxHeight().verticalScrollbar(rootState)
             // пульт: «вниз» с последней строки списка уходит на нижнюю панель значков (если есть отмеченное), а не на нижнюю навигацию
             .focusProperties { exit = { d -> if (d == androidx.compose.ui.focus.FocusDirection.Down && FmRootCfg.sel.isNotEmpty()) FmRootCfg.barFocus else androidx.compose.ui.focus.FocusRequester.Default } }.focusGroup(), state = rootState, contentPadding = sbPadding(), verticalArrangement = Arrangement.spacedBy(if (tv) 2.dp else 0.dp)) {
-            // 12.0 (владелица: «резко, надо как в X-plore - быстро но плавнее»): появление/исчезновение и сдвиг строк
+            // 12.0 (владелица: «резко, надо как в X-plore — быстро но плавнее»): появление/исчезновение и сдвиг строк
             // при раскрытии папки в дереве анимируются (коротко, с плавной кривой), а не щёлкают мгновенной подменой списка
             items(rows, key = { it.key }, contentType = { it.header }) { r ->
                 // 12.0 (владелица: «слипшийся текст при первом раскрытии»): временные строки-заглушки («Загрузка…», ошибка,
-                // «нужен модуль» - ключ "t:...") на первом раскрытии появляются и тут же сменяются настоящим содержимым;
+                // «нужен модуль» — ключ "t:...") на первом раскрытии появляются и тут же сменяются настоящим содержимым;
                 // если заглушка ТОЖЕ анимированно входит и выходит, обе волны (её исчезновение + появление реальных строк)
                 // накладываются и дают нахлёст текста. Заглушки показываются и убираются без анимации, растут только настоящие строки.
-                // 18.11.2026 (владелица): выключатель «Анимация переходов» - выключен, весь список раскрывается/сворачивается мгновенно.
+                // 18.11.2026 (владелица): выключатель «Анимация переходов» — выключен, весь список раскрывается/сворачивается мгновенно.
                 // 14.0: строки списка «Файлов» без анимации появления и сдвига (animateItem и AnimatedVisibility стоили сотни мс на слабой приставке), независимо от выключателя
                 FmRootRowView(p, r, tv, Modifier, false, born[0])
             }
@@ -1802,7 +1802,7 @@ private fun rootAccordion(p: FmPane, id: String) {
     }
     // 10.11.2026 (владелица: на S9 при раскрытии диска всё дерево «Облачные диски» схлопывалось): группа, в которой лежит открываемый узел («lan», «cloud», «wifi», «apps»), остаётся раскрытой
     val keepGroup: String? = netGroupOf(id)
-    // 10.11.2026 (владелица: «нажимаю на корзину, и диск сворачивается»; затем «везде одинаково: раскрыл одно, другое свернулось»): «Корзина» и «Облачный диск» - соседи и сворачивают друг друга, как всё остальное;
+    // 10.11.2026 (владелица: «нажимаю на корзину, и диск сворачивается»; затем «везде одинаково: раскрыл одно, другое свернулось»): «Корзина» и «Облачный диск» — соседи и сворачивают друг друга, как всё остальное;
     // аккаунт облака (их родитель) при раскрытии корзины остаётся раскрытым
     fun acct(o: String): String? = when {
         o.startsWith("N|") -> o.split('|').take(4).joinToString("|")
@@ -1823,10 +1823,10 @@ const val TREE_IND = 11
 
 // 10.0 (fm1): перетаскивание строк дерева убрано (владелица: мешало прокрутке); квадратик отметки SmallCheck/SelBox/SelZone в FmSelUi.kt
 
-/** 12.0: строка дерева растёт/гаснет при появлении ([animated]=true) или появляется сразу без анимации (временные заглушки «Загрузка…»/ошибка/«нужен модуль» - ключ "t:..."). */
+/** 12.0: строка дерева растёт/гаснет при появлении ([animated]=true) или появляется сразу без анимации (временные заглушки «Загрузка…»/ошибка/«нужен модуль» — ключ "t:..."). */
 @Composable
 private fun FmRowEnter(animated: Boolean, visibleState: androidx.compose.animation.core.MutableTransitionState<Boolean>, modifier: Modifier, content: @Composable () -> Unit) {
-    // 18.11.2026 (владелица): общий выключатель «Анимация переходов» - выключен, раскрытие папки мгновенное, без анимации.
+    // 18.11.2026 (владелица): общий выключатель «Анимация переходов» — выключен, раскрытие папки мгновенное, без анимации.
     if (animated && UiAnim.on) {
         androidx.compose.animation.AnimatedVisibility(
             visibleState = visibleState,
@@ -1910,10 +1910,10 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
     val rowToggle = { id: String -> rootRowToggle(p, r, ctx, id) }
     val rowClickR: () -> Unit = { rootRowClick(p, r, ctx) { menu = true } }
     val rowLongR: () -> Unit = { Fm.active = p.id; p.rootSel = r.key; menu = true }
-    // 12.0 (владелица: «рывок, а надо вообще без рывка» - одного animateItem() на сдвиг соседних строк мало, новая строка выскакивала
+    // 12.0 (владелица: «рывок, а надо вообще без рывка» — одного animateItem() на сдвиг соседних строк мало, новая строка выскакивала
     // сразу в полный рост, только прозрачность менялась): своя строка по-настоящему вырастает (fadeIn+expandVertically) при первом
-    // появлении на экране - ключ строки меняется при каждом новом раскрытии/закрытии узла, поэтому анимация входа всегда свежая.
-    // Временные строки-заглушки (animated=false, см. items() выше) растут без анимации - иначе их уход и приход настоящих строк
+    // появлении на экране — ключ строки меняется при каждом новом раскрытии/закрытии узла, поэтому анимация входа всегда свежая.
+    // Временные строки-заглушки (animated=false, см. items() выше) растут без анимации — иначе их уход и приход настоящих строк
     // накладываются друг на друга и текст на миг «слипается».
     // 14.0: строки списка «Файлов» появляются мгновенно (раньше AnimatedVisibility на каждую строку: на слабой приставке раскладка и кадры анимации съедали сотни мс)
     androidx.compose.foundation.layout.Box(modifier) {
@@ -2137,6 +2137,7 @@ internal fun FmRootRowMenu(p: FmPane, r: RR, close: () -> Unit, pickIcon: () -> 
                 item(R.string.fm_copy) { transfer(false) }
                 item(R.string.fm_move) { transfer(true) }
                 item(R.string.fm_delete) { val nb = FmRootCfg.neighborOf(tg.map { "t:" + it.key }.toSet()); Fm.askDelete(pane("/"), rel); refresh(nb) }
+                if (!multiSel && !e.isDir) item(R.string.fm_open_in_system) { ApkInstall.showPicker(pane(e.parentPath), FmItem(e.name, false, 0L, "")) }   // 24.11.2026: окно «Открыть через…» (и «Сбросить» запомненного) доступно и на корневом экране
                 if (!multiSel) item(R.string.fm_rename) { Fm.dlg = FmDlg.Rename(pane(e.parentPath), e.name); refresh() }
                 if (!multiSel) item(R.string.fm_duplicate) {
                     val dot = e.name.lastIndexOf('.')

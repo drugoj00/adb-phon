@@ -43,6 +43,13 @@ object AppUi {
     val BTN_SHAPE: RoundedCornerShape = RoundedCornerShape(BTN_RADIUS)
 }
 
+/** Кнопка-переключатель (правило для всех программ, 25.11.2026): включено залита бирюзой, выключено контурная. */
+@Composable
+fun StateButton(on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, contentPadding: PaddingValues = ButtonDefaults.ContentPadding, content: @Composable RowScope.() -> Unit) {
+    if (on) Button(onClick = onClick, modifier = modifier, contentPadding = contentPadding, content = content)
+    else OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = contentPadding, content = content)
+}
+
 /** Приподнятая кнопка: то же, что у Material3, но с формой [AppUi.BTN_SHAPE] и откликом на нажатие, как у остальных кнопок (см. Haptics.kt). */
 @Composable
 fun ElevatedButton(

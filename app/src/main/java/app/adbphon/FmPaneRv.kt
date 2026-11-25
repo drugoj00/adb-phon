@@ -43,6 +43,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
@@ -278,7 +281,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
         } else {
             iconImg.visibility = GONE
             val ih = iconHost ?: ComposeView(context).also { h ->
-                h.setParentCompositionContext(e.parent)
+                h.hostInit(e.parent)
                 h.setContent { val x = iconState.value; val e2 = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides e2.density) { PaneIconCompose(e2.p, x) } }
                 h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false
                 iconHost = h; content.addView(h, content.indexOfChild(iconImg) + 1)
@@ -354,6 +357,25 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
         super.onDetachedFromWindow(); job?.cancel(); iconJob?.cancel()
         hadFocus = false
     }
+}
+
+/**
+ * 24.11.2026: владельцы дерева видов (жизненный цикл, хранилище состояния, ViewModel) ставятся на ComposeView-хост строки явно, из Activity панели.
+ * Без этого значок запомненного приложения (и другие Compose-значки строк), созданный в момент ухода программы под другое окно, падал:
+ * IllegalStateException "Composed into the View which doesn't propagate ViewTreeLifecycleOwner!" в RecyclerView.onLayout.
+ */
+internal fun androidx.compose.ui.platform.ComposeView.hostInit(p: CompositionContext) {
+    setParentCompositionContext(p)
+    bindTreeOwners(this)
+}
+
+internal fun bindTreeOwners(v: View) {
+    var c: Context? = v.context
+    while (c is android.content.ContextWrapper && c !is androidx.activity.ComponentActivity) c = c.baseContext
+    val a = c as? androidx.activity.ComponentActivity ?: return
+    v.setViewTreeLifecycleOwner(a)
+    v.setViewTreeSavedStateRegistryOwner(a)
+    v.setViewTreeViewModelStoreOwner(a)
 }
 
 @Composable
@@ -442,7 +464,7 @@ internal class OtherHolder(val env0: () -> RvEnv, ctx: Context) : FrameLayout(ct
     private val state = mutableStateOf<PaneRvItem?>(null)
     private val host = ComposeView(ctx)
     init {
-        host.setParentCompositionContext(env0().parent)
+        host.hostInit(env0().parent)
         host.setContent { val x = state.value; val e = env0(); if (x?.other != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides e.density) { x.other?.invoke() } }
         addView(host, LayoutParams(-1, -2))
     }
@@ -484,6 +506,7 @@ internal fun FmPaneRvList(p: FmPane, items: List<PaneRvItem>, tv: Boolean, st: R
         AndroidView(
             factory = { c ->
                 val rv = RecyclerView(c)
+                bindTreeOwners(rv)
                 rv.layoutManager = LinearLayoutManager(c); rv.itemAnimator = null; rv.setItemViewCacheSize(0); rv.clipToPadding = false; rv.clipChildren = false; rv.isFocusable = false
                 rv.overScrollMode = View.OVER_SCROLL_NEVER; rv.adapter = adapter
                 rv.recycledViewPool.setMaxRecycledViews(0, 40); rv.recycledViewPool.setMaxRecycledViews(1, 10)

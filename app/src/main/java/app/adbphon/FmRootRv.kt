@@ -486,7 +486,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         tri.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         setOnClickListener {
             val rr = r ?: return@setOnClickListener; val e = env0()
-            if (flipArrow(rr)) postDelayed({ rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) } }, 20)   // стрелка меняется сразу, тяжёлая перестройка списка - следующим кадром
+            if (flipArrow(rr)) postDelayed({ rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) } }, 20)   // стрелка меняется сразу, тяжёлая перестройка списка — следующим кадром
             else rootRowClick(e.p, rr, e.ctx) { hostKeys.openMenu(this, rr) }
         }
         setOnLongClickListener { val rr = r ?: return@setOnLongClickListener false; val e = env0(); Fm.active = e.p.id; e.p.rootSel = rr.key; hostKeys.openMenu(this, rr); true }
@@ -575,7 +575,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
     private fun tail(rr: RR, e: RvEnv): ComposeView {
         var h = tailHost
         if (h == null) {
-            h = ComposeView(context); h.setParentCompositionContext(env0().parent)
+            h = ComposeView(context); h.hostInit(env0().parent)
             h.setContent { val x = tailState.value; val en = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides en.density) { RvTail(x, en.tv) } }
             h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
             tailHost = h
@@ -620,7 +620,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
             if (spinner == null) { spinner = android.widget.ProgressBar(context).also { content.addView(it, content.indexOfChild(iconImg)) } }
             spinner!!.visibility = VISIBLE; spinner!!.layoutParams = LinearLayout.LayoutParams(e.dp(14).toInt(), e.dp(14).toInt()).also { it.marginEnd = gap }
         } else spinner?.visibility = GONE
-        // значок: обычная папка и значок типа файла - готовая картинка; остальное (миниатюры, значки приложений, свои значки, значки групп) - Compose
+        // значок: обычная папка и значок типа файла — готовая картинка; остальное (миниатюры, значки приложений, свои значки, значки групп) — Compose
         val si = if (model.iconKey != null) (model.si ?: staticIcon(e, rr, model.open)) else null
         if (si != null) {
             val px = e.dp(if (tv) 32 else 28).toInt()
@@ -638,7 +638,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         } else {
             iconImg.visibility = GONE
             val ih = iconHost ?: ComposeView(context).also { h ->
-                h.setParentCompositionContext(env0().parent)
+                h.hostInit(env0().parent)
                 h.setContent { val rr2 = iconState.value; val e2 = env0(); if (rr2 != null) androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides e2.density) { FmRootRowIcon(e2.p, rr2, e2.tv) } }
                 h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false
                 iconHost = h; content.addView(h, content.indexOfChild(iconImg) + 1)
@@ -659,13 +659,13 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         } else sub.visibility = GONE
         // полоска занятого места
         if (rr.total > 0) {
-            val b = barHost ?: ComposeView(context).also { h -> h.setParentCompositionContext(env0().parent); h.setContent { val x = barState.value; val en = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides en.density) { FmSpaceBar(1f - x.free.toFloat() / x.total, Modifier.fillMaxWidth().padding(top = 1.dp)) } }; h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false; barHost = h; textCol.addView(h, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)) }
+            val b = barHost ?: ComposeView(context).also { h -> h.hostInit(env0().parent); h.setContent { val x = barState.value; val en = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides en.density) { FmSpaceBar(1f - x.free.toFloat() / x.total, Modifier.fillMaxWidth().padding(top = 1.dp)) } }; h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false; barHost = h; textCol.addView(h, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)) }
             b.visibility = VISIBLE; barState.value = rr
         } else barHost?.visibility = GONE
         // точка состояния подключения
         val kfs = rr.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } } }
         if (kfs != null) {
-            val d = dotHost ?: ComposeView(context).also { h -> h.setParentCompositionContext(env0().parent); h.setContent { val x = dotState.value; val en = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides en.density) { val k = x.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } } }; if (k != null) NetDot(k) } }; h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false; dotHost = h; titleRow.addView(h) }
+            val d = dotHost ?: ComposeView(context).also { h -> h.hostInit(env0().parent); h.setContent { val x = dotState.value; val en = env0(); if (x != null) androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides en.density) { val k = x.net?.let { nc -> Fm.panes.firstNotNullOfOrNull { pp -> (pp.smb as? KeepFs)?.takeIf { pp.src == "smb" && pp.net == nc } } }; if (k != null) NetDot(k) } }; h.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; h.descendantFocusability = FOCUS_BLOCK_DESCENDANTS; h.isFocusable = false; dotHost = h; titleRow.addView(h) }
             d.visibility = VISIBLE; dotState.value = rr
         } else dotHost?.visibility = GONE
         // хвост: замок, переключатель, число справа у строк верхнего уровня
@@ -762,7 +762,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
 
     /** Свойства строки по точке слева: касанием и (24.11.2026) пультом: стрелка влево на строке, затем ОК. */
     private fun openDotProps(rr: RR, e: RvEnv, e0: FmRootCfg.SelE) {
-        Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "-" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "-") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "-"))
+        Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "—" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "—") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "—"))
     }
 
     /** Нажатие на точку «свойства» у левого края (отдельное от нажатия на строку). */
@@ -911,6 +911,7 @@ internal fun FmRootRvList(p: FmPane, model: RootModel, tv: Boolean, st: RvState,
         AndroidView(
             factory = { c ->
                 val rv = RecyclerView(c)
+                bindTreeOwners(rv)
                 rv.layoutManager = LinearLayoutManager(c)
                 rv.itemAnimator = null
                 rv.setItemViewCacheSize(0)

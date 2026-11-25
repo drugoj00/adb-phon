@@ -322,8 +322,10 @@ object AppBackup {
             files?.keys()?.forEach { n -> if (n in SECRET_FILES) writeFileAtomic(File(ctx.filesDir, n), Base64.decode(files.getString(n), Base64.NO_WRAP)) }
         } catch (e: Throwable) {
             runCatching { applyRaw(ctx, snap) }
+            runCatching { FmButtons.reload(ctx) }
             throw e
         }
+        runCatching { FmButtons.reload(ctx) }   // 24.11.2026: кнопки боковой панели берутся из восстановленных настроек сразу
         return summary
     }
 
@@ -339,6 +341,7 @@ object AppBackup {
     fun rollback(ctx: Context) {
         val f = rollbackFile(ctx)
         applyRaw(ctx, JSONObject(f.readText()))
+        runCatching { FmButtons.reload(ctx) }
     }
 
     // ------------------------------------------------------------------ самопроверка (на устройстве: am start ... BACKUP_SELFTEST)

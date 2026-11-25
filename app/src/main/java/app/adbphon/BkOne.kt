@@ -569,7 +569,8 @@ fun BkRestoreDialog(onClose: () -> Unit) {
         )
         is RsSt.AppCheck -> BkAppCheckDialog(s.l, { t -> st = if (t == null) RsSt.List else RsSt.Info(t, false) })
         is RsSt.Info -> LAlertDialog(
-            onDismissRequest = onClose,
+            // 24.11.2026: после успешного восстановления настроек закрытие окна тоже перезапускает программу
+            onDismissRequest = { if (s.restart) restartApp(ctx) else onClose() },
             title = { Text(stringResource(R.string.bk3_restore_title)) },
             text = {
                 Column(Modifier.heightIn(max = 420.dp).barScroll()) {
@@ -587,7 +588,7 @@ fun BkRestoreDialog(onClose: () -> Unit) {
                 else TextButton(onClose) { Text(stringResource(R.string.btn_close)) }
             },
             dismissButton = {
-                if (s.restart) TextButton(onClose) { Text(stringResource(R.string.btn_close)) }
+                if (s.restart) TextButton({ restartApp(ctx) }) { Text(stringResource(R.string.btn_close)) }
                 else TextButton({ st = RsSt.List; tick++ }) { Text(stringResource(R.string.bkp_back)) }
             },
         )
