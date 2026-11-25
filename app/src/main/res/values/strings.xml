@@ -1888,4 +1888,13 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="set_vp_hide_hint">The control panel of the built-in video player hides by itself after the chosen time. “Never” keeps it on screen until you tap the screen again.</string>
     <string name="vp_hide_sec">%1$d s</string>
     <string name="vp_hide_never">Never</string>
+    <string name="panel_title">Panel colors</string>
+    <string name="panel_hint">Color of the bottom tab bar and of the side button panel in Files: default, like the side buttons, black, or your own color (hue and brightness).</string>
+    <string name="panel_bottom">Bottom panel</string>
+    <string name="panel_side">Side panel</string>
+    <string name="panel_now">Default</string>
+    <string name="panel_btn">Like buttons</string>
+    <string name="panel_black">Black</string>
+    <string name="panel_custom">Custom color</string>
+    <string name="panel_bright">Brightness</string>
 </resources>

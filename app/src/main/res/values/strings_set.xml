@@ -10,7 +10,7 @@
     <string name="set_grp_adb_sub">Helper without debugging, Shizuku, terminal</string>
     <string name="set_grp_cloud">Clouds</string>
     <string name="set_grp_cloud_sub">Clouds module and its updates</string>
-    <string name="set_grp_panels">Panels and calls</string>
+    <string name="set_grp_panels">Panels</string>
     <string name="set_grp_panels_sub">Panel side, buttons, avatar</string>
     <string name="set_grp_sys">System</string>
     <string name="set_grp_sys_sub">Startup, screen, exit, log</string>
