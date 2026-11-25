@@ -16,17 +16,16 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 20.0.** [ADB-phon-20.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 21.0.** [ADB-phon-21.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `4e20b857165c077829b5bf73a573c9cd6ff863d869ad1f58baae71c2cb622869`
+SHA-256: `050d437ca40a1aa1b90dd83c44ebaf010be037699983d2ac0a997209611af197`
 
-## What's new in 20.0
+## What's new in 21.0
 
-- Large fb2 and text files open without freezing
-- “Open with…”: reader apps are listed, clear app names
-- “Remember for…”: checkbox above the list, Reset button, crash fixed
-- Restoring a backup keeps the side panel button set
-- Active buttons are filled turquoise
+- New setting "Panel colors": bottom and side panel default, like the buttons or your own color (hue and brightness, black is brightness 0)
+- On panels with your own color the icons get a thin contrasting outline, black or white automatically
+- Icons of the side panel buttons are larger, the labels keep their size
+- The settings section is now called "Panels", the avatar was removed from the settings
 - Bug fixes
 
 **Requirements and limits**
@@ -95,7 +94,7 @@ SHA-256: `4e20b857165c077829b5bf73a573c9cd6ff863d869ad1f58baae71c2cb622869`
 
 ## Quick start
 
-1. Download ADB-phon-20.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-21.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8-10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
