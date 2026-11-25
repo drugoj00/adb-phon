@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ed_big_view">Большой файл (%1$s): только просмотр, правка до %2$d КБ.</string>
+    <string name="ed_truncated">Показаны только первые %1$d МБ.</string>
+    <string name="ed_open_other">Открыть в другой программе</string>
+    <string name="ed_found_at">Найдено, примерно %1$d%% файла.</string>
+    <string name="inst_saved_now">Запомнено для .%1$s: %2$s</string>
+    <string name="inst_saved_reset">Сбросить</string>
+    <string name="inst_remember_note_open">Запомненный тип открывается сразу, без этого окна; вернуть окно: «Сбросить».</string>
+</resources>
