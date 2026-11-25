@@ -286,6 +286,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "full" to listOf(R.string.fs_title),
     "colors" to listOf(R.string.col_dynamic, R.string.col_accent),
     "bars" to listOf(R.string.bar_contrast, R.string.bar_color),
+    "panel_colors" to listOf(R.string.panel_title, R.string.panel_bottom, R.string.panel_side),
     "tapguard" to listOf(R.string.tg_title),
     "anim" to listOf(R.string.anim_title),
     "dir_tap" to listOf(R.string.set_dir_tap),
@@ -314,7 +315,6 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "cmod_auto" to listOf(R.string.set_cmod_auto),
     "hand" to listOf(R.string.set_hand),
     "side_mode" to listOf(R.string.set_side_mode, R.string.set_side_scale),
-    "call_pics" to listOf(R.string.cp_avatar, R.string.cp_pic_mode),
     "startup" to listOf(R.string.start_tab, R.string.start_folder),
     "keep_on" to listOf(R.string.set_keep_on),
     "exit_back" to listOf(R.string.set_exit_back),
@@ -410,6 +410,7 @@ fun SetItem(key: String, vm: MainViewModel) {
             }
         }
         "bars" -> BarContrastSetting()
+        "panel_colors" -> PanelColorsSetting()
         "tapguard" -> SettingSwitch(TapGuard.on, { TapGuard.set(ctx, it) }, stringResource(R.string.tg_title), stringResource(R.string.tg_hint))
         "anim" -> SettingSwitch(UiAnim.on, { UiAnim.set(ctx, it) }, stringResource(R.string.anim_title), stringResource(R.string.anim_hint))
 
@@ -449,10 +450,9 @@ fun SetItem(key: String, vm: MainViewModel) {
         "cmod" -> CloudModuleSetting()
         "cmod_auto" -> CloudModuleAutoSetting()
 
-        // ---- Панели и звонки
+        // ---- Панели
         "hand" -> HandednessSection()
         "side_mode" -> SideModeSetting()
-        "call_pics" -> CallPicSettings()
 
         // ---- Система
         "startup" -> StartupSection(ctx)

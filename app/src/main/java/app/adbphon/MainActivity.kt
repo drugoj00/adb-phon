@@ -335,7 +335,7 @@ object AppColors {
 fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     val baseCtx = LocalContext.current
     val uiCtx = remember(vm.lang, baseCtx) { Lang.wrap(baseCtx, vm.lang) }
-    remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); BarStyle.load(baseCtx); 0 }
+    remember(baseCtx) { AppColors.load(baseCtx); AppScale.load(baseCtx); AppFull.load(baseCtx); BarStyle.load(baseCtx); PanelStyle.load(baseCtx); 0 }
     val scaleCfg = androidx.compose.ui.platform.LocalConfiguration.current
     remember(scaleCfg.densityDpi, scaleCfg.screenWidthDp, scaleCfg.screenHeightDp, scaleCfg.fontScale, scaleCfg.uiMode) { AppScale.updateAuto(baseCtx); 0 }
     val dark = when (vm.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
@@ -481,7 +481,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                 containerColor = MaterialTheme.colorScheme.background,
                 snackbarHost = { SnackbarHost(snack) },
                 bottomBar = {
-                  if (!hideBarForIme) androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+                  if (!hideBarForIme) PanelSurface(0) {
                         val items = listOf(
                             R.string.tab_connect to Icons.Filled.Link,
                             R.string.tab_apps to Icons.Filled.Apps,
@@ -930,7 +930,7 @@ private object IconCache {
 @Composable
 fun BarIcon(i: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String?, tint: Color, size: androidx.compose.ui.unit.Dp) {
     val cs = CustomIcons.spec("t:$i")
-    if (cs != null) CustomIconView(cs, size) else Icon(icon, desc, tint = tint, modifier = Modifier.size(size))
+    if (cs != null) CustomIconView(cs, size) else PanelIcon(icon, desc, tint, size)
 }
 
 @Composable

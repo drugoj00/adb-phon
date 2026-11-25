@@ -22,6 +22,8 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -2499,6 +2501,10 @@ internal fun FmSwitchPaneButton(modifier: Modifier = Modifier, iconSize: android
     val bg = MaterialTheme.colorScheme.background
     val dark = (0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue) < 0.5f
     val purple = if (dark) Color(0xFFC4B5FD) else Color(0xFF6D28D9)
+    // 21.0: на панели своего цвета стрелка получает тонкую контрастную обводку (чёрную у светлой, белую у тёмной)
+    val panelSlot = LocalPanelSlot.current
+    val outlineArrow = panelSlot >= 0 && PanelStyle.mode(panelSlot) != PanelStyle.NOW
+    val outlineC = if (dark) Color.Black else Color.White
     val shape = RoundedCornerShape(10.dp)
     val desc = stringResource(R.string.fm_switch_pane)
     Box(
@@ -2517,6 +2523,12 @@ internal fun FmSwitchPaneButton(modifier: Modifier = Modifier, iconSize: android
             val tail = if (toRight) w * 0.10f else w * 0.90f
             val tip = if (toRight) w * 0.90f else w * 0.10f
             val back = if (toRight) -w * 0.34f else w * 0.34f
+            if (outlineArrow) {
+                val ow = sw + w * 0.07f
+                drawLine(outlineC, androidx.compose.ui.geometry.Offset(tail, cy), androidx.compose.ui.geometry.Offset(tip, cy), strokeWidth = ow, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(outlineC, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy - h * 0.34f), strokeWidth = ow, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(outlineC, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy + h * 0.34f), strokeWidth = ow, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            }
             drawLine(purple, androidx.compose.ui.geometry.Offset(tail, cy), androidx.compose.ui.geometry.Offset(tip, cy), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
             drawLine(purple, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy - h * 0.34f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
             drawLine(purple, androidx.compose.ui.geometry.Offset(tip, cy), androidx.compose.ui.geometry.Offset(tip + back, cy + h * 0.34f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
@@ -2607,7 +2619,14 @@ private fun FmSquareButton(a: FmAction, size: androidx.compose.ui.unit.Dp, icon:
         }
         val cs = CustomIcons.spec("s:" + FmButtons.key(androidx.compose.ui.platform.LocalContext.current, a.label))
         val tintC = (a.tint ?: MaterialTheme.colorScheme.primary).copy(alpha = alpha)
-        if (cs != null) CustomIconGlyph(cs, icon, tintC) else Icon(a.icon, null, Modifier.size(icon), tint = tintC)
+        // 21.0 (владелица: «иконки на кнопках боковой панели маленькие, увеличь, но не за счёт текста»): значок рисуется крупнее (x1,3) в том же месте кнопки,
+        // слот под значок и расчёт шрифта подписи остаются прежними, поэтому текст не меняется; лишнее уходит вверх в свободное поле кнопки
+        val bigIcon = icon * 1.3f
+        Box(Modifier.size(icon), contentAlignment = Alignment.Center) {
+            Box(Modifier.requiredSize(bigIcon).offset(y = -(icon * 0.10f)), contentAlignment = Alignment.Center) {
+                if (cs != null) CustomIconGlyph(cs, bigIcon, tintC) else PanelIcon(a.icon, null, tintC, bigIcon)
+            }
+        }
         // 10.11.2026: длинное слово («Сортировка», «Инверсия») не должно рваться посреди слова: шрифт слегка уменьшается так, чтобы слово влезло (9 букв при 7,5 sp в кнопке 44 dp влезают)
         val txt = stringResource(a.label)
         // подпись всегда по центру и без разрыва слова: шрифт подбирается по самому длинному слову (измерение, а не оценка по числу букв)
@@ -2761,7 +2780,7 @@ private fun FmNarrow(actions: List<FmAction>, modifier: Modifier, tvSize: androi
     val moreAct = FmAction(Icons.Filled.MoreHoriz, R.string.fm_more) { Fm.dlg = FmDlg.AddButton() }
     val items = if (moreInGrid) main + moreAct else main   // кнопок немного и всё влезает: «⋯» стоит в сетке следом за ними; иначе закреплена внизу
     val narrowScroll = androidx.compose.foundation.rememberScrollState()
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    PanelColumn(1, modifier, Arrangement.spacedBy(3.dp)) {
         // 12.0 (владелица, приставка/пульт): вместо текстовой шапки «Левая/Правая», «Объектов», «Выбрано» — крупная кнопка-переключатель.
         // Владелица уточнила: кнопка ОТДЕЛЬНЫЙ зафиксированный элемент сверху, не часть прокручиваемой колонки ниже (не должна ехать
         // вместе с кнопками при прокрутке). 18.11.2026: высота кнопки больше НЕ привязана жёстко к размеру обычных кнопок — её может
@@ -2847,7 +2866,7 @@ private fun FmStripBox(actions: List<FmAction>, modifier: Modifier) {
         // которой sz пришлось бы ужимать, если арифметика где-то не сойдётся день в день.
         val gridH = sz * rows + gap * (rows - 1)
         val switchH = (maxHeight - gap - gridH).coerceAtLeast(sz)
-        FmStrip(actions, Modifier.width(sz).fillMaxHeight(), sz, switchH, rows - 1)
+        PanelBox(1, Modifier.width(sz).fillMaxHeight()) { FmStrip(actions, Modifier.width(sz).fillMaxHeight(), sz, switchH, rows - 1) }
     }
 }
 
