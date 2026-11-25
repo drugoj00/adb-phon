@@ -1874,4 +1874,13 @@
     <string name="set_vp_hide_hint">Панель керування вбудованого відеоплеєра згасає сама через вибраний час. «Не ховати» тримає її на екрані, доки не натиснеш на екран ще раз.</string>
     <string name="vp_hide_sec">%1$d с</string>
     <string name="vp_hide_never">Не ховати</string>
+    <string name="panel_title">Колір панелей</string>
+    <string name="panel_hint">Колір нижньої панелі вкладок і бічної панелі кнопок у «Файлах»: за замовчуванням, як у бічних кнопок, чорний або свій колір (відтінок і яскравість).</string>
+    <string name="panel_bottom">Нижня панель</string>
+    <string name="panel_side">Бічна панель</string>
+    <string name="panel_now">За замовчуванням</string>
+    <string name="panel_btn">Як у кнопок</string>
+    <string name="panel_black">Чорний</string>
+    <string name="panel_custom">Свій колір</string>
+    <string name="panel_bright">Яскравість</string>
 </resources>

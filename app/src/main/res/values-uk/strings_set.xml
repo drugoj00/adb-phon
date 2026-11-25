@@ -10,7 +10,7 @@
     <string name="set_grp_adb_sub">Помічник без налагодження, Shizuku, термінал</string>
     <string name="set_grp_cloud">Хмари</string>
     <string name="set_grp_cloud_sub">Модуль хмар і його оновлення</string>
-    <string name="set_grp_panels">Панелі та дзвінки</string>
+    <string name="set_grp_panels">Панелі</string>
     <string name="set_grp_panels_sub">Бік панелей, кнопки, аватарка</string>
     <string name="set_grp_sys">Система</string>
     <string name="set_grp_sys_sub">Запуск, екран, вихід, журнал</string>
