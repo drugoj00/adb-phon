@@ -10,7 +10,7 @@
     <string name="set_grp_adb_sub">Помощник без отладки, Shizuku, терминал</string>
     <string name="set_grp_cloud">Облака</string>
     <string name="set_grp_cloud_sub">Модуль облаков и его обновление</string>
-    <string name="set_grp_panels">Панели и звонки</string>
+    <string name="set_grp_panels">Панели</string>
     <string name="set_grp_panels_sub">Сторона панелей, кнопки, аватарка</string>
     <string name="set_grp_sys">Система</string>
     <string name="set_grp_sys_sub">Запуск, экран, выход, журнал</string>
