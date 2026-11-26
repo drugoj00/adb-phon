@@ -894,7 +894,13 @@ object Fm {
         } finally { kidsLoading.remove(key) }
     }
 
+    /** 26.11.2026 (слово владелицы): отметки живут только внутри раскрытых папок; раскрыли другую папку, а прежняя свернулась: её отметки снимаются. */
+    private fun pruneSel(p: FmPane) {
+        p.selected = p.selected.filter { key -> val par = key.substringBeforeLast('/', ""); par.isEmpty() || FmIo.join(p.path, par) in p.expanded }.toSet()
+    }
+
     fun toggleExpand(p: FmPane, path: String) {
+        val opening = path !in p.expanded
         // 20.11.2026 (слово владелицы): свернули папку: раскрытое внутри забывается, повторное нажатие раскрывает только эту папку
         if (path in p.expanded) { val inner = path.trimEnd('/') + "/"; p.expanded.removeAll { it.startsWith(inner) }; p.expanded.remove(path); saveExpanded(p) }
         else {
@@ -906,6 +912,7 @@ object Fm {
             p.expanded.add(path); saveExpanded(p); scope.launch { loadKids(p, path) }
         }
         dropClosedKids(p)
+        if (opening) pruneSel(p)
     }
 
     /** 12.0: списки свёрнутых папок выгружаются из памяти (в облаке повторное раскрытие читает папку заново и показывает свежее). Только при «Держать раскрытой только одну папку». */
@@ -1167,7 +1174,28 @@ object Fm {
     /** Отмечено само или через отмеченную папку выше (раскрытое дерево). */
     fun isSel(p: FmPane, key: String): Boolean = SelTree.covered(p.selected, key)
     /** 10.0 (fm1): отметка папки = всё её содержимое; снятие вложенного оставляет остальное отмеченным (SelTree). */
-    fun toggleSel(p: FmPane, name: String) { p.lastName = name.substringAfterLast('/'); p.selected = SelTree.toggle(p.selected, name, selKids(p)) }
+    fun toggleSel(p: FmPane, name: String) {
+        p.lastName = name.substringAfterLast('/')
+        // 26.11.2026 (как в X-plore): отмеченная папка (или папка, где отмечены только её файлы) по повторному нажатию меняет отметку: папка, затем только файлы в ней, затем ничего
+        // слово владелицы: круг только у РАСКРЫТОЙ папки; у свёрнутой отметка просто включается и выключается
+        if (treeMode && FmIo.join(p.path, name) in p.expanded && (name in p.selected || SelTree.partial(p.selected, name)) && isDirKey(p, name)) { cycleFolder(p, name); return }
+        p.selected = SelTree.toggle(p.selected, name, selKids(p))
+    }
+    private fun isDirKey(p: FmPane, rel: String): Boolean {
+        val par = rel.substringBeforeLast('/', ""); val nm = rel.substringAfterLast('/')
+        val l = if (par.isEmpty()) p.items else p.kids[FmIo.join(p.path, par)]
+        return l?.firstOrNull { it.name == nm }?.isDir == true
+    }
+    private fun cycleFolder(p: FmPane, name: String) {
+        val full = FmIo.join(p.path, name)
+        val go = { l: List<FmItem>? ->
+            p.selected = if (l == null) SelTree.toggle(p.selected, name, selKids(p))
+            else SelTree.cycle(p.selected, name, l.filter { showHidden || !it.hidden }.map { "$name/${it.name}" }, selKids(p))
+        }
+        val cached = p.kids[full]
+        if (cached != null) go(cached)
+        else scope.launch { go(withContext(Dispatchers.IO) { runCatching { FmIo.list(p, full) }.getOrNull() }) }
+    }
     fun selectAll(p: FmPane) { if (p.root) { FmRootCfg.selectAllVisible(p.id); return }; if (virt(p)) return; p.selected = SelTree.selectAll(p.selected.filter { '/' in it }, shown(p).map { it.name }) }
     fun invert(p: FmPane) { if (p.root) { FmRootCfg.invertVisible(p.id); return }; if (virt(p)) return; p.selected = SelTree.invert(p.selected, shown(p).map { it.name }, selKids(p)) }
     fun mask(p: FmPane, glob: String) {
@@ -3377,8 +3405,8 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     }
     val full = node?.path ?: FmIo.join(p.path, f.name)
     val selKey = if (depth > 0) nodePath.removePrefix(p.path.trimEnd('/') + "/") else f.name
-    val sel by remember(selKey) { androidx.compose.runtime.derivedStateOf { p.selIdx.value.covered(selKey) } }
-    val part by remember(selKey, f.isDir) { androidx.compose.runtime.derivedStateOf { f.isDir && !sel && p.selIdx.value.partial(selKey) } }
+    val sel by remember(selKey) { androidx.compose.runtime.derivedStateOf { p.selIdx.value.direct(selKey) } }
+    val part = false   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
     val rowFr = remember { FocusRequester() }
     val chkFr = remember { FocusRequester() }
     val sctx = androidx.compose.ui.platform.LocalContext.current
@@ -3580,7 +3608,7 @@ private fun FmItemMenu(p: FmPane, f0: FmItem, node: TNode?) {
             item(R.string.arc_test) { Fm.testArc(p, f.name) }
         }
         if (!nested && p.src == "local") item(R.string.fm_make_archive) { Fm.dlg = FmDlg.MakeArchive(p, names) }
-        item(if (Fm.isSel(p, rel)) R.string.fm_unselect else R.string.fm_select) { Fm.toggleSel(p, rel) }
+        item(if (rel in p.selected) R.string.fm_unselect else R.string.fm_select) { Fm.toggleSel(p, rel) }
         if (!multi && !f.isDir && p.src == "local") item(R.string.ic_item) { Fm.dlg = FmDlg.FileIcon("p:" + full, f.name) }
         if (!multi && f.isDir) {
             item(R.string.fm_play_folder) { Fm.playFolder(p, rel) }
