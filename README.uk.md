@@ -18,7 +18,7 @@ ADB-phon підключається до ADB цього ж телефона (а�
 
 **Версія 22.0.** [ADB-phon-22.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `ba5dc91312b4091181db19790a601fd0101638c5e37603597c353e4329a27255`
+SHA-256: `b374f8ce32590371b6b8421e4929cc6f5b1c97d066222f06d78b0df7549ce234`
 
 ## Що нового в 22.0
 
