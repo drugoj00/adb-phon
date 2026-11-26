@@ -15,4 +15,15 @@
     <string name="cmu_remove">Remove</string>
     <string name="cmu_removed">Clouds module removed</string>
     <string name="cmu_remove_fail">Could not remove the module: %1$s</string>
+    <string name="set_cloud_bg">Keep the cloud engine running in the background</string>
+    <string name="set_cloud_bg_hint">The engine starts once and remembers the cloud sign-in, so folders open faster. It uses memory while the app is running. Off: the engine starts for every request.</string>
+    <string name="fm_copy_short">File copied incompletely (%1$d of %2$d B). The original is kept.</string>
+    <string name="fm_copy_unlisted">Cannot read folder: %1$s. The original is kept.</string>
+    <string name="fm_copy_unverified">Copied, but the copy could not be verified. The original is kept.</string>
+    <string name="wf_auth_again">The password was not accepted. Enter the new password shown on the device.</string>
+    <string name="fs_rotate">Rotate the screen</string>
+    <string name="set_narrow_font">Narrow font in files</string>
+    <string name="set_narrow_font_hint">The same size, but more text fits in a line.</string>
+    <string name="inst_all_apps">All apps…</string>
+    <string name="inst_long_always">Long press an app: always open with it.</string>
 </resources>

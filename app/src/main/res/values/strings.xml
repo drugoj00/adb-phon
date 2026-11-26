@@ -16,7 +16,7 @@
     <string name="conn_port">Connection port (if not found automatically)</string>
     <string name="btn_pair">Pair</string>
     <string name="btn_connect">Connect</string>
-    <string name="conn_title_tcp">Android 8–10: ADB over network</string>
+    <string name="conn_title_tcp">Android 8-10: ADB over network</string>
     <string name="conn_steps_tcp">Once, from a computer with USB debugging: adb tcpip 5555 (the program \"Phone in Window with Sound\" has a button for it). Then press the button below and allow debugging on the phone. After a reboot repeat the command.</string>
     <string name="btn_connect_tcp">Connect to %1$s:5555</string>
     <string name="btn_disconnect">Disconnect</string>
@@ -1060,7 +1060,7 @@
     <string name="pad_dry_note">trial mode: nothing is sent to the PC</string>
     <string name="pad_write_ask">Allow for screen rotation in the game</string>
     <string name="pad_local">Play on this phone (prototype)</string>
-    <string name="pad_local_need_adb">Needs the app connected to this phone over ADB (Connect tab) and Android 12+</string>
+    <string name="pad_local_need_adb">Needs the app connected to this phone over ADB (Connect tab) and Android 12+. On Android 8-11 connect over USB ADB from a computer once</string>
     <string name="pad_overlay_label">Gamepad over game</string>
     <string name="pad_overlay_short">Gamepad</string>
     <string name="pad_overlay_perm">To show the gamepad over a game, ADB-phon needs the "Display over other apps" permission; the overlay starts by itself after you allow it</string>
