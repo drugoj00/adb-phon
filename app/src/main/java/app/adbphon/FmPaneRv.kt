@@ -114,8 +114,8 @@ private fun paneModel(e: RvEnv, it: PaneRvItem): PaneModel {
     val p = e.p; val f = it.item!!
     val full = fullOf(p, it); val sk = selKeyOf(p, it)
     val ix = p.selIdx.value
-    val sel = ix.covered(sk)
-    val part = f.isDir && !sel && ix.partial(sk)
+    val sel = ix.direct(sk)
+    val part = false   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
     val open = e.p.expanded.let { ex -> it.node != null && f.isDir && it.nodePath in ex }
     val ck = countKey(p, f, full)
     val cnt = if (ck == null) null else { val t = FolderCounts.ver; if (t >= 0) FolderCounts.peek(ck) else null }

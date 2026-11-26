@@ -187,8 +187,8 @@ private fun rowModel(env: RvEnv, r: RR): RowModel {
     val e0 = r.selE
     val ix = FmRootCfg.selIdx.value
     var chkBits = 0
-    if (e0 != null) { val on = ix.covered(e0.key); chkBits = (if (on) 1 else 0) or (if (e0.isDir && !on && ix.partial(e0.key)) 2 else 0) }
-    else if (r.selAll.isNotEmpty()) { val on = r.selAll.all { ix.covered(it.key) }; chkBits = (if (on) 1 else 0) or (if (!on && r.selAll.any { ix.covered(it.key) || ix.partial(it.key) }) 2 else 0) }
+    if (e0 != null) { val on = ix.direct(e0.key); chkBits = if (on) 1 else 0 }   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
+    else if (r.selAll.isNotEmpty()) { val on = r.selAll.all { ix.covered(it.key) }; chkBits = 0 }   // как в X-plore: у устройства галка не горит, отмечено содержимое
     val cnt = r.path?.let { FmRootCfg.counts[it] }
     val cKey = r.cntKey?.takeIf { FmSub.mode != FmSub.NONE }
     val cntNow: Pair<Int, Int>? = if (cKey == null) null else { val t = FolderCounts.ver; if (t >= 0) FolderCounts.peek(cKey) else null }
@@ -512,7 +512,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
     private fun chkClick() {
         val rr = r ?: return; val e = env0(); val e0 = rr.selE
         if (e0 != null) { Fm.active = e.p.id; FmRootCfg.toggleTree(e.p.id, e0) }
-        else if (rr.selAll.isNotEmpty()) { Fm.active = e.p.id; FmRootCfg.setAll(e.p.id, rr.selAll, !(m?.chkOn ?: false)) }
+        else if (rr.selAll.isNotEmpty()) { Fm.active = e.p.id; FmRootCfg.setAll(e.p.id, rr.selAll, !rr.selAll.all { FmRootCfg.covered(it.key) }) }
     }
 
     private fun onKey(v: View, code: Int, ev: KeyEvent): Boolean {

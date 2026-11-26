@@ -306,8 +306,23 @@ object FmRootCfg {
     fun toggleTree(paneId: Int, e: SelE) {
         if (isTrash(e)) { toggleSel(e); return }
         val v = visSel[paneId]
+        // 26.11.2026 (как в X-plore): раскрытая папка (её содержимое видно в списке) по повторному нажатию: сначала всё, что лежит прямо в ней, затем ничего.
+        // У свёрнутой папки отметка просто включается и выключается.
+        val shownKids = v?.kids?.get(e.key)
+        if (e.isDir && shownKids != null && (sel.containsKey(e.key) || SelTree.partial(sel.keys.toList(), e.key, canon))) {
+            val ready = kids[e.key]
+            if (ready != null) { cycleFiles(paneId, e, ready); return }
+        }
         if (v == null || !v.byKey.containsKey(e.key)) { val keys = SelTree.toggle(sel.keys.toList(), e.key, { null }, canon); if (keys.contains(e.key)) sel[e.key] = e; apply(paneId, keys); return }
         apply(paneId, SelTree.toggle(sel.keys.toList(), e.key, { v.kids[it] }, canon))
+    }
+    /** Второе и третье нажатие на галочку папки: всё, что лежит прямо в ней (файлы и подпапки), затем ничего. */
+    private fun cycleFiles(paneId: Int, e: SelE, tks: List<TK>) {
+        val v = visSel[paneId]
+        val files = tks.filter { Fm.showHidden || !it.name.startsWith(".") }
+        val keys = SelTree.cycle(sel.keys.toList(), e.key, files.map { it.id }, { v?.kids?.get(it) }, canon)
+        for (f in files) if (f.id in keys && !sel.containsKey(f.id) && v?.byKey?.containsKey(f.id) != true) sel[f.id] = SelE(f.id, e.net, e.key, e.path, f.name, f.path, false, null)
+        apply(paneId, keys)
     }
     /** Галочка раскрытого устройства или тома без своей отметки: отметить или снять всё прямо внутри. */
     fun setAll(paneId: Int, list: List<SelE>, on: Boolean) {
@@ -332,6 +347,12 @@ object FmRootCfg {
     class SelE(val key: String, val net: NetConn?, val parentId: String, val parentPath: String, val name: String, val path: String, val isDir: Boolean, val ti: CloudTrash.TItem?, val fi: FmTrash.FItem? = null)
     val sel = androidx.compose.runtime.mutableStateMapOf<String, SelE>()
     fun toggleSel(e: SelE) { if (sel.containsKey(e.key)) sel.remove(e.key) else sel[e.key] = e }
+    /** Отметки лежат только в раскрытых узлах: у отметки, чей родитель свёрнут (ни в одной панели), отметка снимается. */
+    fun pruneSel() {
+        val open = HashSet<String>(); Fm.panes.forEach { open.addAll(it.rootOpen) }
+        val drop = sel.entries.filter { (_, e) -> e.ti == null && e.fi == null && e.parentId.isNotEmpty() && e.parentId !in open }.map { it.key }
+        drop.forEach { sel.remove(it) }
+    }
     /**
      * Порядок дочерних узлов «домика» по настройке «Сортировка» панели (раньше был зашит «папки, потом имя», и сортировка в этом дереве не действовала).
      * Корзина и служебные узлы остаются как есть. Дата есть только у локальных файлов.
@@ -1877,8 +1898,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
     val chkBitsSt = remember(e0?.key, r.selAll) {
         androidx.compose.runtime.derivedStateOf {
             val ix = FmRootCfg.selIdx.value
-            if (e0 != null) { val on = ix.covered(e0.key); (if (on) 1 else 0) or (if (e0.isDir && !on && ix.partial(e0.key)) 2 else 0) }
-            else if (r.selAll.isNotEmpty()) { val on = r.selAll.all { ix.covered(it.key) }; (if (on) 1 else 0) or (if (!on && r.selAll.any { ix.covered(it.key) || ix.partial(it.key) }) 2 else 0) }
+            if (e0 != null) { if (ix.direct(e0.key)) 1 else 0 }   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
+            else if (r.selAll.isNotEmpty()) { 0 }   // как в X-plore: у устройства галка не горит, отмечено содержимое
             else 0
         }
     }
@@ -1888,7 +1909,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
     val chkClick: (() -> Unit)? =
         if (e0 != null) { { Fm.active = p.id; FmRootCfg.toggleTree(p.id, e0) } }
         // раскрытое устройство, том или «диск» без своей отметки: галочка отмечает или снимает всё прямо внутри
-        else if (r.selAll.isNotEmpty()) { { Fm.active = p.id; FmRootCfg.setAll(p.id, r.selAll, !chkOn) } }
+        else if (r.selAll.isNotEmpty()) { { Fm.active = p.id; FmRootCfg.setAll(p.id, r.selAll, !r.selAll.all { FmRootCfg.covered(it.key) }) } }
         else null
     val selected = p.rootSel == r.key
     val rowActive = selected || ibitsSt.value != 0
@@ -2042,6 +2063,7 @@ internal fun rootRowToggle(p: FmPane, r: RR, ctx: Context, id: String) {
         val isLan = r.level == 1 && !r.drive && r.net != null && id == r.treeId && (r.key.startsWith("lanf:") || (r.key.startsWith("net:") && r.net.kind != "dav" && r.net.kind != "cloud"))
         val opening = id !in p.rootOpen
         rootTreeToggle(p, r.key, ctx, id)
+        if (opening) FmRootCfg.pruneSel()   // 26.11.2026: раскрыли другую папку, прежняя свернулась: её отметки снимаются
         if (isLan && opening) {
             val nc = r.net!!
             val h = if (r.key.startsWith("lanf:")) FmRootCfg.lanFound.firstOrNull { FmRootCfg.lanConn(it).host == nc.host } else null
@@ -2111,7 +2133,7 @@ internal fun FmRootRowMenu(p: FmPane, r: RR, close: () -> Unit, pickIcon: () -> 
             else if (r.expandKey == null && r.header == 0 && r.tnet == null && !r.ftrash && r.fitem == null) item(if (r.treeId != null && FmRootCfg.treeOn && r.file == null) R.string.fm_open_panel else R.string.fm_open) { r.act() }
             // полное меню файла и папки на корневом экране (как в списке панели): отметка, копирование, права доступа и так далее
             r.selE?.takeIf { it.net == null && it.ti == null && it.fi == null && r.appName == null }?.let { e ->
-                val inSel = FmRootCfg.covered(e.key)
+                val inSel = FmRootCfg.selIdx.value.direct(e.key)
                 val multiSel = inSel && FmRootCfg.sel.size > 1
                 val tg = if (multiSel) FmRootCfg.sel.values.filter { it.net == null && it.ti == null && it.fi == null } else listOf(e)
                 fun pane(path: String): FmPane = FmPane(9, path).also { it.src = "local" }

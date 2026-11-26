@@ -208,6 +208,10 @@ private val Dark = darkColorScheme(
     onSecondaryContainer = Color.White,
     primaryContainer = Color(0xFF0F766E),
     onPrimaryContainer = Color.White,
+    // 26.11.2026 (4PDA wad72): в тёмной теме всплывающие сообщения (Snackbar, подсказки) были светлыми (inverseSurface у darkColorScheme светлый)
+    inverseSurface = Color(0xFF2B2B38),
+    inverseOnSurface = Color(0xFFE5E7EB),
+    inversePrimary = Color(0xFF5EEAD4),
 )
 private val Light = lightColorScheme(
     primary = Color(0xFF0F766E),
@@ -320,7 +324,10 @@ object AppColors {
 
     fun scheme(dark: Boolean, ctx: Context): androidx.compose.material3.ColorScheme {
         if (dynamic && Build.VERSION.SDK_INT >= 31) {
-            return if (dark) androidx.compose.material3.dynamicDarkColorScheme(ctx) else androidx.compose.material3.dynamicLightColorScheme(ctx)
+            if (!dark) return androidx.compose.material3.dynamicLightColorScheme(ctx)
+            // 26.11.2026: в тёмной динамической схеме inverseSurface светлый: всплывающие сообщения становились белыми на тёмном фоне
+            val dd = androidx.compose.material3.dynamicDarkColorScheme(ctx)
+            return dd.copy(inverseSurface = dd.surfaceContainerHighest, inverseOnSurface = dd.onSurface)
         }
         val base = if (dark) Dark else Light
         if (hue >= 0f) { val l = hueColor(hue, false); val d = hueColor(hue, true); return base.copy(primary = if (dark) d else l, secondaryContainer = l, primaryContainer = l) }

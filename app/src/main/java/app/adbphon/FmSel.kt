@@ -69,9 +69,38 @@ object SelTree {
         return out
     }
 
-    /** Нажатие на галочку: отмеченное (в том числе через папку выше) снимается, неотмеченное и «частичное» отмечается целиком. */
-    fun toggle(sel: Collection<String>, k: String, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> =
-        if (covered(sel, k, canon)) unselect(sel, k, kids, canon) else select(sel, k, canon)
+    /**
+     * Нажатие на галочку (26.11.2026, как в X-plore): отмеченная сама строка снимается (вместе с тем, что отмечено отдельно внутри неё);
+     * строка внутри отмеченной папки отмечается и сама (папка остаётся отмеченной, счёт и операции не двоятся: [normalize]); остальное отмечается целиком.
+     * [kids] осталось для совместимости.
+     */
+    fun toggle(sel: Collection<String>, k: String, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> {
+        if (sel.any { same(it, k, canon) }) { val out = LinkedHashSet<String>(); for (x in sel) if (!same(x, k, canon) && !under(x, k, canon)) out.add(x); return out }
+        if (covered(sel, k, canon)) return LinkedHashSet(sel).also { it.add(k) }
+        return select(sel, k, canon)
+    }
+
+    /**
+     * 26.11.2026 (слово владелицы, как в X-plore): нажатия на галочку папки идут по кругу: 1) папка целиком; 2) папка снимается, отмечается всё, что лежит прямо в ней
+     * (файлы и подпапки, но не глубже; [files]: ключи элементов прямо в папке); 3) всё внутри снимается. Для вложенной в отмеченную выше папку и для прочих случаев работает [toggle].
+     */
+    fun cycle(sel: Collection<String>, k: String, files: List<String>, kids: (String) -> List<String>?, canon: (String) -> String = ID): Set<String> {
+        if (sel.any { same(it, k, canon) }) {
+            val out = LinkedHashSet<String>()
+            for (x in sel) if (!same(x, k, canon) && !under(x, k, canon)) out.add(x)
+            out.addAll(files)
+            return out
+        }
+        if (partial(sel, k, canon)) {
+            val inside = sel.filter { under(it, k, canon) }
+            if (files.isNotEmpty() && inside.size == files.size && inside.all { a -> files.any { same(it, a, canon) } }) {
+                val out = LinkedHashSet<String>()
+                for (x in sel) if (!under(x, k, canon)) out.add(x)
+                return out
+            }
+        }
+        return toggle(sel, k, kids, canon)
+    }
 
     /** «Все»: отмечается каждый видимый элемент верхнего уровня (вложенное входит в них). Отмеченное вне [top] сохраняется. */
     fun selectAll(sel: Collection<String>, top: List<String>, canon: (String) -> String = ID): Set<String> = normalize(sel.toList() + top, canon)
@@ -123,6 +152,9 @@ class SelIndex(sel: Collection<String>, private val canon: (String) -> String = 
     }
 
     val isEmpty get() = raw.isEmpty()
+
+    /** 26.11.2026 (как в X-plore): отмечена САМА эта строка (не через папку выше): галочка рисуется только у неё. */
+    fun direct(k: String): Boolean = raw.isNotEmpty() && (k in raw || canon(k) in cset)
 
     /** То же, что SelTree.covered(sel, k, canon): отмечен сам или через отмеченную папку выше. */
     fun covered(k: String): Boolean {
