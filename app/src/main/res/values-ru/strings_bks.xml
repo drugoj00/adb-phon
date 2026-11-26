@@ -5,6 +5,6 @@
     <string name="bks_protect_sub">Необязательно. Файл шифруется паролем (AES-256)</string>
     <string name="bks_plain_note">Без пароля файл хранит пароли подключений открытым текстом: держи его в надёжном месте.</string>
     <string name="bks_pick">Выбрать место</string>
-    <string name="bks_saving">Сохраняю…</string>
+    <string name="bks_saving">Сохранение…</string>
     <string name="bks_not_ours">Это не копия настроек ADB-phon. Копии приложений восстанавливаются на вкладке «Софт».</string>
 </resources>

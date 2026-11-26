@@ -15,4 +15,15 @@
     <string name="cmu_remove">Удалить</string>
     <string name="cmu_removed">Модуль облаков удалён</string>
     <string name="cmu_remove_fail">Не удалось удалить модуль: %1$s</string>
+    <string name="set_cloud_bg">Движок облаков включён в фоне</string>
+    <string name="set_cloud_bg_hint">Движок запускается один раз и помнит вход в облака: папки открываются быстрее. Занимает память, пока программа работает. Выключено: движок запускается на каждый запрос.</string>
+    <string name="fm_copy_short">Файл скопирован не полностью (%1$d из %2$d Б). Оригинал не удалён.</string>
+    <string name="fm_copy_unlisted">Не удаётся прочитать папку: %1$s. Оригинал не удалён.</string>
+    <string name="fm_copy_unverified">Скопировано, но проверить копию не удалось. Оригинал не удалён.</string>
+    <string name="wf_auth_again">Вход не принят. Введите новый пароль, который показан на устройстве.</string>
+    <string name="fs_rotate">Повернуть экран</string>
+    <string name="set_narrow_font">Узкий шрифт в файлах</string>
+    <string name="set_narrow_font_hint">Размер тот же, но в строку помещается больше текста.</string>
+    <string name="inst_all_apps">Все программы…</string>
+    <string name="inst_long_always">Долгое нажатие на программу: всегда открывать ею.</string>
 </resources>
