@@ -178,7 +178,7 @@ object Adb {
 
     suspend fun serverStart(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
         srvMutex.withLock { runCatching {
-            if (AdbServer.ping() || rootOn) return@runCatching   // с root помощник не нужен: команды и так идут от root
+            if (AdbServer.ping() || rootOn || context.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false)) return@runCatching   // с root помощник не нужен: команды и так идут от root
             if (rootOn || currentHost.isNotEmpty() || !(::mgr.isInitialized && mgr.isConnected)) error("нужна связь ADB с этим телефоном")
             val bytes = context.assets.open("server.jar").use { it.readBytes() }
             runCatching { shell("pkill -f 'app_process / Server' 2>/dev/null; true") }   // сервер со старым токеном (данные приложения очищались)

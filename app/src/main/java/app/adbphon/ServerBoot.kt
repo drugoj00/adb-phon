@@ -45,7 +45,8 @@ object ServerBoot {
     private suspend fun run(ctx: Context): Boolean {
         AdbServer.init(ctx)
         AppLog.i("ADBphon", "автозапуск сервера: auto=${AdbServer.auto} sdk=${Build.VERSION.SDK_INT} root=${Adb.isRoot} право=${WifiDebug.canWrite(ctx)} userOff=${WifiDebug.userOff(ctx)}")
-        if (!AdbServer.auto || Build.VERSION.SDK_INT < 30 || Adb.isRoot) return true
+        // 26.11.2026 (владелица, Pixel 3 с root): при загрузке root ещё не определён, и программа сама включала отладку по Wi-Fi, а система каждый раз спрашивала разрешение; прежний успешный root помнится
+        if (!AdbServer.auto || Build.VERSION.SDK_INT < 30 || Adb.isRoot || ctx.getSharedPreferences("adbphon", Context.MODE_PRIVATE).getBoolean("root_ok", false)) return true
         if (AdbServer.ping()) return true
         if (!WifiDebug.canWrite(ctx)) return true   // нет права WRITE_SECURE_SETTINGS. Флаг «пользователь сам выключил отладку» здесь не учитывается: режим сервера как раз включает её на несколько секунд и снова выключает; отключается настройкой AdbServer.auto
         runCatching { Settings.Global.putInt(ctx.contentResolver, "adb_wifi_enabled", 1) }
