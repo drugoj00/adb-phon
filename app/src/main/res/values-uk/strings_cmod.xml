@@ -15,4 +15,15 @@
     <string name="cmu_remove">Видалити</string>
     <string name="cmu_removed">Модуль хмар видалено</string>
     <string name="cmu_remove_fail">Не вдалося видалити модуль: %1$s</string>
+    <string name="set_cloud_bg">Рушій хмар увімкнено у фоні</string>
+    <string name="set_cloud_bg_hint">Рушій запускається один раз і пам’ятає вхід у хмари: папки відкриваються швидше. Займає пам’ять, поки програма працює. Вимкнено: рушій запускається на кожен запит.</string>
+    <string name="fm_copy_short">Файл скопійовано не повністю (%1$d з %2$d Б). Оригінал не видалено.</string>
+    <string name="fm_copy_unlisted">Не вдається прочитати теку: %1$s. Оригінал не видалено.</string>
+    <string name="fm_copy_unverified">Скопійовано, але перевірити копію не вдалося. Оригінал не видалено.</string>
+    <string name="wf_auth_again">Вхід не прийнято. Введіть новий пароль, показаний на пристрої.</string>
+    <string name="fs_rotate">Повернути екран</string>
+    <string name="set_narrow_font">Вузький шрифт у файлах</string>
+    <string name="set_narrow_font_hint">Розмір той самий, але в рядок вміщується більше тексту.</string>
+    <string name="inst_all_apps">Усі програми…</string>
+    <string name="inst_long_always">Довге натискання на програму: завжди відкривати нею.</string>
 </resources>
