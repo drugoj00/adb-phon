@@ -22,11 +22,8 @@ SHA-256: `b374f8ce32590371b6b8421e4929cc6f5b1c97d066222f06d78b0df7549ce234`
 
 ## What's new in 22.0
 
-- Folder selection: tapping the check of an expanded folder goes in a circle: the folder, everything directly inside it, nothing. A collapsed folder simply turns on and off. Works for the phone, network and clouds, in both windows
-- The check shows only on the selected row itself, the "partial" mark (minus) is gone. For an expanded device or disk everything inside is selected
-- Selections live only in expanded folders: expand another folder and the selections in the previous, collapsed one are cleared
-- On a device with root the app no longer turns Wi-Fi debugging on by itself at boot, so the system does not ask "Allow Wi-Fi debugging on this network?" every time
-- Pop-up messages in the dark theme are dark, not white
+- Folder selection: the check of an expanded folder goes in a circle (folder, everything inside, nothing), a collapsed one just toggles; the "partial" mark is gone; selections live only in expanded folders
+- On a device with root Wi-Fi debugging no longer turns on by itself at boot, so the system does not ask every time; pop-up messages in the dark theme are dark
 - Bug fixes
 
 **Requirements and limits**
