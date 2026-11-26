@@ -39,15 +39,15 @@ class SelTreeTest {
         assertFalse(SelTree.covered(s, "Download/Pics/1.jpg"))
     }
 
-    @Test fun unchecking_nested_item_keeps_the_rest_checked() {
+    @Test fun nested_item_of_selected_folder_is_marked_on_its_own_and_not_counted_twice() {
         var s = SelTree.toggle(emptySet(), "Download", kids)
         s = SelTree.toggle(s, "Download/Pics/1.jpg", kids)
-        assertEquals(setOf("Download/a.txt", "Download/b.txt", "Download/Pics/2.jpg"), s)
-        assertFalse(SelTree.covered(s, "Download"))
-        assertTrue(SelTree.partial(s, "Download"))
-        assertTrue(SelTree.partial(s, "Download/Pics"))
-        assertFalse(SelTree.covered(s, "Download/Pics/1.jpg"))
+        assertEquals(setOf("Download", "Download/Pics/1.jpg"), s)
+        assertEquals(1, SelTree.count(s))
         assertTrue(SelTree.covered(s, "Download/a.txt"))
+        // повторное нажатие снимает только его, папка остаётся
+        s = SelTree.toggle(s, "Download/Pics/1.jpg", kids)
+        assertEquals(setOf("Download"), s)
     }
 
     @Test fun partial_folder_click_selects_it_whole() {
@@ -59,7 +59,8 @@ class SelTreeTest {
 
     @Test fun unknown_content_drops_folder_without_crash() {
         val s = SelTree.toggle(setOf("Music"), "Music/x.mp3", { null })
-        assertTrue(s.isEmpty())
+        assertEquals(setOf("Music", "Music/x.mp3"), s)
+        assertEquals(1, SelTree.count(s))
     }
 
     @Test fun select_all_covers_all_visible_and_counts_once() {
@@ -97,8 +98,8 @@ class SelTreeTest {
         assertTrue(SelTree.covered(s, "F|/sdcard/Download/a.apk", canon))
         assertTrue(SelTree.covered(s, "L|/sdcard/Download/Sub", canon))
         s = SelTree.toggle(s, "F|/sdcard/Download/a.apk", { rk[it] }, canon)
-        assertEquals(setOf("L|/sdcard/Download/Sub"), s)
-        assertTrue(SelTree.partial(s, "L|/sdcard/Download", canon))
+        assertEquals(setOf("L|/sdcard/Download", "F|/sdcard/Download/a.apk"), s)
+        assertEquals(1, SelTree.count(s, canon))
         // корень «L|/» (Root): вложенность тоже распознаётся
         assertTrue(SelTree.under("F|/x.txt", "L|/", canon))
     }
@@ -106,5 +107,30 @@ class SelTreeTest {
     @Test fun normalize_removes_double_count() {
         assertEquals(setOf("Download", "c.txt"), SelTree.normalize(listOf("Download", "Download/a.txt", "Download/Pics/1.jpg", "c.txt")))
         assertEquals(2, SelTree.count(listOf("Download", "Download/Pics", "c.txt")))
+    }
+
+    // 26.11.2026 (как в X-plore): папка -> только файлы в ней -> ничего
+    @Test fun folder_click_cycle_folder_then_files_then_none() {
+        val files = listOf("Download/a.txt", "Download/Pics", "Download/b.txt")
+        var s = SelTree.cycle(emptySet(), "Download", files, kids)
+        assertEquals(setOf("Download"), s)
+        s = SelTree.cycle(s, "Download", files, kids)
+        assertEquals(setOf("Download/a.txt", "Download/Pics", "Download/b.txt"), s)
+        assertFalse(SelTree.covered(s, "Download"))
+        assertFalse(SelTree.covered(s, "Download/Pics/1.jpg") && !SelTree.covered(s, "Download/Pics"))
+        assertTrue(SelTree.partial(s, "Download"))
+        s = SelTree.cycle(s, "Download", files, kids)
+        assertTrue(s.isEmpty())
+    }
+
+    @Test fun cycle_keeps_other_selection_and_partial_other_files_select_folder() {
+        val files = listOf("Download/a.txt", "Download/b.txt")
+        var s: Set<String> = setOf("c.txt", "Download")
+        s = SelTree.cycle(s, "Download", files, kids)
+        assertEquals(setOf("c.txt", "Download/a.txt", "Download/b.txt"), s)
+        s = SelTree.cycle(s, "Download", files, kids)
+        assertEquals(setOf("c.txt"), s)
+        // отмечен один файл из двух: это не «только файлы», нажатие отмечает папку целиком
+        assertEquals(setOf("Download"), SelTree.cycle(setOf("Download/a.txt"), "Download", files, kids))
     }
 }
