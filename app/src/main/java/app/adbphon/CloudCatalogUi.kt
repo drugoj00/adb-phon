@@ -163,11 +163,11 @@ fun CloudFormDlg(entry: CEntry, close: () -> Unit) {
                                 Column {
                                     Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
                                     OutlinedButton({ open = true }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
-                                        Text((values[o.name] ?: o.def).ifBlank { "—" }, Modifier.weight(1f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text((values[o.name] ?: o.def).ifBlank { "-" }, Modifier.weight(1f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     LDropdownMenu(open, { open = false }) {
                                         o.examples.take(80).forEach { (v, h) ->
-                                            DropdownMenuItem({ Text(v.ifBlank { "—" } + if (h.isNotBlank()) "  ·  " + h.lineSequence().first().take(50) else "", fontSize = 13.sp, maxLines = 1) }, { values[o.name] = v; open = false })
+                                            DropdownMenuItem({ Text(v.ifBlank { "-" } + if (h.isNotBlank()) "  ·  " + h.lineSequence().first().take(50) else "", fontSize = 13.sp, maxLines = 1) }, { values[o.name] = v; open = false })
                                         }
                                     }
                                 }

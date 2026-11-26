@@ -92,6 +92,9 @@ internal fun skipFully(i: InputStream, n: Long) {
 }
 
 /** Нет права записи в папку: понятное сообщение вместо молчаливой ошибки. */
+/** 26.11.2026: сервер WebDAV не принял вход. */
+class DavAuthError : IllegalStateException("401: нужен логин и пароль")
+
 class NoWriteRights : java.io.IOException(FmIo.app.getString(R.string.fm_no_write))
 
 /** Файл для выгрузки как поток: считает байты и обрывается по отмене операции. */
@@ -229,7 +232,7 @@ class DavFs(private val url: String, private val user: String, private val pass:
         val body = "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:displayname/><d:getlastmodified/></d:prop></d:propfind>"
         val r = req(dirPath).header("Depth", "1").method("PROPFIND", body.toRequestBody("application/xml".toMediaType())).build()
         client.newCall(r).execute().use { resp ->
-            if (resp.code == 401) error("401: нужен логин и пароль")
+            if (resp.code == 401) throw DavAuthError()
             if (resp.code !in 200..299) error("HTTP ${resp.code}")
             val xml = resp.body?.string().orEmpty()
             parse(xml, dirPath)

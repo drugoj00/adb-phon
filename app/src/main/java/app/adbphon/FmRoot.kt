@@ -476,7 +476,11 @@ object FmRootCfg {
      */
     fun purgeClosedCloud() {
         val open = Fm.panes.flatMap { it.rootOpen.toList() + it.rootPending.toList() }.toSet()
-        for (k in (kids.keys + kidErr.keys).toList()) if (k.startsWith("N|cloud|") && k !in open) { kids.remove(k); kidErr.remove(k); kidErrOwnKey.remove(k) }
+        // 26.11.2026 (владелица: «облака долго открываются, перерисовывается заново и опять ожидание»): прочитанные списки остаются в памяти и при повторном раскрытии
+        // показываются сразу (refresh перечитывает их в фоне на месте); выгружаются только ошибки и лишнее сверх 120 свёрнутых папок
+        for (k in kidErr.keys.toList()) if (k.startsWith("N|cloud|") && k !in open) { kidErr.remove(k); kidErrOwnKey.remove(k) }
+        val closed = kids.keys.filter { it.startsWith("N|cloud|") && it !in open }
+        if (closed.size > 120) closed.take(closed.size - 120).forEach { kids.remove(it) }
     }
     private val autoRetry = HashMap<String, Int>()
     /** Сколько элементов узла показывать сразу (остальное счётчиком): быстрая прокрутка длинных папок. */
@@ -502,6 +506,14 @@ object FmRootCfg {
         val first = kids[id] == null
         if (first && !loadingFirst.add(id)) return
         try { loadKidsNow(id, favs) } finally { if (first) loadingFirst.remove(id) }
+    }
+
+    /** 26.11.2026: Wi-Fi проводник после перезапуска сервера отвечает 401 (пароль новый): сразу открывается окно этого устройства для нового пароля. */
+    private fun askWifiPass(id: String, favs: List<NetConn>) {
+        val a = id.split('|', limit = 5)
+        if (a.size < 4 || a[0] != "N" || a[1] != "dav") return
+        val c = (favs + WifiExplorer.found.toList()).firstOrNull { it.kind == "dav" && it.host == a[2] && it.user == a[3] && it.smb == WifiExplorer.TAG } ?: return
+        if (Fm.dlg == null) Fm.dlg = FmDlg.WifiDev(c, "", "", authFailed = true)
     }
 
     private suspend fun loadKidsNow(id: String, favs: List<NetConn>) {
@@ -580,13 +592,16 @@ object FmRootCfg {
                 val c = favs.firstOrNull { it.kind == a[1] && it.host == a[2] && it.user == a[3] } ?: error("?")
                 cSel = c
                 val fs = fsCache.getOrPut(a[1] + "|" + a[2] + "|" + a[3]) { c.fs() }
-                (fs as? KeepFs)?.connect(); (fs as? CloudFs)?.connect()
+                (fs as? KeepFs)?.connect()   // 26.11.2026: у облака отдельной проверки нет: она читала весь корень перед каждой папкой; ошибки даёт само чтение списка
                 val path = if (a.getOrNull(4) == NetTrash.ROOT_MARK) NetTrash.rootPath(c, fs) else a.getOrNull(4)?.takeIf { it.isNotEmpty() } ?: ownPath(c) ?: fs.root
                 pSel = path
+                val asTk = { it: FsEntry -> if (it.isDir) TK(it.name, "N|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "f|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, false, it.size, it.date) }
+                // 26.11.2026: облачная папка сначала показывается из прошлого чтения, свежий список заменит её, когда придёт
+                if (fs is CloudFs && kids[id] == null) fs.cached(path)?.let { old -> if (kids[id] == null) { kids[id] = old.take(KEEP).map(asTk); FmRootCfg.ver++ } }
                 withContext(Dispatchers.IO) {
                     val all = fs.list(path)
                     pendCnt[id] = all.size
-                    all.take(KEEP).map { if (it.isDir) TK(it.name, "N|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, true, 0L, it.date) else TK(it.name, "f|" + a[1] + "|" + a[2] + "|" + a[3] + "|" + it.path, it.path, false, it.size, it.date) }
+                    all.take(KEEP).map(asTk)
                 }
             }
             // 22.11.2026: сортировка большой папки считается здесь, в фоне, до показа (раньше 35+ мс на главном потоке в первом кадре раскрытия)
@@ -596,7 +611,7 @@ object FmRootCfg {
             val same = oldKids != null && oldKids.size == list.size && oldKids.indices.all { i -> val x = oldKids[i]; val y = list[i]; x.name == y.name && x.id == y.id && x.size == y.size && x.date == y.date && x.isDir == y.isDir && x.count == y.count && x.dirs == y.dirs && x.files == y.files }
             if (same) { pendCnt.remove(id)?.let { if (appCount[id] != it) appCount[id] = it }; autoRetry.remove(id) }
             else androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { pendCnt.remove(id)?.let { appCount[id] = it }; kids[id] = list; autoRetry.remove(id) }
-        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { kidErr[id] = FmIo.nice(e); if (e is CloudApiError && CloudErr.retryable(e.kind) && (autoRetry[id] ?: 0) < 3) { autoRetry[id] = (autoRetry[id] ?: 0) + 1; Fm.scope.launch { delay(15_000); if (kidErr[id] != null) kidErr.remove(id) } } else if (e !is CloudApiError) autoRetry.remove(id); if (e is CloudApiError && e.kind in CloudErr.ownKeyKinds) kidErrOwnKey[id] = e.type ?: "drive" else if (e is CloudApiError && e.kind == "expired") kidErrOwnKey[id] = (e.type ?: "drive") + "@publish" }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { kidErr[id] = FmIo.nice(e); if (e is DavAuthError) askWifiPass(id, favs); if (e is CloudApiError && CloudErr.retryable(e.kind) && (autoRetry[id] ?: 0) < 3) { autoRetry[id] = (autoRetry[id] ?: 0) + 1; Fm.scope.launch { delay(15_000); if (kidErr[id] != null) kidErr.remove(id) } } else if (e !is CloudApiError) autoRetry.remove(id); if (e is CloudApiError && e.kind in CloudErr.ownKeyKinds) kidErrOwnKey[id] = e.type ?: "drive" else if (e is CloudApiError && e.kind == "expired") kidErrOwnKey[id] = (e.type ?: "drive") + "@publish" }
     }
 
     private fun sp(ctx: Context) = ctx.applicationContext.getSharedPreferences("fm", Context.MODE_PRIVATE)

@@ -97,6 +97,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.CompositionLocalProvider
@@ -322,6 +323,24 @@ object AppColors {
     /** «Как у темы»: прежний бирюзовый основной цвет. */
     fun resetColor(ctx: Context) { hue = -1f; accent = 0; sp(ctx).edit().putFloat("col_hue", -1f).putInt("col_accent", 0).apply() }
 
+    /**
+     * 26.11.2026 (4PDA wad72): фон окон и меню берёт оттенок выбранного основного цвета. Раньше при своём цвете окна оставались с бирюзовым
+     * оттенком (surfaceTint не менялся вместе с primary), а в схемах без surfaceContainer* Material подставлял сиреневый.
+     */
+    private fun tinted(s: androidx.compose.material3.ColorScheme, dark: Boolean): androidx.compose.material3.ColorScheme {
+        val base = if (dark) s.surface else Color.White
+        fun mix(a: Float) = s.primary.copy(alpha = a).compositeOver(base)
+        return s.copy(
+            surfaceTint = s.primary,
+            surfaceContainerLowest = if (dark) s.background else Color.White,
+            surfaceContainerLow = mix(if (dark) .04f else .03f),
+            surfaceContainer = mix(if (dark) .07f else .05f),
+            surfaceContainerHigh = mix(if (dark) .09f else .07f),
+            surfaceContainerHighest = mix(if (dark) .13f else .11f),
+            outlineVariant = s.onSurface.copy(alpha = .18f).compositeOver(base),
+        )
+    }
+
     fun scheme(dark: Boolean, ctx: Context): androidx.compose.material3.ColorScheme {
         if (dynamic && Build.VERSION.SDK_INT >= 31) {
             if (!dark) return androidx.compose.material3.dynamicLightColorScheme(ctx)
@@ -330,11 +349,11 @@ object AppColors {
             return dd.copy(inverseSurface = dd.surfaceContainerHighest, inverseOnSurface = dd.onSurface)
         }
         val base = if (dark) Dark else Light
-        if (hue >= 0f) { val l = hueColor(hue, false); val d = hueColor(hue, true); return base.copy(primary = if (dark) d else l, secondaryContainer = l, primaryContainer = l) }
-        if (accent == 0) return base
+        if (hue >= 0f) { val l = hueColor(hue, false); val d = hueColor(hue, true); return tinted(base.copy(primary = if (dark) d else l, secondaryContainer = l, primaryContainer = l), dark) }
+        if (accent == 0) return tinted(base, dark)
         val ac = accents[accent]
         val c = if (dark) ac.light else ac.light   // контейнеры выбранного цвета одинаковы в обеих темах, основной цвет светлее в тёмной
-        return base.copy(primary = if (dark) ac.dark else ac.light, secondaryContainer = c, primaryContainer = c)
+        return tinted(base.copy(primary = if (dark) ac.dark else ac.light, secondaryContainer = c, primaryContainer = c), dark)
     }
 }
 
@@ -347,6 +366,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
     remember(scaleCfg.densityDpi, scaleCfg.screenWidthDp, scaleCfg.screenHeightDp, scaleCfg.fontScale, scaleCfg.uiMode) { AppScale.updateAuto(baseCtx); 0 }
     val dark = when (vm.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     val fullNow = AppFull.on
+    FullRotateButton(fullNow && baseCtx is ComponentActivity)
     SideEffect {
         (baseCtx as? ComponentActivity)?.window?.let { w ->
             WindowCompat.getInsetsController(w, w.decorView).apply {
@@ -448,6 +468,7 @@ fun AdbPhonApp(vm: MainViewModel = viewModel()) {
                     PadKeeper.stopForExit(appCtx)
                     runCatching { kotlinx.coroutines.withTimeoutOrNull(20000) { VpnSession.end(appCtx, "выход из программы") } }   // другой VPN возвращается как был
                     runCatching { vmRef.shutdown() }
+                    runCatching { CloudDaemon.stop() }
                     android.util.Log.i("ADBphon", "выход: фоновая остановка закончена за " + (System.currentTimeMillis() - t0) + " мс")
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }
@@ -863,7 +884,7 @@ fun ConnectScreen(vm: MainViewModel) {
                     if (!hasSu) Text(stringResource(R.string.root_none), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     Button(onClick = { vm.connectRoot() }, enabled = !vm.busy && hasSu) { Text(stringResource(R.string.root_connect_btn)) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        androidx.compose.material3.Switch(useRoot && hasSu, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } }, enabled = hasSu)
+                        androidx.compose.material3.Switch(useRoot && hasSu, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } }, enabled = hasSu, thumbContent = swCheck(useRoot && hasSu))
                         Text(stringResource(R.string.root_use_title), fontSize = 14.sp, modifier = Modifier.weight(1f))
                     }
                 }
@@ -1358,7 +1379,7 @@ fun AppInfoBlocks(a: AppEntry, extra: AppExtra?, twoCols: Boolean, big: Boolean,
         if (!a.installed) append(", $removedS")
         if (abi != null) { append(" · "); withStyle(androidx.compose.ui.text.SpanStyle(color = orange, fontWeight = FontWeight.Bold)) { append(abi) } }
     }
-    fun sz(v: Long?): String = if (extra == null) "…" else if (v == null) "—" else android.text.format.Formatter.formatShortFileSize(ctx, v)
+    fun sz(v: Long?): String = if (extra == null) "…" else if (v == null) "-" else android.text.format.Formatter.formatShortFileSize(ctx, v)
     val kSp = if (big) 14.sp else 11.sp
     val vSp = if (big) 18.sp else 12.sp
     @Composable fun lineA(k: Int, v: androidx.compose.ui.text.AnnotatedString, lines0: Int = 2) {

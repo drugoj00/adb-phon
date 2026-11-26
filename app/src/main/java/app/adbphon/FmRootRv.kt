@@ -762,7 +762,7 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
 
     /** Свойства строки по точке слева: касанием и (24.11.2026) пультом: стрелка влево на строке, затем ОК. */
     private fun openDotProps(rr: RR, e: RvEnv, e0: FmRootCfg.SelE) {
-        Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "—" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "—") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "—"))
+        Fm.active = e.p.id; if (e0.net == null && e0.path.startsWith("/")) Fm.propsPath(e0.path) else Fm.dlg = FmDlg.Props(Fm.str(R.string.fm_props_title), Fm.str(R.string.fm_name) + ": " + e0.name + "\n" + Fm.str(R.string.fm_path) + ": " + e0.path + (if (e0.isDir) "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file).let { "-" } else "\n" + Fm.str(R.string.fm_type) + ": " + Fm.str(R.string.fm_type_file)) + "\n" + Fm.str(R.string.fm_size) + ": " + (rr.file?.takeIf { it.size >= 0 }?.let { fmSize(it.size) } ?: "-") + "\n" + Fm.str(R.string.fm_modified) + ": " + (rr.dateRaw?.takeIf { it.isNotBlank() }?.let { FmSub.date(e.ctx, it, false) } ?: "-"))
     }
 
     /** Нажатие на точку «свойства» у левого края (отдельное от нажатия на строку). */

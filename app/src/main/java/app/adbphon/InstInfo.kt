@@ -167,7 +167,7 @@ private fun okCol(dark: Boolean) = if (dark) Color(0xFF7BD88F) else Color(0xFF1B
 private fun badCol(dark: Boolean) = if (dark) Color(0xFFFF8A80) else Color(0xFFC62828)
 private fun warnCol(dark: Boolean) = if (dark) Color(0xFFFFCC80) else Color(0xFF9A5B00)
 
-private fun sigShort(set: Set<String>): String = if (set.isEmpty()) "—" else set.sorted().joinToString(" ") { it.take(6) + "…" }
+private fun sigShort(set: Set<String>): String = if (set.isEmpty()) "-" else set.sorted().joinToString(" ") { it.take(6) + "…" }
 
 /** Строка таблицы «параметр | установлено | новое»: изменившееся значение подсвечено (старое красным, новое зелёным или янтарным, если стало хуже). */
 @Composable
@@ -240,8 +240,8 @@ fun ApkInfoBlock(f: ApkFile, m: ApkMeta?, full: Boolean, modifier: Modifier = Mo
                 val sigOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
                 CmpRow(stringResource(R.string.ii_row_sig) + (if (sigOpen.value) " ▴" else " ▾"), sigShort(m.curSigs), if (m.sigSame) stringResource(R.string.ii_sig_same_short) else sigShort(m.sigs), sigCh, if (sigCh) bad else ok, onClick = { sigOpen.value = !sigOpen.value })
                 if (sigOpen.value) {
-                    Text(stringResource(R.string.ii_col_cur) + ": " + (m.curSigs.sorted().joinToString("\n").ifEmpty { "—" }), color = t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                    Text(stringResource(R.string.ii_col_new) + ": " + (if (m.sigSame) stringResource(R.string.ii_sig_same_short) else m.sigs.sorted().joinToString("\n").ifEmpty { "—" }), color = if (sigCh) bad else t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    Text(stringResource(R.string.ii_col_cur) + ": " + (m.curSigs.sorted().joinToString("\n").ifEmpty { "-" }), color = t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    Text(stringResource(R.string.ii_col_new) + ": " + (if (m.sigSame) stringResource(R.string.ii_sig_same_short) else m.sigs.sorted().joinToString("\n").ifEmpty { "-" }), color = if (sigCh) bad else t.sub, fontSize = 10.sp, lineHeight = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                 }
                 val curSizeText = sizeLabel(m.curSize)
                 CmpRow(stringResource(R.string.ii_row_size), curSizeText, newSizeText, curSizeText != newSizeText, t.text)
@@ -360,7 +360,7 @@ private suspend fun wipeDowngrade(ctx: Context, pkg: String, apk: File): String 
     if (r.contains("Success", true)) return "Success"
     val back = Adb.installFiles(copy.files, "-r")
     val why = friendlyReason(ctx, r)
-    return "FAIL:" + why + " — " + ctx.getString(if (back.contains("Success", true)) R.string.ii_wipe_restored else R.string.ii_wipe_restore_failed)
+    return "FAIL:" + why + " - " + ctx.getString(if (back.contains("Success", true)) R.string.ii_wipe_restored else R.string.ii_wipe_restore_failed)
 }
 
 /**
@@ -380,7 +380,7 @@ private suspend fun keepDataDowngrade(ctx: Context, pkg: String, apk: File): Str
     if (!r.contains("Success", true)) {
         val back = runCatching { FullBackup.restore(ctx, copy) { } }.getOrNull()
         val ok = back != null && Adb.shell("pm path $pkg").contains("package:")
-        return "FAIL:" + friendlyReason(ctx, r) + " — " + ctx.getString(if (ok) R.string.ii_root_restored else R.string.ii_wipe_restore_failed)
+        return "FAIL:" + friendlyReason(ctx, r) + " - " + ctx.getString(if (ok) R.string.ii_root_restored else R.string.ii_wipe_restore_failed)
     }
     // данные возвращаются в уже установленную старую версию (APK из копии не ставится)
     val res = runCatching { FullBackup.restore(ctx, copy.copy(parts = copy.parts - "apk")) { } }

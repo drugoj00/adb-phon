@@ -185,7 +185,7 @@ fun SetSwitchRow(checked: Boolean, onChange: (Boolean) -> Unit, title: String, h
         ) {
             FloorText(title, Modifier.weight(1f), fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 1.1.em)
             if (hint.isNotBlank()) SetInfoButton(open) { open = !open }
-            androidx.compose.material3.Switch(checked, null, enabled = enabled, colors = setSwitchColors())
+            androidx.compose.material3.Switch(checked, null, enabled = enabled, colors = setSwitchColors(), thumbContent = swCheck(checked))
         }
         AnimatedVisibility(open && hint.isNotBlank(), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             FloorText(hint, Modifier.padding(horizontal = 14.dp, vertical = 4.dp), fontSize = 12.sp, color = cs.onSurface.copy(alpha = .7f))
@@ -313,6 +313,8 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "term" to listOf(R.string.tc_set_title),
     "cmod" to listOf(R.string.set_cmod_title, R.string.set_cmod_remove),
     "cmod_auto" to listOf(R.string.set_cmod_auto),
+    "cloud_bg" to listOf(R.string.set_cloud_bg),
+    "narrow_font" to listOf(R.string.set_narrow_font),
     "hand" to listOf(R.string.set_hand),
     "side_mode" to listOf(R.string.set_side_mode, R.string.set_side_scale),
     "startup" to listOf(R.string.start_tab, R.string.start_folder),
@@ -449,6 +451,8 @@ fun SetItem(key: String, vm: MainViewModel) {
         // ---- Облака
         "cmod" -> CloudModuleSetting()
         "cmod_auto" -> CloudModuleAutoSetting()
+        "cloud_bg" -> CloudBgSetting()
+        "narrow_font" -> NarrowFontSetting()
 
         // ---- Панели
         "hand" -> HandednessSection()

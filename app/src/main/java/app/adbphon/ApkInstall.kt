@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
@@ -242,6 +243,21 @@ object ApkInstall {
         return out
     }
 
+    /** 26.11.2026 (wad72: для части расширений список очень короткий): все программы, умеющие принимать какой-нибудь файл. */
+    fun anyHandlers(ctx: Context): List<InstOpt> = runCatching {
+        val pm = ctx.packageManager
+        val seen = LinkedHashMap<String, InstOpt>()
+        for (m in listOf("*/*", "text/plain", "image/jpeg", "video/mp4", "audio/mpeg", "application/pdf", "application/zip", "application/octet-stream")) {
+            for (r in pm.queryIntentActivities(Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://x/file"), m), PackageManager.MATCH_ALL)) {
+                val ai = r.activityInfo ?: continue
+                if (ai.packageName == ctx.packageName || ai.packageName in SYSTEM || ai.packageName in seen || !ai.exported || JUNK.any { ai.name.contains(it, true) }) continue
+                val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(ai.packageName, 0)).toString() }.getOrDefault(ai.packageName)
+                seen[ai.packageName] = InstOpt("cmp:" + ai.packageName + "/" + ai.name, label, null, ai.packageName, null, ai, 5)
+            }
+        }
+        seen.values.sortedBy { it.label.lowercase() }
+    }.getOrDefault(emptyList())
+
     /** «Открыть через…» из меню: всегда полный список; галочка «Запомнить» отмечена, если для расширения уже есть выбор. */
     fun showPicker(p: FmPane, item: FmItem) {
         if (item.ext == "apk" || isBundle(item.ext)) { startInstall(p, item, true); return }
@@ -344,6 +360,7 @@ object ApkInstall {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -371,13 +388,15 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                 Row(Modifier.fillMaxWidth().toggleable(value = remember, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { remember = it }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     BigCheckbox(remember, null); Text(stringResource(R.string.inst_remember_ext, d.item.ext), fontSize = if (tv) 16.sp else 13.sp, modifier = Modifier.padding(start = 8.dp))
                 }
-                Text(stringResource(R.string.inst_remember_note_open), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f), modifier = Modifier.padding(bottom = 6.dp))
+                Text(stringResource(R.string.inst_remember_note_open) + " " + stringResource(R.string.inst_long_always), fontSize = if (tv) 13.sp else 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f), modifier = Modifier.padding(bottom = 6.dp))
                 Column(Modifier.heightIn(max = 520.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    var showAll by remember { mutableStateOf(false) }
+                    val list = remember(showAll) { if (!showAll) d.opts else d.opts + ApkInstall.anyHandlers(ctx).filter { a -> d.opts.none { it.pkg == a.pkg } } }
                     val firstEnabled = d.opts.indexOfFirst { it.enabled && it.id != "archive" }
                     val fr = remember { androidx.compose.ui.focus.FocusRequester() }
                     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
-                    d.opts.forEachIndexed { idx, o ->
-                        Row((if (idx == firstEnabled) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }.then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier).clickable { if (o.id != "market" && (o.id != "archive" || d.item.ext == "apk" || ApkInstall.isBundle(d.item.ext))) { if (remember) { ApkInstall.remember(ctx, d.item.ext, o.id); UiPrefs.setAskInstaller(ctx, false) } else if (savedId != null) ApkInstall.forget(ctx, d.item.ext) }; close(); ApkInstall.run(d.pane, d.item, o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
+                    list.forEachIndexed { idx, o ->
+                        Row((if (idx == firstEnabled) Modifier.focusRequester(fr) else Modifier).fillMaxWidth().graphicsLayer { alpha = if (o.enabled) 1f else .55f }.then(if (o.recommended) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = .10f), RoundedCornerShape(10.dp)) else Modifier).combinedClickable(onLongClick = { if (o.id != "market" && o.id != "archive") { ApkInstall.remember(ctx, d.item.ext, o.id); UiPrefs.setAskInstaller(ctx, false); close(); ApkInstall.run(d.pane, d.item, o) } }) { if (o.id != "market" && (o.id != "archive" || d.item.ext == "apk" || ApkInstall.isBundle(d.item.ext))) { if (remember) { ApkInstall.remember(ctx, d.item.ext, o.id); UiPrefs.setAskInstaller(ctx, false) } else if (savedId != null) ApkInstall.forget(ctx, d.item.ext) }; close(); ApkInstall.run(d.pane, d.item, o) }.heightIn(min = if (tv) 64.dp else 52.dp).padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val sz = if (tv) 44.dp else 36.dp
                             val bmp = remember(o.id) { o.ai?.let { ai -> runCatching { val d = ai.loadIcon(ctx.packageManager); android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888).also { b -> d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(b)) } }.getOrNull() } }
@@ -389,6 +408,7 @@ fun InstallPickDialog(d: FmDlg.InstallPick, close: () -> Unit) {
                             }
                         }
                     }
+                    if (!showAll) TextButton({ showAll = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.inst_all_apps), fontSize = if (tv) 17.sp else 14.sp) }
                 }
                 // 9.2: флажок «Запомнить» виден всегда; один фокус на всей строке: ОК пультом и касание переключают (с 24.11.2026 стоит над списком)
             }

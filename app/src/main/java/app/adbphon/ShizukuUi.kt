@@ -107,7 +107,7 @@ private fun ShizukuAppsDialog(on: Boolean, onClose: () -> Unit) {
                         }
                         Switch(r.uid in allowed, { v ->
                             if (v) { ShizukuHost.grant(r.uid); if (r.uid !in allowed) allowed.add(r.uid) } else { ShizukuHost.revoke(r.uid); allowed.remove(r.uid) }
-                        })
+                        }, thumbContent = swCheck(r.uid in allowed))
                     }
                 }
             }

@@ -148,7 +148,7 @@ object InstallWindow {
         val meta = withContext(Dispatchers.IO) { runCatching { ApkInfo.readFor(app, af) }.getOrNull() }
         val label = meta?.label ?: f.name
         val pkg = meta?.pkg.orEmpty()
-        val mb = "%.1f".format(java.util.Locale.US, f.length() / 1048576.0)
+        val mb = apkMb(f.length())
         val cur = meta?.curName
         val info = if (meta == null) "" else if (cur != null) app.getString(R.string.silent_win_info_upd, label, cur, meta.curCode.toInt(), meta.verName, meta.verCode.toInt(), mb)
             else app.getString(R.string.silent_win_info_new, label, meta.verName, meta.verCode.toInt(), mb)
@@ -180,7 +180,7 @@ object SelfInstallNotice {
         val app = ctx.applicationContext
         val af = ApkFile(f.name, Uri.fromFile(f), f.length(), f)
         val meta = runCatching { ApkInfo.readFor(app, af) }.getOrNull() ?: return
-        val mb = "%.1f".format(java.util.Locale.US, f.length() / 1048576.0)
+        val mb = apkMb(f.length())
         val info = if (meta.curName != null) app.getString(R.string.silent_win_info_upd, meta.label, meta.curName, meta.curCode.toInt(), meta.verName, meta.verCode.toInt(), mb)
             else app.getString(R.string.silent_win_info_new, meta.label, meta.verName, meta.verCode.toInt(), mb)
         val method = app.getString(R.string.silent_m_adb)
@@ -218,4 +218,10 @@ object SelfInstallNotice {
         SilentInstallState.cur = SilentInstallState.Data(if (ok) 2 else 3, "ADB-phon", p[0], p[3], p[5], p[6], 100, if (ok) "" else app.getString(R.string.silent_win_selfnot), null, inst.versionName.orEmpty(), icode)
         runCatching { app.startActivity(Intent(app, SilentInstallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
     }
+}
+
+/** 26.11.2026: у маленьких APK вместо «0.0 МБ» показываются сотые доли. */
+internal fun apkMb(bytes: Long): String {
+    val v = bytes / 1048576.0
+    return when { v >= 0.1 -> "%.1f".format(java.util.Locale.US, v); v >= 0.01 -> "%.2f".format(java.util.Locale.US, v); else -> "<0.01" }
 }

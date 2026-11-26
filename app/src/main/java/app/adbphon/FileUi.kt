@@ -882,11 +882,18 @@ fun FolderColorDialog(title: String, current: Int?, showReset: Boolean, onPick: 
 fun FilesLookSection() {
     FilesBgMusicSetting(); FilesWifiAutoSetting(); FilesThumbsSetting()
     InstallerDefaultSetting()   // 10.0: «Установщик по умолчанию» вместо «Спрашивать, чем устанавливать»
-    CloudModuleSetting(); CloudModuleAutoSetting()
+    CloudModuleSetting(); CloudModuleAutoSetting(); CloudBgSetting()
+    NarrowFontSetting()
     FilesOpenAsSetting(); FilesDirTapSetting(); FilesFolderColorSetting(); FilesTypeIconsSetting()
 }
 
 // 10.0 (set): пункты блока по отдельности, чтобы экран «Настройки» раскладывал их по группам («Файлы», «Облака»)
+@Composable
+fun NarrowFontSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    SettingSwitch(UiPrefs.narrow, { UiPrefs.setNarrow(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_narrow_font), androidx.compose.ui.res.stringResource(R.string.set_narrow_font_hint))
+}
+
 @Composable
 fun FilesBgMusicSetting() {
     androidx.compose.runtime.key(PlayerPrefs.rev) {
@@ -936,6 +943,14 @@ fun CloudModuleSetting() {
         confirmButton = { TextButton({ cmDel = false; Fm.scope.launch { Fm.say(CloudModule.uninstall(ctx)) } }) { FloorText(androidx.compose.ui.res.stringResource(R.string.cmu_remove)) } },
         dismissButton = { TextButton({ cmDel = false }) { FloorText(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) } },
     )
+}
+
+/** 26.11.2026: движок облаков постоянной службой (папки открываются быстрее). */
+@Composable
+fun CloudBgSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var on by remember { mutableStateOf(CloudDaemon.enabled(ctx)) }
+    SettingSwitch(on, { on = it; CloudDaemon.setEnabled(ctx, it) }, androidx.compose.ui.res.stringResource(R.string.set_cloud_bg), androidx.compose.ui.res.stringResource(R.string.set_cloud_bg_hint))
 }
 
 @Composable

@@ -408,6 +408,19 @@ private fun DownloadDetail() {
         "%.2f".format(CloudModule.speedBps / 1048576.0), CloudModule.fmtEta(CloudModule.etaSec)), fontSize = 12.sp)
 }
 
+/** 26.11.2026: «Что нового» модуля из описания его выпуска на GitHub на языке интерфейса; нет текста или сети: ничего не показывается. */
+@Composable
+private fun ModuleNotes() {
+    val lang = Updater.langOf(LocalLangCode.current)
+    var notes by androidx.compose.runtime.remember(lang) { androidx.compose.runtime.mutableStateOf(emptyList<String>()) }
+    androidx.compose.runtime.LaunchedEffect(lang) {
+        notes = withContext(Dispatchers.IO) { runCatching { Updater.notes(Updater.releaseBody("clouds-" + CloudModule.VERSION), lang) }.getOrDefault(emptyList()) }
+    }
+    if (notes.isEmpty()) return
+    Text(stringResource(R.string.upd_whatsnew), fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+    notes.take(6).forEach { Text("• $it", fontSize = 12.sp, lineHeight = 15.sp) }
+}
+
 /** Окно «Нужен модуль облаков»: вопрос, ход загрузки, ошибка. */
 @Composable
 fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
@@ -440,6 +453,7 @@ fun CloudModuleDialog(d: FmDlg.CloudModule, close: () -> Unit) {
                         Text(stringResource(if (d.upgrade && st == CloudModule.State.OK) R.string.cm_ask_upgrade else when (st) { CloudModule.State.OUTDATED -> R.string.cm_ask_update; CloudModule.State.WRONG_ABI -> R.string.cm_ask_abi; else -> R.string.cm_ask }, CloudModule.sizeMb()), fontSize = 14.sp)
                         if (st == CloudModule.State.OUTDATED) CloudModule.reasonText(ctx)?.let { Text(it, fontSize = 12.sp) }
                         if (CloudModule.wifiHint(ctx)) Text(stringResource(R.string.cm_wifi_hint, CloudModule.sizeMb()), fontSize = 12.sp)
+                        if (st == CloudModule.State.OUTDATED || d.upgrade) ModuleNotes()
                     }
                 }
             }
@@ -473,6 +487,7 @@ fun ModuleHost() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.cmu_ask, CloudModule.installedVersion(ctx).orEmpty(), CloudModule.VERSION), fontSize = 14.sp)
+                    ModuleNotes()
                     TextButton({ CloudModule.askUpdate = false; CloudModule.setAuto(ctx, true); CloudModule.start(ctx, null, upgrade = true) }) { Text(stringResource(R.string.cmu_auto)) }
                 }
             },

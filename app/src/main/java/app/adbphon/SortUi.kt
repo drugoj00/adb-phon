@@ -262,14 +262,14 @@ fun SortDialog(p: FmPane, close: () -> Unit) {
                 }
                 if (tab != SGroup.DIR && tab != SGroup.FILE) {
                     Row(Modifier.fillMaxWidth().clickable(enabled = !cfg.grouped) { edit { it.copy(sep = if (tab in it.sep) it.sep - tab else it.sep + tab) } }, verticalAlignment = Alignment.CenterVertically) {
-                        Switch(tab in cfg.sep || cfg.grouped, { v -> edit { it.copy(sep = if (v) it.sep + tab else it.sep - tab) } }, enabled = !cfg.grouped)
+                        Switch(tab in cfg.sep || cfg.grouped, { v -> edit { it.copy(sep = if (v) it.sep + tab else it.sep - tab) } }, enabled = !cfg.grouped, thumbContent = swCheck(tab in cfg.sep || cfg.grouped))
                         FloorText(stringResource(R.string.sort_separate), Modifier.padding(start = 8.dp), fontSize = 13.sp)
                     }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 @Composable fun Sw(label: Int, on: Boolean, set: (Boolean) -> Unit) {
                     Row(Modifier.fillMaxWidth().clickable { set(!on) }, verticalAlignment = Alignment.CenterVertically) {
-                        Switch(on, set)
+                        Switch(on, set, thumbContent = swCheck(on))
                         FloorText(stringResource(label), Modifier.padding(start = 8.dp), fontSize = 13.sp)
                     }
                 }

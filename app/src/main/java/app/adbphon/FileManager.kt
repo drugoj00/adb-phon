@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package app.adbphon
 
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -295,7 +296,7 @@ sealed class FmDlg {
     class PickTarget(val move: Boolean, val jobs: List<Pair<FmPane, List<String>>>, val after: suspend () -> Unit = {}) : FmDlg()
     class Storage : FmDlg()
     class WifiServer(val dir: String) : FmDlg()
-    class WifiDev(val conn: NetConn?, val host: String, val name: String) : FmDlg()
+    class WifiDev(val conn: NetConn?, val host: String, val name: String, val authFailed: Boolean = false) : FmDlg()
     /** «Компьютеры» (10.11.2026): добавить или изменить ПК; экран ПК во весь экран. */
     class PcAdd(val host: PcHost?) : FmDlg()
     class PcScreen(val host: PcHost) : FmDlg()
@@ -444,6 +445,12 @@ object Fm {
             p.fix = null
             // обычная папка: панель возвращается из режима ADB/root в прямой доступ
             if (p.auto && p.src == "adb" && !FmIo.restricted(path)) { p.src = "local"; p.auto = false }
+            val prevPath = p.path
+            var fromCache = false
+            // 26.11.2026: облачная папка сначала показывается из прошлого чтения, свежий список заменит её, когда придёт
+            (p.smb as? CloudFs)?.takeIf { p.src == "smb" }?.cached(path)?.let { old ->
+                if (myGen == p.loadGen && (p.path != path || p.items.isEmpty())) { p.path = path; p.items = old.map { FmItem(it.name, it.isDir, it.size, it.date) }; p.error = null; p.selected = emptySet(); fromCache = true }
+            }
             while (true) {
                 try { list = FmIo.list(p, path); break }
                 catch (e: kotlinx.coroutines.CancellationException) { throw e }
@@ -474,8 +481,9 @@ object Fm {
             if (myGen != p.loadGen) return@launch
             p.loading = false
             if (list == null) { p.error = err; return@launch }
-            if (remember && p.path != path) { p.back.add(p.path); if (p.back.size > 50) p.back.removeAt(0) }
-            p.path = path; p.items = list; p.error = null; p.selected = emptySet(); p.lastName = pick
+            if (remember && prevPath != path) { p.back.add(prevPath); if (p.back.size > 50) p.back.removeAt(0) }
+            p.path = path; p.items = list; p.error = null; // отметки сбрасываются; кроме отмеченного, пока на экране был тот же список из прошлого чтения
+            p.selected = if (fromCache) p.selected.filter { n -> list.any { it.name == n } }.toSet() else emptySet(); p.lastName = pick
             if (AppLog.enabled) Thumbs.logList("список(" + p.src + ")", path, list.count { !it.isDir && (it.ext == "apk" || it.ext == "apks" || it.ext == "xapk" || it.ext == "apkm") })
             if (remember) fmLeaveRoot(p)
             pick?.let { p.scrollToName = it }
@@ -712,7 +720,8 @@ object Fm {
             val fs = c.fs()
             WifiAuto.onNetOpen(sctx)
             val err = scanLock.withLock { withContext(Dispatchers.IO) {
-                runCatching { (fs as? KeepFs)?.connect() ?: (fs as? CloudFs)?.connect() }.exceptionOrNull()
+                // 26.11.2026: облако, корень которого уже читали, открывается без отдельной проверки: она читала корень второй раз
+                runCatching { (fs as? KeepFs)?.connect() ?: (fs as? CloudFs)?.let { cl -> if (parked != null || fallbackLocal || cl.cached("/") == null) cl.connect() } }.exceptionOrNull()
             } }
             p.status = null
             if (err != null) {
@@ -909,7 +918,9 @@ object Fm {
                 val stay = p.expanded.filter { o -> path.startsWith(o.trimEnd('/') + "/") }
                 p.expanded.clear(); p.expanded.addAll(stay)
             }
-            p.expanded.add(path); saveExpanded(p); scope.launch { loadKids(p, path) }
+            p.expanded.add(path); saveExpanded(p)
+            if (p.smb is CloudFs && p.kids.containsKey(path)) scope.launch { val fresh = runCatching { FmIo.list(p, path) }.getOrNull(); if (fresh != null && p.kids.containsKey(path) && p.kids[path] != fresh) p.kids[path] = fresh }
+            else scope.launch { loadKids(p, path) }
         }
         dropClosedKids(p)
         if (opening) pruneSel(p)
@@ -919,7 +930,10 @@ object Fm {
     fun dropClosedKids(p: FmPane) {
         if (!treeOne) return
         val open = p.expanded.toSet()
-        p.kids.keys.toList().filter { it !in open }.forEach { p.kids.remove(it) }
+        val closed = p.kids.keys.toList().filter { it !in open }
+        // 26.11.2026: у облаков прочитанные списки не выбрасываются (повторное раскрытие сразу, свежее подчитывается в фоне)
+        if (p.smb is CloudFs) { if (closed.size > 120) closed.take(closed.size - 120).forEach { p.kids.remove(it) }; return }
+        closed.forEach { p.kids.remove(it) }
     }
 
     fun chooseTreeOne(v: Boolean) {
@@ -1068,8 +1082,18 @@ object Fm {
         val out = java.io.File(join(p.path, outName))
         val srcs = names.map { java.io.File(join(p.path, it)) }
         prefs().edit().putString("arc_fmt", format).putInt("arc_level", level).apply()
+        // 26.11.2026: на карте памяти без ADB и root архив собирается в кэше и переносится через выданный доступ
+        val saf = SafAccess.needs(out.path)
+        if (saf && !SafAccess.ensure(out.path)) { say(str(R.string.saf_not_granted)); return@launch }
         runJob(str(R.string.fm_packing), listOf(outName), true, { srcs.sumOf { LocalOps.size(it) } }, { srcs.sumOf { LocalOps.fileCount(it) } }) { j, _ ->
-            try { ArcCreate.create(format, out, srcs, level, pass, arcTmp(), j); null } catch (e: ArcUnsupported) { e.message }
+            val stage = if (saf) java.io.File(java.io.File(sctx.cacheDir, "fmsaf"), System.nanoTime().toString(36)).apply { mkdirs() } else null
+            try {
+                val target = if (stage != null) java.io.File(stage, outName) else out
+                val from = if (stage == null) srcs else srcs.map { src -> if (src.canRead() || !SafAccess.needs(src.path)) src else java.io.File(java.io.File(stage, "src"), src.name).also { SafAccess.copyTree(src.path, it.path, false, j) } }
+                ArcCreate.create(format, target, from, level, pass, arcTmp(), j)
+                if (stage != null) SafAccess.copyTree(target.path, out.path, false, j)
+                null
+            } catch (e: ArcUnsupported) { e.message } finally { stage?.deleteRecursively() }
         }
         load(p, remember = false, pick = outName)
     }
@@ -1591,7 +1615,9 @@ object Fm {
     private fun mimeOf(ext: String): String = FileMime.of(ext)
 
     private fun viewLocal(f: java.io.File, ext: String, pkg: String? = null, mime: String? = null): Boolean {
-        val uri = androidx.core.content.FileProvider.getUriForFile(sctx, sctx.packageName + ".files", f)
+        // 26.11.2026: файл на карте памяти, который программе напрямую не читается: отдаётся через выданный доступ к карте
+        val uri = if (!f.canRead() && SafAccess.needs(f.path) && SafAccess.covered(f.path)) SafAccess.documentUri(f.path)
+            else androidx.core.content.FileProvider.getUriForFile(sctx, sctx.packageName + ".files", f)
         val m = mime ?: if (ext == "apk") "application/vnd.android.package-archive" else FileMime.ofName(f.name, "*/*")
         val i = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, m)
             .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -2208,10 +2234,14 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                 // 10.0 (fm1, владелица): в портрете колонка кнопок у края активной панели: правая панель — справа, левая — слева (на приставке как было, слева);
                 // у края справа отступ от системного жеста «назад»
                 val stripRight = !Marq.tv && Fm.active == 0   // 10.2 (слово владелицы): зеркально, активно левое окно: колонка справа, активно правое: слева
+                // 26.11.2026 (слово владелицы 19.11): панель едет за пальцем. panePos: 0 видна левая панель, 1 правая, между ними обе частично
+                val panePos = remember { androidx.compose.animation.core.Animatable(Fm.active.toFloat()) }
+                var paneDrag by remember { mutableStateOf(false) }
+                val paneScope = androidx.compose.runtime.rememberCoroutineScope()
                 // 19.11.2026: свайп влево/вправо переключает панели из ЛЮБОГО места ряда (список, «Источники», боковая полоса), а не только с
                 // обычного списка файлов (раньше с экрана «Источники» свайпа не было — «обратно только кнопкой, а она наверху»). Порядок «панель/полоса»
                 // меняется через key(): полоса переезжает на другую сторону без пересоздания; отступ справа постоянный — ширина панели не прыгает.
-                Row(Modifier.weight(1f).fillMaxWidth().padding(end = FmMetrics.STRIP_END).fmPaneSwipe(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.weight(1f).fillMaxWidth().padding(end = FmMetrics.STRIP_END).fmPaneSwipe(panePos, paneScope) { paneDrag = it }, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     (if (stripRight) listOf(0, 1) else listOf(1, 0)).forEach { slot ->
                         androidx.compose.runtime.key(slot) {
                             if (slot == 1) FmStripBox(actions, Modifier.fillMaxHeight()) else {
@@ -2219,45 +2249,26 @@ fun FileManagerScreen(vm: MainViewModel, onConnectTab: () -> Unit = {}) {
                         // 19.11.2026: обе панели существуют ВСЕГДА, каждая на своём фиксированном месте (key): состояние (прокрутка, список, фокус)
                         // не теряется и ничто не пересоздаётся при переключении — раньше после конца анимации панель создавалась заново и «передёргивалась».
                         // Скрытая панель уезжает за край (touch и рисование ей не достаются); при переходе — прежняя анимация переезда.
-                        var shown by remember { mutableStateOf(Fm.active) }
-                        var incoming by remember { mutableStateOf(Fm.active) }
-                        var slideToRight by remember { mutableStateOf(true) }
-                        val progress = remember { androidx.compose.animation.core.Animatable(0f) }
-                        LaunchedEffect(Fm.active) {
-                            if (Fm.active != shown) {
-                                incoming = Fm.active
-                                slideToRight = Fm.active > shown
-                                // 18.11.2026 (владелица): общий выключатель «Анимация переходов» — выключен, переход мгновенный, без анимации вообще.
+                        LaunchedEffect(Fm.active, paneDrag) {
+                            if (paneDrag) return@LaunchedEffect   // палец держит панель: прежняя доводка этим отменена
+                            val to = Fm.active.toFloat()
+                            if (panePos.value != to) {
+                                // 18.11.2026 (владелица): общий выключатель «Анимация переходов»: выключен, переход мгновенный, без анимации вообще.
                                 if (UiAnim.on) kotlinx.coroutines.withContext(FmFullMotion) {
-                                    progress.snapTo(0f)
-                                    progress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
-                                } else progress.snapTo(1f)
-                                shown = incoming
-                                progress.snapTo(0f)
+                                    panePos.animateTo(to, tween((280 * kotlin.math.abs(to - panePos.value)).toInt().coerceAtLeast(90), easing = FastOutSlowInEasing))
+                                } else panePos.snapTo(to)
                             }
                         }
-                        Box(Modifier.weight(1f).fillMaxHeight()) {
-                            val p = progress.value
-                            val anim = shown != incoming
+                        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                             for (k in 0..1) androidx.compose.runtime.key(k) {
-                                val isOut = k == shown && (!anim || p < 1f)
-                                val isIn = anim && k == incoming && p > 0f
-                                val visible = isOut || isIn
+                                val visible by remember { androidx.compose.runtime.derivedStateOf { kotlin.math.abs(k - panePos.value) < 0.999f } }
                                 Box(
                                     Modifier.fillMaxSize()
                                         .layout { m, c ->
                                             val pl = m.measure(c)
                                             layout(pl.width, pl.height) { if (visible) pl.place(0, 0) else pl.place(-100000, 0) }
                                         }
-                                        .graphicsLayer {
-                                            if (anim && isOut) {
-                                                translationX = (if (slideToRight) -1f else 1f) * size.width * 0.9f * p
-                                                alpha = 1f - p
-                                            } else if (anim && isIn) {
-                                                translationX = (if (slideToRight) 1f else -1f) * size.width * 0.9f * (1f - p)
-                                                alpha = p
-                                            }
-                                        },
+                                        .graphicsLayer { translationX = (k - panePos.value) * size.width },
                                 ) { FmPaneView(Fm.panes[k], Modifier.fillMaxSize()) }
                             }
                         }
@@ -2433,7 +2444,7 @@ fun rememberFmActionsAll(): List<FmAction> {
         FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { if (rootSel) RootSelOps.transfer(p, true) else RootSelOps.fromList(p, true) },
         FmAction(Icons.Filled.DeleteOutline, R.string.fm_delete, sel, tint = deleteRed()) { if (rootSel) RootSelOps.deleteFiles() else Fm.askDelete(p, Fm.targets(p)) },
         FmAction(Icons.Filled.Edit, R.string.fm_b_rename, renameOk) { Fm.dlg = FmDlg.Rename(p, Fm.targets(p).first()) },
-        FmAction(Icons.Filled.CreateNewFolder, R.string.fm_new_folder, Fm.canCreate(p)) { Fm.dlg = FmDlg.NewFolder() },
+        FmAction(Icons.Filled.CreateNewFolder, R.string.fm_new_folder, Fm.canCreate(p) || p.smb is CloudFs) { Fm.dlg = FmDlg.NewFolder() },
         FmAction(Icons.Filled.Description, R.string.fm_new_file, Fm.canCreate(p)) { Fm.dlg = FmDlg.NewFile() },
         FmAction(Icons.Filled.FolderZip, R.string.fm_new_zip, Fm.canCreateZip(p)) { Fm.dlg = FmDlg.NewZip() },
         FmAction(Icons.Filled.SelectAll, R.string.fm_select_all) { Fm.selectAll(p) },
@@ -2916,13 +2927,38 @@ internal fun HintArrow(sizeDp: Int, modifier: Modifier = Modifier) {
 }
 
 /** Свайп влево/вправо переключает панели: влево — вторая, вправо — первая; не мешает вертикальной прокрутке и нажатиям (работает, пока дочерние элементы не забрали жест). */
-private fun Modifier.fmPaneSwipe(): Modifier = this.pointerInput(Unit) {
-    var drag = 0f
+private fun Modifier.fmPaneSwipe(
+    pos: androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    scope: kotlinx.coroutines.CoroutineScope, dragging: (Boolean) -> Unit,
+): Modifier = this.pointerInput(Unit) {
+    var total = 0f
+    var cur = 0f
+    val speed = androidx.compose.ui.input.pointer.util.VelocityTracker()
     detectHorizontalDragGestures(
-        onDragStart = { drag = 0f },
-        onDragEnd = { if (drag < -110f) Fm.active = 1 else if (drag > 110f) Fm.active = 0; drag = 0f },
-        onDragCancel = { drag = 0f },
-    ) { _, dx -> drag += dx }
+        onDragStart = { total = 0f; cur = pos.value; speed.resetTracking(); dragging(true) },
+        onDragEnd = {
+            val vx = speed.calculateVelocity().x
+            val fling = 500.dp.toPx()
+            // анимация выключена: как раньше, по пройденному пути; включена: быстрый взмах решает сам, иначе ближняя сторона
+            val to = when {
+                !UiAnim.on -> if (total < -110f) 1 else if (total > 110f) 0 else Fm.active
+                vx < -fling && total < 0f -> 1
+                vx > fling && total > 0f -> 0
+                else -> if (cur >= 0.5f) 1 else 0
+            }
+            if (to != Fm.active) Fm.active = to
+            dragging(false)
+        },
+        onDragCancel = { dragging(false) },
+    ) { change, dx ->
+        total += dx
+        speed.addPosition(change.uptimeMillis, androidx.compose.ui.geometry.Offset(total, 0f))
+        if (UiAnim.on) {
+            cur = (cur - dx / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+            val v = cur
+            scope.launch { pos.snapTo(v) }
+        }
+    }
 }
 
 @Composable
@@ -3633,7 +3669,7 @@ private fun CreateMenu(p: FmPane, dir: String, close: () -> Unit) {
     if (open) {
         DropdownMenuItem({ Text(stringResource(R.string.fm_new_file), fontSize = 14.sp) }, { close(); Fm.dlg = FmDlg.NewFile(dir) }, enabled = ok,
             leadingIcon = { Icon(Icons.Filled.Description, null, Modifier.size(20.dp)) }, modifier = Modifier.padding(start = 12.dp))
-        DropdownMenuItem({ Text(stringResource(R.string.fm_new_folder), fontSize = 14.sp) }, { close(); Fm.dlg = FmDlg.NewFolder(dir) }, enabled = ok,
+        DropdownMenuItem({ Text(stringResource(R.string.fm_new_folder), fontSize = 14.sp) }, { close(); Fm.dlg = FmDlg.NewFolder(dir) }, enabled = ok || p.smb is CloudFs,
             leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null, Modifier.size(20.dp)) }, modifier = Modifier.padding(start = 12.dp))
         DropdownMenuItem({ Text(stringResource(R.string.fm_new_zip), fontSize = 14.sp) }, { close(); Fm.dlg = FmDlg.NewZip(dir) }, enabled = Fm.canCreateZip(p),
             leadingIcon = { Icon(Icons.Filled.FolderZip, null, Modifier.size(20.dp)) }, modifier = Modifier.padding(start = 12.dp))
@@ -3727,7 +3763,7 @@ private fun FmDialogs() {
         is FmDlg.History -> PathListDlg(R.string.fm_history, Fm.history(), R.string.fm_hist_empty, close) { Fm.load(Fm.cur, it) }
         is FmDlg.Storage -> StorageDlg(close)
         is FmDlg.WifiServer -> WifiServerDialog(d.dir, close)
-        is FmDlg.WifiDev -> WifiDeviceDialog(d.conn, d.host, d.name, close)
+        is FmDlg.WifiDev -> WifiDeviceDialog(d.conn, d.host, d.name, close, d.authFailed)
         is FmDlg.PcAdd -> PcAddDialog(d.host, close)
         is FmDlg.PcScreen -> PcScreenDialog(d.host, close)
         is FmDlg.DevAdd -> DevAddDialog(d.pc, d.adb, close)

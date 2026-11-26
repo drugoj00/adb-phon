@@ -330,18 +330,37 @@ object Adb {
     /** Ничего не ждёт: в ADB-phon менеджер создаётся сразу (нужно перенесённым модулям). */
     suspend fun awaitReady() {}
 
-    /** Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает). */
-    suspend fun pull(path: String, dest: java.io.File) = withContext(Dispatchers.IO) {
-        if (!Integrity.safe()) return@withContext
+    /** 26.11.2026: размер файла на устройстве или -1, если узнать не удалось. */
+    suspend fun sizeOf(path: String): Long = runCatching {
+        shell("stat -L -c %s " + q(path) + " 2>/dev/null || wc -c < " + q(path), 60_000, fast = true).trim().lineSequence().last().trim().toLong()
+    }.getOrDefault(-1L)
+
+    private fun shortCopy(got: Long, want: Long): java.io.IOException = java.io.IOException(appCtx.getString(R.string.fm_copy_short, got, want))
+
+    /**
+     * Копирует файл с устройства через оболочку ADB (так читаются флешки, которые система приложению не показывает).
+     * 26.11.2026: копия сверяется с размером на устройстве; обрезанная копия: ошибка. true: размер совпал (только тогда при переносе можно удалять оригинал).
+     */
+    suspend fun pull(path: String, dest: java.io.File): Boolean = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext false
+        val want = sizeOf(path)
+        pullRaw(path, dest)
+        val got = if (dest.isFile) dest.length() else 0L
+        if (want >= 0 && got < want) { dest.delete(); throw shortCopy(got, want) }
+        want >= 0 && got == want
+    }
+
+    private fun pullRaw(path: String, dest: java.io.File) {
         if (rootOn) {
             val p = ProcessBuilder(suArgs("cat " + q(path))).start()
             runCatching { p.outputStream.close() }
             Thread { runCatching { p.errorStream.copyTo(java.io.ByteArrayOutputStream()) } }.start()
             p.inputStream.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
-            p.waitFor()
-            return@withContext
+            val code = p.waitFor()
+            if (code != 0) { dest.delete(); throw java.io.IOException("cat: exit $code") }
+            return
         }
-        if (useServer()) { AdbServer.pullTo("cat " + q(path), dest); return@withContext }
+        if (useServer()) { AdbServer.pullTo("cat " + q(path), dest); return }
         val s = mgr.openStream(AdbText.safe("exec:cat '" + path.replace("'", "'\\''") + "'"))
         try {
             s.openInputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
@@ -431,23 +450,34 @@ object Adb {
         return ShellApk.Out(runCatching { android.util.Base64.decode(txt.trim(), android.util.Base64.DEFAULT) }.getOrElse { return ShellApk.Out(null, "root: base64: ${it.message}") }, "")
     }
 
-    /** Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb). */
-    suspend fun pushStream(input: InputStream, size: Long, dest: String) = withContext(Dispatchers.IO) {
-        if (!Integrity.safe()) return@withContext
+    /**
+     * Записывает [size] байт из потока в файл на устройстве от имени shell (туда, куда обычному приложению писать нельзя, например Android/obb).
+     * 26.11.2026: записанный размер сверяется; недописанный файл: ошибка. true: размер совпал.
+     */
+    suspend fun pushStream(input: InputStream, size: Long, dest: String): Boolean = withContext(Dispatchers.IO) {
+        if (!Integrity.safe()) return@withContext false
+        pushRaw(input, size, dest)
+        if (size < 0) return@withContext false
+        var got = sizeOf(dest)
+        if (got >= 0 && got != size) { kotlinx.coroutines.delay(1500); got = sizeOf(dest) }
+        if (got >= 0 && got != size) throw shortCopy(got, size)
+        got == size
+    }
+
+    private suspend fun pushRaw(input: InputStream, size: Long, dest: String) {
         shell("mkdir -p " + q(dest.substringBeforeLast('/')))
         if (rootOn) {
             rootRun("head -c $size > " + q(dest), input, 1_800_000)
             val m = Regex("^(.*/Android/(?:obb|data))/([^/]+)/").find(dest)
             if (m != null) runCatching { rootRun("chown -R \$(stat -c %u:%g " + q(m.groupValues[1]) + ") " + q(m.groupValues[1] + "/" + m.groupValues[2]), null, 60_000) }
-            return@withContext Unit
+            return
         }
-        if (useServer()) { AdbServer.run("head -c $size > " + q(dest), input, size, 1_800_000); return@withContext Unit }
+        if (useServer()) { AdbServer.run("head -c $size > " + q(dest), input, size, 1_800_000); return }
         val s = mgr.openStream(AdbText.safe("exec:head -c $size > " + q(dest)))
         val out = s.openOutputStream()
         input.copyTo(out)
         out.flush()
         readAll(s, 600_000, "push")
-        Unit
     }
 
     /** Установка одного APK или набора частей одного приложения (сессия установки). flags: например "-r" или "-r -d". */

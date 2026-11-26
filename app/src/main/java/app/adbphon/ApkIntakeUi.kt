@@ -264,7 +264,7 @@ private fun IntakeScreen(uri: Uri, mime: String?, close: () -> Unit) {
                                 fontSize = 13.sp, lineHeight = 16.sp,
                             )
                             val bad = MaterialTheme.colorScheme.error
-                            val mbSize = "%.1f".format(java.util.Locale.US, d.files.sumOf { it.size } / 1048576.0)
+                            val mbSize = apkMb(d.files.sumOf { it.size })
                             // 17.0 (код 83): размер всего набора, число частей и предупреждение об отсутствии языка устройства; 22.11.2026: размер и число частей в одной строке
                             val nParts = d.files.singleOrNull()?.parts?.size
                             Text(stringResource(R.string.silent_win_size, mbSize) + (if (nParts != null) " · " + stringResource(R.string.ii_parts, nParts) else ""), fontSize = 12.sp, lineHeight = 15.sp)

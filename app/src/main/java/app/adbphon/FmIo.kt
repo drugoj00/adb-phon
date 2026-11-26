@@ -176,7 +176,7 @@ object FmIo {
 
     suspend fun mkdir(p: FmPane, path: String): String? = when (srcOf(p, path)) {
         "adb" -> failed(sh("mkdir -p ${q(path)} 2>&1"))
-        "smb" -> { val n = netFs(p); if (n != null) netOp { n.mkdirRemote(path) } else arcOp(p) { a -> a.mkdir(path) } }
+        "smb" -> { val n = netFs(p); val cl = p.smb as? CloudFs; if (cl != null) netOp { cl.mkdirCloud(path) } else if (n != null) netOp { n.mkdirRemote(path) } else arcOp(p) { a -> a.mkdir(path) } }
         else -> if (SafAccess.needs(path)) safOp(path) { SafAccess.mkdirs(path) } else withContext(Dispatchers.IO) { if (File(path).mkdirs() || File(path).isDirectory) null else s(R.string.fm_err_denied) }
     }
 
@@ -188,7 +188,7 @@ object FmIo {
 
     suspend fun rename(p: FmPane, from: String, to: String): String? = when (srcOf(p, from)) {
         "adb" -> failed(sh("mv ${q(from)} ${q(to)} 2>&1"))
-        "smb" -> { val n = netFs(p); if (n != null) netOp { n.renameRemote(from, to, false) } else arcOp(p) { a -> a.rename(from, to) } }
+        "smb" -> { val n = netFs(p); val cl = p.smb as? CloudFs; if (cl != null) netOp { cl.renameCloud(from, to) } else if (n != null) netOp { n.renameRemote(from, to, false) } else arcOp(p) { a -> a.rename(from, to) } }
         else -> if (SafAccess.needs(from)) {
             if (!SafAccess.ensure(from)) s(R.string.saf_not_granted)
             else try {
@@ -251,6 +251,21 @@ object FmIo {
         return try {
             when {
                 dst.src == "smb" && dst.smb is KeepFs -> if (src.src == "adb") unsupported() else toNet(src, dst, from, to, isDir, move, j)
+                // 26.11.2026: в облако можно копировать и из сети, архива и другого облака: сначала во временную папку, оттуда обычная отправка
+                dst.src == "smb" && dst.smb is CloudFs && src.src == "smb" -> withContext(Dispatchers.IO) {
+                    val stage = File(File(app.cacheDir, "fmx"), "c" + System.nanoTime().toString(36)).apply { mkdirs() }
+                    try {
+                        val part = File(stage, to.trimEnd('/').substringAfterLast('/'))
+                        smbToLocal(src.smb!!, from, isDir, part, j)
+                        if (j?.cancelled == true) throw LocalOps.Cancelled()
+                        (dst.smb as CloudFs).upload(part, to, isDir)
+                        if (!move) null else when (val sf = src.smb) {
+                            is ArchiveFs -> { sf.delete(listOf(from)); null }
+                            is CloudFs -> sf.deletePath(from, isDir, false)
+                            else -> delete(src, from)
+                        }
+                    } finally { stage.deleteRecursively() }
+                }
                 src.src == "smb" -> if (dst.src != "local") unsupported() else withContext(Dispatchers.IO) {
                     if (SafAccess.needs(to)) {
                         // назначение на съёмном томе под SAF: скачивание во временную папку и перенос в дерево
@@ -354,19 +369,25 @@ object FmIo {
 
     /** Копирование между этим телефоном и удалённым устройством ADB (пути разных устройств). */
     private suspend fun crossRemote(src: FmPane, dst: FmPane, from: String, to: String, isDir: Boolean, move: Boolean): String? {
+        // 26.11.2026: при переносе оригинал удаляется только когда размер КАЖДОГО файла совпал и все файлы папки скопированы
+        var sure = true
         if (src.src == "local") {
             suspend fun push(f: File, dest: String) {
-                if (f.isDirectory) { sh("mkdir -p ${q(dest)}"); f.listFiles().orEmpty().forEach { push(it, join(dest, it.name)) } }
-                else {
+                if (f.isDirectory) {
+                    sh("mkdir -p ${q(dest)}")
+                    val l = f.listFiles() ?: throw java.io.IOException(app.getString(R.string.fm_copy_unlisted, f.path))
+                    l.forEach { push(it, join(dest, it.name)) }
+                } else {
                     sh("mkdir -p ${q(dest.substringBeforeLast('/', "").ifEmpty { "/" })}")
                     val tmp = "$dest.fmpart"
-                    f.inputStream().use { Adb.pushStream(it, f.length(), tmp) }
+                    if (!f.inputStream().use { Adb.pushStream(it, f.length(), tmp) }) sure = false
                     failed(sh("mv -f ${q(tmp)} ${q(dest)} 2>&1"))?.let { throw java.io.IOException(it) }
                 }
             }
             withContext(Dispatchers.IO) { push(File(from), to) }
-            if (move) File(from).deleteRecursively()
+            if (move) { if (!sure) return s(R.string.fm_copy_unverified); File(from).deleteRecursively() }
         } else {
+            var files = 0
             suspend fun pull(path: String, dir: Boolean, dest: File) {
                 if (dir) {
                     dest.mkdirs()
@@ -375,11 +396,20 @@ object FmIo {
                 } else {
                     dest.parentFile?.mkdirs()
                     val tmp = File(dest.parentFile, dest.name + ".fmpart")
-                    try { Adb.pull(path, tmp); if (dest.exists()) dest.delete(); if (!tmp.renameTo(dest)) throw java.io.IOException("rename failed") } catch (e: Throwable) { tmp.delete(); throw e }
+                    try { if (!Adb.pull(path, tmp)) sure = false; if (dest.exists()) dest.delete(); if (!tmp.renameTo(dest)) throw java.io.IOException("rename failed") } catch (e: Throwable) { tmp.delete(); throw e }
+                    files++
                 }
             }
             pull(from, isDir, File(to))
-            if (move) sh("rm -rf ${q(from)} 2>&1")
+            if (move) {
+                if (isDir) {
+                    // список папки мог прийти не весь: на устройстве не должно быть больше файлов, чем скопировано
+                    val there = runCatching { sh("find ${q(from)} ! -type d 2>/dev/null | wc -l", 180_000L).trim().toInt() }.getOrDefault(-1)
+                    if (there < 0 || there > files) sure = false
+                }
+                if (!sure) return s(R.string.fm_copy_unverified)
+                failed(sh("rm -rf ${q(from)} 2>&1", 180_000L))?.let { return it }
+            }
         }
         return null
     }

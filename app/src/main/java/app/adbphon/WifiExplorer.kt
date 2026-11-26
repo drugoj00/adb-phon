@@ -179,13 +179,13 @@ object WifiExplorer {
 
 /** «Добавить устройство»: метка, адрес и пароль; «Тест» проверяет связь, «Сохранить» запоминает устройство постоянно. */
 @Composable
-fun WifiDeviceDialog(edit: NetConn?, preHost: String, preName: String, close: () -> Unit) {
+fun WifiDeviceDialog(edit: NetConn?, preHost: String, preName: String, close: () -> Unit, authFailed: Boolean = false) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(edit?.name ?: preName) }
     var host by remember { mutableStateOf(edit?.let { WifiExplorer.hostText(it) } ?: preHost) }
-    var pass by remember { mutableStateOf(edit?.pass.orEmpty()) }
-    var test by remember { mutableStateOf<String?>(null) }
+    var pass by remember { mutableStateOf(if (authFailed) "" else edit?.pass.orEmpty()) }
+    var test by remember { mutableStateOf<String?>(if (authFailed) ctx.getString(R.string.wf_auth_again) else null) }
     var testOk by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     fun build(): NetConn { val url = WifiExplorer.normalize(host); return NetConn("dav", url, 0, if (pass.isBlank()) "" else "adb", pass, "", WifiExplorer.TAG, name.trim()) }

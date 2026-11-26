@@ -105,7 +105,7 @@ fun PeopleSection() {
             Text(stringResource(R.string.call_title), fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 HintTitle(stringResource(R.string.call_listen), stringResource(R.string.call_hint), Modifier.weight(1f), titleSize = 13.sp, titleWeight = null)
-                Switch(listen, { listen = it; CallListen.setEnabled(ctx, it) })
+                Switch(listen, { listen = it; CallListen.setEnabled(ctx, it) }, thumbContent = swCheck(listen))
             }
             CField(stringResource(R.string.call_myname), myName, { myName = it; Calls.setMyName(ctx, it) })
             people.toList().forEach { p ->

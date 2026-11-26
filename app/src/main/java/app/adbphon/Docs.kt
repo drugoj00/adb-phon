@@ -252,6 +252,27 @@ fun TextEditor(onClose: () -> Unit) {
             }
             return
         }
+        // 26.11.2026: карта памяти без ADB и root: запись только через выданный доступ к карте, с проверкой размера
+        if (MediaSrc.local && SafAccess.needs(e.path)) {
+            val bytes = tv.text.toByteArray(Charset.forName(enc))
+            msg = ctx.getString(R.string.ed_saving_net)
+            edScope.launch {
+                if (!SafAccess.ensure(e.path)) { msg = ctx.getString(R.string.ed_save_failed, ctx.getString(R.string.saf_not_granted)); return@launch }
+                val err = withContext(Dispatchers.IO) { runCatching {
+                    if (backup && SafAccess.stat(e.path) != null) {
+                        val bak = e.path + ".bak"
+                        if (SafAccess.stat(bak) == null) SafAccess.touch(bak)
+                        SafAccess.openIn(e.path).use { i -> SafAccess.openOut(bak).use { o -> i.copyTo(o) } }
+                    }
+                    if (SafAccess.stat(e.path) == null) SafAccess.touch(e.path)
+                    SafAccess.openOut(e.path).use { it.write(bytes) }
+                    val got = SafAccess.stat(e.path)?.size
+                    if (got != bytes.size.toLong()) error("size " + got + " != " + bytes.size)
+                }.exceptionOrNull() }
+                if (err == null) { dirty = false; msg = ctx.getString(R.string.ed_saved) } else msg = ctx.getString(R.string.ed_save_failed, err.message ?: "")
+            }
+            return
+        }
         val net = if (MediaSrc.local) null else MediaSrc.fs as? KeepFs
         runCatching {
             if (backup && f.exists() && net == null) f.copyTo(File(f.path + ".bak"), overwrite = true)

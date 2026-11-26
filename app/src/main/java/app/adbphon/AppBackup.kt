@@ -153,6 +153,7 @@ object AppBackup {
         val iconsDir = File(ctx.filesDir, "icons")
         val iconsTotal = iconsDir.listFiles()?.filter { it.isFile && it.length() < 400_000 }?.sumOf { it.length() } ?: 0L
         if (iconsTotal <= MAX_ICONS_BYTES) root.put("icons", iconsToJson(ctx)) else skipped += "icons (" + (iconsTotal / 1048576) + " MB)"
+        root.put("media", mediaToJson(ctx, skipped))
         root.put("skipped", JSONArray(skipped))
         if (secrets) {
             val files = JSONObject()
@@ -271,6 +272,32 @@ object AppBackup {
         return o
     }
 
+    /** 26.11.2026: свои картинки звонков и рингтоны (filesDir/callpics, filesDir/ringtones): не настройки, но без них после восстановления выбор пустой. */
+    private val MEDIA_DIRS = listOf("callpics", "ringtones")
+    private const val MAX_MEDIA_FILE = 3L * 1024 * 1024
+    private const val MAX_MEDIA_BYTES = 6L * 1024 * 1024
+
+    private fun mediaToJson(ctx: Context, skipped: MutableList<String>): JSONObject {
+        val o = JSONObject()
+        var total = 0L
+        for (d in MEDIA_DIRS) File(ctx.filesDir, d).listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") }?.sortedBy { it.length() }?.forEach { f ->
+            if (f.length() > MAX_MEDIA_FILE || total + f.length() > MAX_MEDIA_BYTES) skipped += d + "/" + f.name + " (" + (f.length() / 1048576) + " MB)"
+            else { total += f.length(); o.put(d + "/" + f.name, Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)) }
+        }
+        return o
+    }
+
+    /** Файлы только добавляются и заменяются: своё, чего нет в копии, не удаляется. */
+    private fun mediaApply(ctx: Context, o: JSONObject?) {
+        if (o == null) return
+        o.keys().forEach { k ->
+            val d = k.substringBefore('/'); val n = k.substringAfter('/', "")
+            if (d !in MEDIA_DIRS || n.isEmpty() || n.contains('/') || n.contains('\\') || n == "." || n == "..") return@forEach
+            val dir = File(ctx.filesDir, d).apply { mkdirs() }
+            writeFileAtomic(File(dir, n), Base64.decode(o.getString(k), Base64.NO_WRAP))
+        }
+    }
+
     private fun iconsApply(ctx: Context, o: JSONObject?) {
         if (o == null) return
         val dir = File(ctx.filesDir, "icons")
@@ -318,6 +345,7 @@ object AppBackup {
                 NetStore.replaceAll(ctx, (0 until net.length()).map { i -> net.getJSONObject(i).let { o -> NetConn(o.getString("k"), o.getString("h"), o.optInt("p", 0), o.optString("u"), o.optString("w"), o.optString("d"), o.optString("v"), o.optString("n")) } })
             }
             iconsApply(ctx, j.optJSONObject("icons"))
+            mediaApply(ctx, j.optJSONObject("media"))
             val files = j.optJSONObject("files")
             files?.keys()?.forEach { n -> if (n in SECRET_FILES) writeFileAtomic(File(ctx.filesDir, n), Base64.decode(files.getString(n), Base64.NO_WRAP)) }
         } catch (e: Throwable) {

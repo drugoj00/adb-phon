@@ -36,6 +36,7 @@ class App : Application() {
         PerfLog.t("Adb.init") { Adb.init(this) }
         PerfLog.t("NetKeep.start") { NetKeep.start(this) }
         PerfLog.t("VersionKeeper.backupSelf") { VersionKeeper.backupSelf(this) }
+        PerfLog.t("CloudDaemon.prewarm") { runCatching { CloudDaemon.prewarm(this) } }
         PerfLog.mark("App.onCreate конец")
     }
 }

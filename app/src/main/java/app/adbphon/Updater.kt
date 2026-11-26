@@ -35,6 +35,21 @@ object Updater {
         }
     }
 
+    /** 26.11.2026: описание одного выпуска по метке (например «clouds-1.3»). Блокирующий вызов. */
+    fun releaseBody(tag: String): String {
+        val c = URL(GhFeed.map("https://api.github.com/repos/" + REPO + "/releases/tags/" + tag)).openConnection() as HttpURLConnection
+        c.connectTimeout = 8_000
+        c.readTimeout = 12_000
+        c.setRequestProperty("Accept", "application/vnd.github+json")
+        c.setRequestProperty("User-Agent", "ADB-phon")
+        try {
+            if (c.responseCode != 200) throw IllegalStateException("HTTP ${c.responseCode}")
+            return org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optString("body")
+        } finally {
+            c.disconnect()
+        }
+    }
+
     private fun fetchApi(): List<Release> {
         val c = URL(GhFeed.map(RELEASES)).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000

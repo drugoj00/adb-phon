@@ -1,5 +1,7 @@
 package app.adbphon
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +51,10 @@ fun StateButton(on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
     if (on) Button(onClick = onClick, modifier = modifier, contentPadding = contentPadding, content = content)
     else OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = contentPadding, content = content)
 }
+
+/** 26.11.2026 (ТОДО 29.10): у включённого переключателя в кружке видна галочка, а не только цвет. */
+fun swCheck(on: Boolean): (@Composable () -> Unit)? =
+    if (on) ({ androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Check, null, Modifier.size(androidx.compose.material3.SwitchDefaults.IconSize)) }) else null
 
 /** Приподнятая кнопка: то же, что у Material3, но с формой [AppUi.BTN_SHAPE] и откликом на нажатие, как у остальных кнопок (см. Haptics.kt). */
 @Composable

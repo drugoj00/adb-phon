@@ -114,8 +114,13 @@ object FolderCounts {
 
     /** Локальная папка: число папок и файлов (один уровень); null: не читается. */
     fun localCount(d: File): Pair<Int, Int>? {
-        val ls = d.listFiles() ?: return null
         var a = 0; var b = 0
+        val ls = d.listFiles() ?: run {
+            // 26.11.2026: карта памяти без ADB и root: подсчёт через выданный доступ
+            if (!SafAccess.needs(d.path) || !SafAccess.covered(d.path)) return null
+            val k = runCatching { SafAccess.children(d.path) }.getOrNull() ?: return null
+            return k.count { it.dir && it.name != FmTrash.DIR } to k.count { !it.dir }
+        }
         for (x in ls) { if (x.name == FmTrash.DIR) continue; if (x.isDirectory) a++ else b++ }
         return a to b
     }
