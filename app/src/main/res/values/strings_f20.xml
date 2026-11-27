@@ -47,6 +47,11 @@
     <string name="sb_down">Down</string>
     <string name="sb_done">Done</string>
     <string name="set_check_color">Mark colour</string>
-    <string name="set_check_color_hint">Colour of a marked square. A folder that contains marked items is always orange.</string>
+    <string name="set_check_color_hint">Colour of a marked square. The squares below are only an example, they are not buttons.</string>
     <string name="check_theme">As theme</string>
+    <string name="check_ex_title">Example:</string>
+    <string name="check_ex_on">marked</string>
+    <string name="check_ex_parent">open folder marked as a whole (always orange)</string>
+    <string name="check_ex_partial">the folder itself is not marked, something inside it is</string>
+    <string name="check_ex_off">not marked</string>
 </resources>
