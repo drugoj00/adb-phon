@@ -42,8 +42,11 @@
     <string name="sb_unpin">Прибрати з панелі</string>
     <string name="sb_customize">Налаштувати панель…</string>
     <string name="sb_menu_title">Кнопки панелі</string>
-    <string name="sb_menu_hint">Позначка: кнопка на бічній панелі. Натисни на назву, щоб виконати дію. Стрілки змінюють порядок на панелі.</string>
+    <string name="sb_menu_hint">Зафарбований квадратик: кнопка є на бічній панелі. Натисни на назву, щоб виконати дію. Стрілки змінюють порядок на панелі.</string>
     <string name="sb_up">Вище</string>
     <string name="sb_down">Нижче</string>
     <string name="sb_done">Готово</string>
+    <string name="set_check_color">Колір позначки</string>
+    <string name="set_check_color_hint">Колір зафарбованого квадратика. Папка, всередині якої є позначене, завжди помаранчева.</string>
+    <string name="check_theme">Як у темі</string>
 </resources>

@@ -7,7 +7,7 @@
     <string name="bt_forget_one">Забути пристрій</string>
     <string name="bt_forget_one_q">Прибрати «%1$s» (%2$s) зі спарених?</string>
     <string name="bt_forget_yes">Забути</string>
-    <string name="set_open_files_hint">Запам’ятаний застосунок для типу файлу (наприклад, .apk), який ти вибрав із галочкою «Запам’ятати». «Забути» повертає питання. Пункт видно, лише поки щось запам’ятано.</string>
+    <string name="set_open_files_hint">Запам’ятаний застосунок для типу файлу (наприклад, .apk), який ти вибрав, позначивши «Запам’ятати». «Забути» повертає питання. Пункт видно, лише поки щось запам’ятано.</string>
     <string name="hint_more">Докладніше</string>
     <string name="pw_show">Показати пароль</string>
     <string name="pw_hide">Сховати пароль</string>

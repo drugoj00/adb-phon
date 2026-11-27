@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="papirus_on">Увімкнути клавіатуру Папірус</string>
+    <string name="papirus_done">Клавіатуру Папірус увімкнено</string>
+    <string name="papirus_none">На пристрої немає клавіатури Папірус</string>
+    <string name="papirus_fail">Не вдалося увімкнути Папірус: %1$s</string>
+    <string name="papirus_ask">На пристрої немає клавіатури Папірус. Завантажити (2 МБ), встановити й увімкнути?</string>
+    <string name="papirus_install">Встановити</string>
+    <string name="papirus_loading">Завантажую та встановлюю Папірус…</string>
+    <string name="papirus_install_fail">Папірус не встановився: %1$s</string>
+    <string name="papirus_wrong_file">завантажений файл не наш Папірус</string>
+    <string name="papirus_no_copy">файл не вдалося передати на пристрій</string>
+</resources>

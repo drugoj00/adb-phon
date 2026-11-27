@@ -1275,6 +1275,8 @@
     <string name="tr_counting">Підрахунок…</string>
     <string name="tr_open_dlg">Відкрити вікно кошика…</string>
     <string name="tr_none">Порожньо</string>
+    <string name="tr_show_all">Показати всі: %2$d</string>
+    <string name="tr_shown_part">Показано %1$d з %2$d. Натисніть, щоб відкрити папку списком</string>
     <string name="tr_drive">Хмарний диск</string>
     <string name="ap_need_root">Немає доступу. Потрібен root.</string>
     <string name="tr_restore_fail">Не вдалося відновити, файл залишився в кошику.</string>
@@ -1883,4 +1885,5 @@
     <string name="panel_black">Чорний</string>
     <string name="panel_custom">Свій колір</string>
     <string name="panel_bright">Яскравість</string>
+    <string name="fm_twin_done">У другій панелі відкрита та сама тека</string>
 </resources>
