@@ -47,6 +47,11 @@
     <string name="sb_down">Нижче</string>
     <string name="sb_done">Готово</string>
     <string name="set_check_color">Колір позначки</string>
-    <string name="set_check_color_hint">Колір зафарбованого квадратика. Папка, всередині якої є позначене, завжди помаранчева.</string>
+    <string name="set_check_color_hint">Колір позначеного квадратика. Квадратики нижче лише зразок, це не кнопки.</string>
     <string name="check_theme">Як у темі</string>
+    <string name="check_ex_title">Зразок:</string>
+    <string name="check_ex_on">позначено</string>
+    <string name="check_ex_parent">розкрита папка, позначена повністю (завжди помаранчева)</string>
+    <string name="check_ex_partial">саму папку не позначено, позначено щось усередині</string>
+    <string name="check_ex_off">не позначено</string>
 </resources>
