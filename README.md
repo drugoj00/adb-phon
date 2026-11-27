@@ -26,7 +26,7 @@ SHA-256: `71bc5ec0a6843b0eb29fb592312e437cbbcacd8b19e9391d0c6c00f1c2f45d24`
 - The "Up" button works in the tree
 - The "=" button opens the same folder in the other panel
 - Marks without checkmarks, with your own color if you like
-- Papirus keyboard: install and turn on with one button
+- Papirus keyboard button: turns it on, or offers to install it if missing
 - The narrow font stays off after a restart
 - In landscape the keyboard no longer covers the name field
 - Bug fixes
