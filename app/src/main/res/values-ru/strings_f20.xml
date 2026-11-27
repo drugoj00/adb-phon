@@ -47,6 +47,11 @@
     <string name="sb_down">Ниже</string>
     <string name="sb_done">Готово</string>
     <string name="set_check_color">Цвет отметки</string>
-    <string name="set_check_color_hint">Цвет закрашенного квадратика. Папка, внутри которой есть отмеченное, всегда оранжевая.</string>
+    <string name="set_check_color_hint">Цвет отмеченного квадратика. Квадратики ниже только образец, это не кнопки.</string>
     <string name="check_theme">Как в теме</string>
+    <string name="check_ex_title">Образец:</string>
+    <string name="check_ex_on">отмечено</string>
+    <string name="check_ex_parent">раскрытая папка, отмечена целиком (всегда оранжевая)</string>
+    <string name="check_ex_partial">сама папка не отмечена, отмечено что-то внутри</string>
+    <string name="check_ex_off">не отмечено</string>
 </resources>
