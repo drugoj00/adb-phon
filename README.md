@@ -16,19 +16,14 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 24.0.** [ADB-phon-24.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 25.0.** [ADB-phon-25.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `71bc5ec0a6843b0eb29fb592312e437cbbcacd8b19e9391d0c6c00f1c2f45d24`
+SHA-256: `b685e976403b7634d8457e0142958f2d9b8e906c68ba6a02af7ea70dd0a4084a`
 
-## What's new in 24.0
+## What's new in 25.0
 
-- A long folder in the tree no longer stops at 200 rows: "Show all"
-- The "Up" button works in the tree
-- The "=" button opens the same folder in the other panel
-- Marks without checkmarks, with your own color if you like
-- Papirus keyboard button: turns it on, or offers to install it if missing
-- The narrow font stays off after a restart
-- In landscape the keyboard no longer covers the name field
+- "Mark colour": the sample squares now have captions, and the hint is fixed
+- The rotate button in "Full screen" mode now looks like the panel switch button
 - Bug fixes
 
 **Requirements and limits**
@@ -97,7 +92,7 @@ SHA-256: `71bc5ec0a6843b0eb29fb592312e437cbbcacd8b19e9391d0c6c00f1c2f45d24`
 
 ## Quick start
 
-1. Download ADB-phon-24.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-25.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8-10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
