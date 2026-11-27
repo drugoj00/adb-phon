@@ -113,7 +113,7 @@ fun PermsDialog(vm: MainViewModel) {
                 items(vm.perms, key = { it.first }) { (name, granted) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(name.removePrefix("android.permission."), Modifier.weight(1f), fontSize = 12.sp)
-                        Switch(granted, { vm.setPerm(app.pkg, name, it) }, thumbContent = swCheck(granted))
+                        Switch(granted, { vm.setPerm(app.pkg, name, it) })
                     }
                 }
             }
@@ -497,7 +497,7 @@ private fun PadArea(vm: MainViewModel, pad: @Composable () -> Unit) {
 @Composable
 private fun HelperSwitch(vm: MainViewModel, extraHint: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Switch(vm.helperOn, { vm.setHelper(it) }, thumbContent = swCheck(vm.helperOn))
+        Switch(vm.helperOn, { vm.setHelper(it) })
         val hh = listOfNotNull(if (!vm.helperOn) stringResource(R.string.helper_hint) else null, extraHint).joinToString("\n\n")
         if (hh.isEmpty()) Text(stringResource(R.string.helper_switch), fontSize = 13.sp, modifier = Modifier.weight(1f))
         else HintTitle(stringResource(R.string.helper_switch), hh, Modifier.weight(1f), titleSize = 13.sp, titleWeight = null, hintSize = 11.sp)
@@ -997,7 +997,6 @@ fun EqChoices(items: List<EqChoice>, perRow: Int = items.size, minH: androidx.co
                             .clickable { c.onClick() }.padding(horizontal = if (minH < 40.dp) 3.dp else 6.dp, vertical = if (minH < 40.dp) 3.dp else 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (c.selected) Text("✓", Modifier.align(Alignment.TopStart), fontSize = 10.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.onPrimary)
                         Text(c.label, fontSize = fontSp.sp, lineHeight = (fontSp + 3).sp, maxLines = if (minH < 40.dp) 1 else 2, textAlign = TextAlign.Center,
                             color = if (c.selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground)
                     }

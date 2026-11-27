@@ -52,11 +52,11 @@ fun OpenWithDialog(p: FmPane, f: FmItem, close: () -> Unit) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Column(Modifier.heightIn(max = 320.dp).barScroll(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (builtin) Row(Modifier.fillMaxWidth().clickable { if (always) UiPrefs.setOpenAs(ctx, key, "builtin"); close(); Fm.openBuiltinForce(p, f) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.oa_builtin) + if (cur == "builtin") "  ✓" else "", fontSize = 15.sp)
+                        Text(stringResource(R.string.oa_builtin) + if (cur == "builtin") "  ■" else "", fontSize = 15.sp)
                     }
                     apps.forEach { (pkg, label) ->
                         Row(Modifier.fillMaxWidth().clickable { if (always) UiPrefs.setOpenAs(ctx, key, pkg); close(); Fm.openWith(p, f, pkg) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AppIcon(pkg, 32.dp); Text(label + if (cur == pkg) "  ✓" else "", maxLines = 1, fontSize = 15.sp)
+                            AppIcon(pkg, 32.dp); Text(label + if (cur == pkg) "  ■" else "", maxLines = 1, fontSize = 15.sp)
                         }
                     }
                     if (apps.isEmpty() && !builtin) Text(stringResource(R.string.fm_no_app), fontSize = 13.sp)

@@ -185,7 +185,7 @@ fun SetSwitchRow(checked: Boolean, onChange: (Boolean) -> Unit, title: String, h
         ) {
             FloorText(title, Modifier.weight(1f), fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 1.1.em)
             if (hint.isNotBlank()) SetInfoButton(open) { open = !open }
-            androidx.compose.material3.Switch(checked, null, enabled = enabled, colors = setSwitchColors(), thumbContent = swCheck(checked))
+            androidx.compose.material3.Switch(checked, null, enabled = enabled, colors = setSwitchColors())
         }
         AnimatedVisibility(open && hint.isNotBlank(), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             FloorText(hint, Modifier.padding(horizontal = 14.dp, vertical = 4.dp), fontSize = 12.sp, color = cs.onSurface.copy(alpha = .7f))
@@ -295,6 +295,7 @@ private val SET_TITLES: Map<String, List<Int>> = mapOf(
     "thumbs" to listOf(R.string.set_thumbs),
     "apk_icon" to listOf(R.string.set_apk_icon),
     "arrow_color" to listOf(R.string.set_arrow_color),
+    "check_color" to listOf(R.string.set_check_color),
     "compact_tree" to listOf(R.string.set_compact_tree),
     "fm_sub" to listOf(R.string.set_fm_sub),
     "delete" to listOf(R.string.ds_confirm, R.string.ft_switch, R.string.ft_keep, R.string.ft_max),
@@ -423,6 +424,7 @@ fun SetItem(key: String, vm: MainViewModel) {
         "thumbs" -> FilesThumbsSetting()
         "apk_icon" -> FilesApkIconSetting()
         "arrow_color" -> FilesArrowColorSetting()
+        "check_color" -> FilesCheckColorSetting()
         "compact_tree" -> FilesCompactTreeSetting()
         "fm_sub" -> FilesSubLineSetting()
         "delete" -> FilesDeleteSection()

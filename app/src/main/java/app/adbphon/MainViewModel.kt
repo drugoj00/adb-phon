@@ -844,6 +844,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 27.11.2026: включить клавиатуру «Папирус» на подключённом устройстве. */
+    fun papirus() = launchBusy {
+        val out = runCatching { Adb.shell(PapirusIme.CMD) }.getOrElse { it.message ?: "error" }
+        if (PapirusIme.parse(out) == PapirusIme.Result.NOT_INSTALLED) papirusAsk = true
+        else { val (id, args) = PapirusIme.message(out); message = t(id, *args) }
+    }
+
+    /** Папируса на устройстве нет: спрашиваем, ставить ли. */
+    var papirusAsk by mutableStateOf(false)
+
+    fun papirusInstall() = launchBusy {
+        message = t(R.string.papirus_loading)
+        val result = runCatching {
+            val apk = withContext(Dispatchers.IO) { PapirusIme.download(Lang.wrap(ctx, lang)) }
+            // файл отправляется на устройство и ставится обычной командой: потоковая установка на некоторых связях ждёт конца ответа 2 минуты
+            val sent = apk.inputStream().use { Adb.pushStream(it, apk.length(), PapirusIme.TMP) }
+            apk.delete()
+            if (!sent) error(t(R.string.papirus_no_copy))
+            val r = Adb.shell(PapirusIme.INSTALL_CMD, 180_000)
+            if (!PapirusIme.installed(r)) error(PapirusIme.lastLine(r))
+            Adb.shell(PapirusIme.CMD)
+        }
+        message = result.fold({ val (id, args) = PapirusIme.message(it); t(id, *args) }, { t(R.string.papirus_install_fail, it.message ?: it.javaClass.simpleName) })
+    }
+
     /** Одиночная команда быстрых настроек. */
     fun quick(cmd: String) = launchBusy {
         val out = runCatching { Adb.shell(cmd) }.getOrElse { it.message ?: "error" }

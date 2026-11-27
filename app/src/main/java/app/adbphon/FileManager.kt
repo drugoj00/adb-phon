@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PushPin
@@ -234,6 +235,8 @@ class FmPane(val id: Int, start: String) {
     val collapsed = androidx.compose.runtime.mutableStateListOf<String>()
     /** Панель показывает корневой экран (список памятей, сети, облаков) вместо папки. */
     var root by mutableStateOf(false)
+    /** 26.11.2026 (mikolkavod): нажатие «Вверх», когда на панели дерево устройств. */
+    var upTick by mutableStateOf(0)
     /** Корень облака с корзиной: «top» (две строки «Корзина» и «Облачный диск»), «trash» (список удалённого), «drive» (обычная папка). */
     var cloudView by mutableStateOf("top")
     val trashItems = androidx.compose.runtime.mutableStateListOf<CloudTrash.TItem>()
@@ -259,6 +262,7 @@ sealed class FmDlg {
     class FileIcon(val key: String, val name: String) : FmDlg()
     class NewFolder(val dir: String? = null) : FmDlg()
     class NewFile(val dir: String? = null) : FmDlg()
+    class Papirus(val dev: AdbDev) : FmDlg()
     class NewZip(val dir: String? = null) : FmDlg()
     class Rename(val pane: FmPane, val name: String) : FmDlg()
     class Delete(val pane: FmPane, val names: List<String>, val plan: DelPlan? = null, val note: String? = null, val force: Boolean = false) : FmDlg()
@@ -1179,8 +1183,32 @@ object Fm {
     }
     /** Виртуальный вид («Корзина» или две строки): настоящие файлы корня не видны, поэтому действия над ними запрещены. */
     fun virt(p: FmPane): Boolean = cloudRoot(p) && p.cloudView != "drive"
+    /** 27.11.2026 (wad72): «=»: во второй панели открывается то же самое, что в [p]: та же папка и те же раскрытые ветки дерева. */
+    fun sameInOther(p: FmPane) {
+        val o = panes[1 - p.id]
+        o.selected = emptySet()
+        if (p.root) {
+            o.rootOpen.clear(); o.rootOpen.addAll(p.rootOpen)
+            o.rootPending.clear(); o.rootPending.addAll(p.rootPending)
+            o.rootSel = p.rootSel
+            fmShowRoot(o)
+            FmRootCfg.saveOpen(sctx, o)
+            p.rootOpen.lastOrNull()?.let { FmRootCfg.scrollTarget[o.id] = it }
+        } else {
+            fmLeaveRoot(o)
+            if (o.src != p.src || o.smb !== p.smb) { o.back.clear(); o.items = emptyList() }
+            o.src = p.src; o.smb = p.smb; o.net = p.net; o.auto = p.auto; o.cloudView = p.cloudView
+            o.error = null; o.parked = null; o.parkedErr = null
+            o.treeSrc = p.treeSrc
+            o.expanded.clear(); o.expanded.addAll(p.expanded)
+            o.kids.clear(); o.kids.putAll(p.kids)
+            load(o, p.path, remember = false)
+        }
+        say(str(R.string.fm_twin_done))
+    }
+
     fun up(p: FmPane) {
-        if (p.root) return
+        if (p.root) { p.upTick++; return }
         if (cloudRoot(p) && p.cloudView != "top") { p.cloudView = "top"; p.selected = emptySet(); FmRootCfg.sel.clear(); return }
         if (p.smb is ArchiveFs && p.src == "smb" && p.path.trim('/').isEmpty()) { exitArchive(p); return }
         if (fmIsSourceRoot(p, p.path)) { fmShowRoot(p); return }
@@ -2300,6 +2328,12 @@ object FmButtons {
      * По умолчанию на панели основные кнопки (как было при установке); первый запуск 15.0: всё, что раньше жило под «Ещё», уходит в список «Добавить кнопку».
      */
     private var migrate = false
+    /** 27.11.2026: кнопка «=» показывается на панели один раз и тем, у кого она была в спрятанных; дальше её можно убрать, как любую. */
+    fun showTwinOnce(ctx: Context) {
+        if (sp(ctx).getBoolean("twin_shown", false)) return
+        sp(ctx).edit().putBoolean("twin_shown", true).apply()
+        show(ctx, key(ctx, R.string.fm_same))
+    }
     fun applyDefaults(ctx: Context, allKeys: List<String>, mainKeys: Set<String>) {
         if (!migrate) return
         migrate = false
@@ -2422,6 +2456,7 @@ private fun rememberFmActions(): List<FmAction> {
     remember { FmButtons.load(c); 0 }
     val allA = rememberFmActionsAll()
     FmButtons.applyDefaults(c, allA.map { FmButtons.key(c, it.label) }, fmMainLabels.map { FmButtons.key(c, it) }.toSet())
+    FmButtons.showTwinOnce(c)
     val hid = FmButtons.hidden
     return FmButtons.ordered(c, allA).filter { FmButtons.key(c, it.label) !in hid }
 }
@@ -2439,6 +2474,7 @@ fun rememberFmActionsAll(): List<FmAction> {
     val sctx = LocalContext.current
     return listOf(
         FmAction(Icons.Filled.ArrowUpward, R.string.fm_up) { Fm.up(p) },
+        FmAction(Icons.Filled.DragHandle, R.string.fm_same) { Fm.sameInOther(p) },
         FmAction(Icons.Filled.Refresh, R.string.fm_refresh) { if (p.root) FmRootCfg.refreshAll(Fm.sctx) else Fm.load(p, remember = false) },
         FmAction(Icons.Filled.ContentCopy, R.string.fm_b_copy, sel) { if (rootSel) RootSelOps.transfer(p, false) else RootSelOps.fromList(p, false) },
         FmAction(Icons.Filled.DriveFileMove, R.string.fm_b_move, sel) { if (rootSel) RootSelOps.transfer(p, true) else RootSelOps.fromList(p, true) },
@@ -2462,7 +2498,6 @@ fun rememberFmActionsAll(): List<FmAction> {
         FmAction(Icons.Filled.Lock, R.string.perm_title, sel && (p.src == "local" || p.src == "adb")) { Fm.dlg = FmDlg.Perms(p, Fm.targets(p)) },
         FmAction(Icons.Filled.FolderZip, R.string.fm_make_archive, sel) { Fm.dlg = FmDlg.MakeArchive(p, Fm.targets(p)) },
         FmAction(Icons.Filled.SwapHoriz, R.string.fm_swap) { val a = Fm.panes[0].path; val b = Fm.panes[1].path; Fm.load(Fm.panes[0], b, remember = false); Fm.load(Fm.panes[1], a, remember = false) },
-        FmAction(Icons.Filled.CompareArrows, R.string.fm_same) { Fm.load(o, p.path) },
         FmAction(Icons.Filled.SdStorage, R.string.fm_storage) { Fm.dlg = FmDlg.Storage() },
         FmAction(Icons.Filled.DeleteOutline, R.string.ft_menu) { Fm.active = p.id; Fm.dlg = FmDlg.FTrash() },
         FmAction(Icons.Filled.Dns, R.string.fm_source) { Fm.dlg = FmDlg.Source() },
@@ -2512,7 +2547,7 @@ fun MqText(text: String, active: Boolean, modifier: Modifier = Modifier, fontSiz
 /** 14.0: набор считается один раз для телефона и один раз для приставки (раньше каждое обращение строило пять множеств, а обращений на каждую перекомпоновку колонки кнопок десятки). */
 private val fmMainLabelsCache = arrayOfNulls<Set<Int>>(2)
 /** Главные кнопки узкой колонки (остальные в «Ещё»). */
-private val fmMainLabels: Set<Int> get() = fmMainLabelsCache[if (Marq.tv) 1 else 0] ?: ((setOf(R.string.fm_up, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
+private val fmMainLabels: Set<Int> get() = fmMainLabelsCache[if (Marq.tv) 1 else 0] ?: ((setOf(R.string.fm_up, R.string.fm_same, R.string.fm_b_copy, R.string.fm_b_move, R.string.fm_delete, R.string.fm_b_rename,
     R.string.fm_new_folder, R.string.fm_new_file, R.string.fm_select_all, R.string.fm_sort, R.string.fm_search, R.string.fm_storage) -
     // 9.2: на приставке шапка панели в три строки, поэтому «Перенести» и «Места» уходят в «Ещё» (функции остаются там)
     (if (Marq.tv) setOf(R.string.fm_b_move, R.string.fm_storage, R.string.fm_b_copy) else emptySet())) +
@@ -2727,7 +2762,7 @@ private fun FmMoreDialog(d: FmDlg.More, close: () -> Unit) {
     val ctx = LocalContext.current
     remember { FmButtons.load(ctx); 0 }
     val all = FmButtons.ordered(ctx, rememberFmActionsAll()).filter {
-        FmButtons.key(ctx, it.label) !in FmButtons.hidden && (!d.excl || (it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same))
+        FmButtons.key(ctx, it.label) !in FmButtons.hidden && (!d.excl || (it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap))
     }
     val n = FmButtons.shownCount.coerceIn(0, all.size)
     val keys = all.map { FmButtons.key(ctx, it.label) }
@@ -2869,7 +2904,7 @@ private fun FmStrip(actions: List<FmAction>, modifier: Modifier, sz: androidx.co
         Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val ctx0 = androidx.compose.ui.platform.LocalContext.current
             // 10.11.2026 (владелица): «Корзина файлов» и «История» убраны из полосы: обе есть в «домике» (корзина и «Недавние файлы»); «Обмен» и «Как здесь» тоже убраны («не нужны»)
-            val visible = actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }
+            val visible = actions.filter { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap }
             // 20.11.2026 (слово владелицы): на панели только выбранные кнопки; их больше, чем влезает: панель сама прокручивается, а «⋯» (добавить кнопку) закреплена под ними
             androidx.compose.runtime.SideEffect { FmButtons.shownCount = visible.size; FmButtons.stripKeys = visible.map { FmButtons.key(ctx0, it.label) } }
             val rk = visible.map { FmButtons.key(ctx0, it.label) }
@@ -2895,7 +2930,7 @@ private fun FmStripBox(actions: List<FmAction>, modifier: Modifier) {
         // 20.11.2026: «Масштаб кнопок панели» (авто / +15% / +30%) и «Компактные отступы» (освободилось место: верхняя граница размера кнопки 64 -> 72 dp при авто)
         val scaleF = FmSideScale.factor()
         val fitRows = ((maxHeight.value - 84f) / (44f * scaleF)).toInt().coerceAtLeast(1)
-        val onPanel = rememberFmActions().count { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap && it.label != R.string.fm_same }
+        val onPanel = rememberFmActions().count { it.label != R.string.ft_menu && it.label != R.string.fm_history && it.label != R.string.fm_swap }
         val rows = minOf(onPanel + 1, fitRows, 11)   // +1 «⋯»; один столбец — без деления на 2; больше 11 кнопок: прокрутка (размер кнопок не мельчает)
         val gap = 4.dp
         // высота = переключатель (2×sz + gap) + отступ + rows×sz + (rows-1) gap, без остатка снизу
@@ -3442,7 +3477,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
     val full = node?.path ?: FmIo.join(p.path, f.name)
     val selKey = if (depth > 0) nodePath.removePrefix(p.path.trimEnd('/') + "/") else f.name
     val sel by remember(selKey) { androidx.compose.runtime.derivedStateOf { p.selIdx.value.direct(selKey) } }
-    val part = false   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
+    val part by remember(selKey) { androidx.compose.runtime.derivedStateOf { f.isDir && p.selIdx.value.partial(selKey) } }
     val rowFr = remember { FocusRequester() }
     val chkFr = remember { FocusRequester() }
     val sctx = androidx.compose.ui.platform.LocalContext.current
@@ -3584,7 +3619,7 @@ private fun FmRow(p: FmPane, f: FmItem, node: TNode? = null) {
                 if (sub.isNotEmpty()) MqText(sub, active = hovered || pressed || focused || sel, fontSize = if (dense) 11.sp else 10.sp, lineHeight = if (dense) 13.sp else 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), fontFamily = UiPrefs.listFont)
             }
             // 10.0 (fm1): квадратик крупнее (26 dp, приставка 32), нажимается вся правая часть строки (SelZone)
-            Box(Modifier.padding(start = 4.dp, end = 4.dp)) { SelBox(sel, part, tvRow) }
+            Box(Modifier.padding(start = 4.dp, end = 4.dp)) { SelBox(sel, part, tvRow, parent = sel && isOpen) }
         }
         SelZone(tvRow, chkFr, rowFr, stringResource(if (sel) R.string.fm_unselect else R.string.fm_select), onLong = { Fm.active = p.id; p.menuFor = menuKey }) { Fm.active = p.id; Fm.toggleSel(p, selKey) }
         FmItemMenu(p, f, node)
@@ -3770,6 +3805,10 @@ private fun FmDialogs() {
         is FmDlg.AndroidScreen -> AndroidScreenDialog(d.dev, close)
         is FmDlg.CallCode -> CallCodeDialog(d.name, d.ip, d.voice, close)
         is FmDlg.AndroidConsole -> AndroidConsoleDialog(d.dev, close)
+        is FmDlg.Papirus -> {
+            val app = androidx.compose.ui.platform.LocalContext.current.applicationContext
+            PapirusAskDialog(d.dev.title, close) { fmPapirusInstall(app, d.dev) }
+        }
         is FmDlg.SearchResult -> PathListDlg(R.string.fm_search, d.list, R.string.fm_nothing, close, subtitle = stringResource(R.string.fm_found, d.list.size) + (if (d.where.isNotEmpty()) "\n" + stringResource(R.string.fm_search_in, d.where) else "")) {
             Fm.openFound(d, it)
         }
@@ -3821,6 +3860,14 @@ private fun FmDialogs() {
 @Composable
 private fun TextDlg(title: Int, init: String, hint: Int, close: () -> Unit, ok: (String) -> Unit) {
     var t by remember { mutableStateOf(init) }
+    // 27.11.2026 (wad72): горизонтально клавиатура закрывала окно, а окно не двигалось
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    if (!Marq.tv && cfg.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE && cfg.screenHeightDp < 520) {
+        TopInputDialog(stringResource(title), close, { close(); ok(t.trim()) }) {
+            OutlinedTextField(t, { t = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(hint), maxLines = 1) })
+        }
+        return
+    }
     LAlertDialog(
         onDismissRequest = close, title = { Text(stringResource(title)) },
         text = { OutlinedTextField(t, { t = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(hint), maxLines = 1) }) },
@@ -4078,7 +4125,7 @@ private fun NewZipDialog(dir: String?, close: () -> Unit) {
 fun FmAddButtonDialog(onClose: () -> Unit) {
     val ctx = LocalContext.current
     remember { FmButtons.load(ctx); 0 }
-    val skip = setOf(R.string.ft_menu, R.string.fm_history, R.string.fm_swap, R.string.fm_same)
+    val skip = setOf(R.string.ft_menu, R.string.fm_history, R.string.fm_swap)
     val all = FmButtons.ordered(ctx, rememberFmActionsAll()).filter { it.label !in skip }.distinctBy { FmButtons.key(ctx, it.label) }
     val on = all.filter { FmButtons.key(ctx, it.label) !in FmButtons.hidden }
     val off = all.filter { FmButtons.key(ctx, it.label) in FmButtons.hidden }

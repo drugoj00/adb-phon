@@ -884,7 +884,7 @@ fun ConnectScreen(vm: MainViewModel) {
                     if (!hasSu) Text(stringResource(R.string.root_none), fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     Button(onClick = { vm.connectRoot() }, enabled = !vm.busy && hasSu) { Text(stringResource(R.string.root_connect_btn)) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        androidx.compose.material3.Switch(useRoot && hasSu, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } }, enabled = hasSu, thumbContent = swCheck(useRoot && hasSu))
+                        androidx.compose.material3.Switch(useRoot && hasSu, { useRoot = it; Cfg.setUseRoot(ctxR, it); if (!it) { Adb.disableRoot(); Hooks.refresh() } }, enabled = hasSu)
                         Text(stringResource(R.string.root_use_title), fontSize = 14.sp, modifier = Modifier.weight(1f))
                     }
                 }
@@ -1535,6 +1535,7 @@ fun DeviceScreen(vm: MainViewModel) {
     var dpi by remember { mutableStateOf("") }
     var reboot by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { if (vm.deviceInfo.isEmpty()) vm.refreshInfo() }
+    if (vm.papirusAsk) PapirusAskDialog("", { vm.papirusAsk = false }) { vm.papirusInstall() }
     TabColumn("tab.device", Modifier.fillMaxSize(), 12.dp, Arrangement.spacedBy(8.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1569,6 +1570,7 @@ fun DeviceScreen(vm: MainViewModel) {
                     }
                     OutlinedButton(onClick = { vm.quick("wm density reset") }) { Text(stringResource(R.string.dpi_reset)) }
                 }
+                OutlinedButton(onClick = { vm.papirus() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.papirus_on)) }
             }
         }
         Card(Modifier.fillMaxWidth()) {

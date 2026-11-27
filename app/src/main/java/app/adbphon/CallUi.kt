@@ -105,7 +105,7 @@ fun PeopleSection() {
             Text(stringResource(R.string.call_title), fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 HintTitle(stringResource(R.string.call_listen), stringResource(R.string.call_hint), Modifier.weight(1f), titleSize = 13.sp, titleWeight = null)
-                Switch(listen, { listen = it; CallListen.setEnabled(ctx, it) }, thumbContent = swCheck(listen))
+                Switch(listen, { listen = it; CallListen.setEnabled(ctx, it) })
             }
             CField(stringResource(R.string.call_myname), myName, { myName = it; Calls.setMyName(ctx, it) })
             people.toList().forEach { p ->
@@ -223,7 +223,7 @@ fun RingtoneDialog(close: () -> Unit) {
                     OutlinedButton({ open = true }, Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text(Ringtones.label(ctx, cur, fname) + "  ▾", fontSize = 13.sp, maxLines = 1) }
                     LDropdownMenu(open, { open = false }) {
                         ids.forEach { id ->
-                            DropdownMenuItem({ Text((if (id == cur) "✓ " else "") + Ringtones.label(ctx, id, fname), fontSize = 14.sp) }, {
+                            DropdownMenuItem({ Text((if (id == cur) "■ " else "") + Ringtones.label(ctx, id, fname), fontSize = 14.sp) }, {
                                 open = false; stopPreview()
                                 if (id == "file" && withFile && (if (kind == "audio") cfg.audioFile else cfg.videoFile).isBlank()) { pickKind = kind; picker.launch("audio/*") }
                                 else { if (kind == "audio") cfg.audio = id else if (kind == "wait") cfg.wait = id else cfg.video = id; commit() }

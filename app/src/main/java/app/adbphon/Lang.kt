@@ -10,6 +10,13 @@ import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.content.res.Resources
 import java.util.Locale
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.unit.dp
 
 /** Язык интерфейса, выбранный в настройках: "auto" (как в системе), "ru", "uk", "en". */
 object Lang {
@@ -108,6 +115,33 @@ fun LAlertDialog(
 @androidx.compose.runtime.Composable
 fun LDialog(onDismissRequest: () -> Unit, properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(), content: @androidx.compose.runtime.Composable () -> Unit) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.imeGateKeys()) { LangScope { SelectableArea(content) } } }
+}
+
+/** Низкое окно у верхнего края: название, поле и две кнопки в одну строку, всегда выше клавиатуры. */
+@androidx.compose.runtime.Composable
+fun TopInputDialog(title: String, onDismiss: () -> Unit, onOk: () -> Unit, field: @androidx.compose.runtime.Composable () -> Unit) {
+    LDialog(onDismiss, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier.fillMaxSize()
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } }
+                .systemBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 4.dp),
+            contentAlignment = androidx.compose.ui.Alignment.TopCenter,
+        ) {
+            androidx.compose.material3.Surface(
+                androidx.compose.ui.Modifier.widthIn(max = 760.dp).fillMaxWidth().pointerInput(Unit) { detectTapGestures { } },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), tonalElevation = 6.dp, shadowElevation = 8.dp,
+            ) {
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    androidx.compose.material3.Text(title, maxLines = 1, style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
+                    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) { field() }
+                        TextButton(onDismiss) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.btn_cancel)) }
+                        Button(onOk) { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.btn_yes)) }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** DropdownMenu с языком из настроек программы. */

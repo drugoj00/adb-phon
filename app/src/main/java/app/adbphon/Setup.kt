@@ -270,7 +270,7 @@ fun WifiDebugCard(vm: MainViewModel) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 HintTitle(stringResource(R.string.wd_title), stringResource(R.string.wd_hint_direct), Modifier.weight(1f), titleWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                androidx.compose.material3.Switch(on, { v -> if (!busy) { busy = true; scope.launch { WifiDebug.set(ctx, v); on = WifiDebug.isOn(ctx); busy = false } } }, thumbContent = swCheck(on))
+                androidx.compose.material3.Switch(on, { v -> if (!busy) { busy = true; scope.launch { WifiDebug.set(ctx, v); on = WifiDebug.isOn(ctx); busy = false } } })
             }
         }
     }

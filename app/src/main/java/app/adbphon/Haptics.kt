@@ -265,5 +265,5 @@ fun FilterChip(
 ) {
     val ctx = LocalContext.current
     val fb = LocalFeedbackOn.current
-    androidx.compose.material3.FilterChip(selected, { if (fb) Feedback.tick(ctx); onClick() }, label, modifier, enabled, leadingIcon ?: if (selected) ({ androidx.compose.material3.Text("✓") }) else null, trailingIcon, shape, colors, elevation, border, interactionSource)
+    androidx.compose.material3.FilterChip(selected, { if (fb) Feedback.tick(ctx); onClick() }, label, modifier, enabled, leadingIcon, trailingIcon, shape, colors, elevation, border, interactionSource)
 }

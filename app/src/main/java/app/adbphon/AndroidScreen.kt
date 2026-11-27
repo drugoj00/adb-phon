@@ -497,9 +497,9 @@ internal fun AndroidScreenLive(c: AndroidScreenClient, title: String, close: () 
             Box {
                 OutlinedButton({ qMenu = true }) { Text(stringResource(R.string.spc_quality), fontSize = 12.sp) }
                 LDropdownMenu(qMenu, { qMenu = false }) {
-                    DropdownMenuItem({ Text((if (c.quality == "auto") "✓ " else "") + stringResource(R.string.spc_q_auto)) }, { c.quality = "auto"; qMenu = false; c.start() })
-                    DropdownMenuItem({ Text((if (c.quality == "fast") "✓ " else "") + stringResource(R.string.spc_q_fast)) }, { c.quality = "fast"; qMenu = false; c.start() })
-                    DropdownMenuItem({ Text((if (c.quality == "sharp") "✓ " else "") + stringResource(R.string.spc_q_sharp)) }, { c.quality = "sharp"; qMenu = false; c.start() })
+                    DropdownMenuItem({ Text((if (c.quality == "auto") "■ " else "") + stringResource(R.string.spc_q_auto)) }, { c.quality = "auto"; qMenu = false; c.start() })
+                    DropdownMenuItem({ Text((if (c.quality == "fast") "■ " else "") + stringResource(R.string.spc_q_fast)) }, { c.quality = "fast"; qMenu = false; c.start() })
+                    DropdownMenuItem({ Text((if (c.quality == "sharp") "■ " else "") + stringResource(R.string.spc_q_sharp)) }, { c.quality = "sharp"; qMenu = false; c.start() })
                 }
             }
             StateButton(c.audioOn, { c.switchAudio(!c.audioOn) }) { Text(stringResource(if (c.audioOn) R.string.asc_sound_on else R.string.asc_sound_off), fontSize = 12.sp) }

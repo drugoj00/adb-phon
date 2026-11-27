@@ -157,6 +157,7 @@ internal class RvEnv(
 
 internal data class RowModel(
     val selected: Boolean, val chkOn: Boolean, val chkPart: Boolean, val hasChk: Boolean, val expanded: Boolean, val open: Boolean,
+    val chkParent: Boolean, val chkColor: Int,
     val cnt: Pair<Int, Int>?, val cntNow: Pair<Int, Int>?, val sub: String, val title: String, val offline: Boolean, val iconKey: String?,
 ) {
     /** Значок, уже вычисленный при сборке описания (не входит в сравнение): привязка строки не считает его второй раз. */
@@ -187,8 +188,8 @@ private fun rowModel(env: RvEnv, r: RR): RowModel {
     val e0 = r.selE
     val ix = FmRootCfg.selIdx.value
     var chkBits = 0
-    if (e0 != null) { val on = ix.direct(e0.key); chkBits = if (on) 1 else 0 }   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
-    else if (r.selAll.isNotEmpty()) { val on = r.selAll.all { ix.covered(it.key) }; chkBits = 0 }   // как в X-plore: у устройства галка не горит, отмечено содержимое
+    if (e0 != null) chkBits = if (ix.direct(e0.key)) 1 else if (e0.isDir && ix.partial(e0.key)) 2 else 0
+    else if (r.selAll.isNotEmpty()) chkBits = if (r.selAll.any { ix.direct(it.key) || ix.partial(it.key) }) 2 else 0   // у устройства сама отметка не горит, отмечено содержимое
     val cnt = r.path?.let { FmRootCfg.counts[it] }
     val cKey = r.cntKey?.takeIf { FmSub.mode != FmSub.NONE }
     val cntNow: Pair<Int, Int>? = if (cKey == null) null else { val t = FolderCounts.ver; if (t >= 0) FolderCounts.peek(cKey) else null }
@@ -211,6 +212,7 @@ private fun rowModel(env: RvEnv, r: RR): RowModel {
     val si0 = staticIcon(env, r, r.treeId != null && r.treeId in p.rootOpen)
     return RowModel(
         selected = p.rootSel == r.key, chkOn = (chkBits and 1) != 0, chkPart = (chkBits and 2) != 0, hasChk = e0 != null || r.selAll.isNotEmpty(),
+        chkParent = (chkBits and 1) != 0 && e0?.isDir == true && r.treeId != null && r.treeId in p.rootOpen, chkColor = checkFill(env.prim),
         expanded = r.expandKey != null && r.expandKey in p.rootOpen, open = r.treeId != null && r.treeId in p.rootOpen,
         cnt = cnt, cntNow = cntNow, sub = sub, title = if (r.header == 1) r.title else if (r.err) r.title else NameWrap.fmt(r.title), offline = offline,
         iconKey = si0?.key,
@@ -400,32 +402,29 @@ internal class GlyphView(ctx: Context) : View(ctx) {
     }
 }
 
-/** Квадратик отметки (как SelBox): без скругления, отмечено / частично / пусто. */
+/** Квадратик отметки (как SelBox): слегка скруглён, отмеченный закрашен без галочки, рамка тогда контрастная. */
 internal class CheckView(ctx: Context) : View(ctx) {
-    var on = false; var part = false
-    var boxPx = 0f; var strokePx = 0f; var prim = 0; var onSurface = 0; var onPrimary = 0
+    var on = false; var part = false; var parent = false
+    var boxPx = 0f; var strokePx = 0f; var fill = 0; var onSurface = 0
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val path = Path()
     override fun onDraw(c: Canvas) {
         val sz = boxPx
         val l = width - sz; val t = (height - sz) / 2f
-        val filled = on || part
-        if (on) { paint.style = Paint.Style.FILL; paint.color = prim; c.drawRect(l, t, l + sz, t + sz, paint) }
-        else if (part) { paint.style = Paint.Style.FILL; paint.color = (prim and 0x00FFFFFF) or (0x73 shl 24); c.drawRect(l, t, l + sz, t + sz, paint) }
-        paint.style = Paint.Style.STROKE; paint.strokeWidth = strokePx
-        paint.color = if (filled) prim else (onSurface and 0x00FFFFFF) or (0xB3 shl 24)
-        c.drawRect(l + strokePx / 2, t + strokePx / 2, l + sz - strokePx / 2, t + sz - strokePx / 2, paint)
-        paint.style = Paint.Style.FILL; paint.color = onPrimary
-        if (on) {
-            val ic = sz - strokePx * 2; val s = ic / 24f; val ox = l + (sz - ic) / 2; val oy = t + (sz - ic) / 2
-            path.reset(); path.moveTo(ox + 9 * s, oy + 16.17f * s); path.lineTo(ox + 4.83f * s, oy + 12 * s); path.lineTo(ox + 3.41f * s, oy + 13.41f * s); path.lineTo(ox + 9 * s, oy + 19 * s)
-            path.lineTo(ox + 21 * s, oy + 7 * s); path.lineTo(ox + 19.59f * s, oy + 5.59f * s); path.close(); c.drawPath(path, paint)
-        } else if (part) {
-            val bw = sz * 0.55f; val bh = strokePx * 1.5f
-            c.drawRoundRect(l + (sz - bw) / 2, t + (sz - bh) / 2, l + (sz + bw) / 2, t + (sz + bh) / 2, bh / 2, bh / 2, paint)
+        val r = sz * CHECK_ROUND
+        if (on) { paint.style = Paint.Style.FILL; paint.color = if (parent) CHECK_PARENT else fill; c.drawRoundRect(l, t, l + sz, t + sz, r, r, paint) }
+        else if (part) {
+            val s = sz * 0.5f; val x = l + (sz - s) / 2; val y = t + (sz - s) / 2
+            paint.style = Paint.Style.FILL; paint.color = CHECK_PARENT; c.drawRoundRect(x, y, x + s, y + s, s * CHECK_ROUND, s * CHECK_ROUND, paint)
         }
+        paint.style = Paint.Style.STROKE; paint.strokeWidth = strokePx
+        paint.color = if (on || part) (onSurface or (0xFF shl 24)) else (onSurface and 0x00FFFFFF) or (0xB3 shl 24)
+        val h = strokePx / 2
+        c.drawRoundRect(l + h, t + h, l + sz - h, t + sz - h, r - h, r - h, paint)
     }
 }
+
+/** Цвет заливки отмеченного по настройке. */
+internal fun checkFill(theme: Int): Int = if (UiPrefs.checkMode == 1) UiPrefs.checkCustom else theme
 
 // ------------------------------------------------------------------ строка
 
@@ -678,8 +677,8 @@ internal class RvRow(val env0: () -> RvEnv, ctx: Context, val hostKeys: RvHost) 
         } else tailHost?.visibility = GONE
         // галочка
         if (model.hasChk) {
-            chk.visibility = VISIBLE; chk.on = model.chkOn; chk.part = model.chkPart
-            chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.prim = e.prim; chk.onSurface = e.onSurface; chk.onPrimary = e.onPrimary
+            chk.visibility = VISIBLE; chk.on = model.chkOn; chk.part = model.chkPart; chk.parent = model.chkParent
+            chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.fill = model.chkColor; chk.onSurface = e.onSurface
             chk.layoutParams = LinearLayout.LayoutParams(e.dp(if (tv) 40 else 32).toInt(), e.dp(if (tv) 40 else 32).toInt()).also { it.marginStart = gap }
             chk.invalidate()
         } else chk.visibility = GONE

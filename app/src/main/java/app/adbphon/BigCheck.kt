@@ -22,9 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,22 +67,29 @@ internal fun Modifier.tapOnly(onTap: () -> Unit): Modifier {
     return this.pointerInput(Unit) { detectTapGestures { cur.value() } }
 }
 
-/** Квадратик отметки. [partial]: внутри папки отмечена только часть (полупрозрачная заливка и черта). */
+/** Цвет квадратика родительской папки (внутри неё отмечено). */
+internal const val CHECK_PARENT = 0xFFFF9800.toInt()
+
+/** Доля скругления углов квадратика: слегка, чтобы не резало глаз. */
+internal const val CHECK_ROUND = 0.2f
+
+/**
+ * Квадратик отметки, без галочки (26.11.2026, слово владелицы): отмеченный закрашен, рамка при этом меняется на контрастную.
+ * [parent]: раскрытая отмеченная папка (оранжевый). [partial]: сама папка не отмечена, отмечено что-то внутри (оранжевый квадратик в середине).
+ */
 @Composable
-internal fun SelBox(on: Boolean, partial: Boolean = false, tv: Boolean = Marq.tv, enabled: Boolean = true) {
+internal fun SelBox(on: Boolean, partial: Boolean = false, tv: Boolean = Marq.tv, enabled: Boolean = true, parent: Boolean = false) {
     val sz = selBoxSize(tv)
     val cs = MaterialTheme.colorScheme
-    // 18.11.2026 (владелица): у квадратиков отметки скругление убрано совсем (острые углы), в отличие от остальных элементов —
-    // это отдельное, явное исключение из общей правки радиуса.
-    val shape = RoundedCornerShape(0.dp)
+    val shape = RoundedCornerShape(sz * CHECK_ROUND)
+    val fill = if (parent) Color(CHECK_PARENT) else if (UiPrefs.checkMode == 1) Color(UiPrefs.checkCustom) else cs.primary
     Box(
-        Modifier.size(sz).then(if (enabled) Modifier else Modifier.alpha(.45f))   // 14.0: без слоя alpha и clip у каждой отметки (углы прямые, clip не нужен)
-            .background(if (on) cs.primary else if (partial) cs.primary.copy(alpha = .45f) else Color.Transparent)
-            .border(2.dp, if (on || partial) cs.primary else cs.onSurface.copy(alpha = .7f), shape),
+        Modifier.size(sz).then(if (enabled) Modifier else Modifier.alpha(.45f))
+            .background(if (on) fill else Color.Transparent, shape)
+            .border(2.dp, if (on || partial) cs.onSurface else cs.onSurface.copy(alpha = .7f), shape),
         contentAlignment = Alignment.Center,
     ) {
-        if (on) Icon(Icons.Filled.Check, null, Modifier.size(sz - 4.dp), tint = cs.onPrimary)
-        else if (partial) Box(Modifier.width(sz * 0.55f).height(3.dp).background(cs.onPrimary, RoundedCornerShape(2.dp)))
+        if (!on && partial) Box(Modifier.size(sz * 0.5f).background(Color(CHECK_PARENT), RoundedCornerShape(sz * 0.5f * CHECK_ROUND)))
     }
 }
 

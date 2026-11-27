@@ -57,24 +57,23 @@ fun FilesArrowColorSetting() {
         EqChoice(stringResource(R.string.arrow_blue), UiPrefs.arrowMode == 2) { UiPrefs.setArrowMode(ctx, 2) },
         EqChoice(stringResource(R.string.arrow_custom), UiPrefs.arrowMode == 3) { dlg = true },
     ), perRow = 2)
-    if (dlg) ArrowColorDialog { dlg = false }
+    if (dlg) PaletteDialog(stringResource(R.string.arrow_custom_title), UiPrefs.arrowCustom.takeIf { UiPrefs.arrowMode == 3 }, { UiPrefs.setArrowCustom(ctx, it) }) { dlg = false }
 }
 
 @Composable
-private fun ArrowColorDialog(onClose: () -> Unit) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+private fun PaletteDialog(title: String, current: Int?, onPick: (Int) -> Unit, onClose: () -> Unit) {
     LAlertDialog(
         onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.arrow_custom_title), fontSize = 16.sp) },
+        title = { Text(title, fontSize = 16.sp) },
         text = {
             Column(Modifier.barScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ARROW_PALETTE.chunked(5).forEach { row ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         row.forEach { c ->
-                            val sel = UiPrefs.arrowMode == 3 && UiPrefs.arrowCustom == c.toArgb()
+                            val sel = current == c.toArgb()
                             Box(Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(c)
                                 .border(if (sel) 3.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                                .clickable { UiPrefs.setArrowCustom(ctx, c.toArgb()); onClose() })
+                                .clickable { onPick(c.toArgb()); onClose() })
                         }
                         repeat(5 - row.size) { Box(Modifier.size(46.dp)) }
                     }
@@ -83,6 +82,22 @@ private fun ArrowColorDialog(onClose: () -> Unit) {
         },
         confirmButton = { TextButton(onClose) { Text(stringResource(R.string.btn_close)) } },
     )
+}
+
+/** 26.11.2026 (слово владелицы): цвет закрашенного квадратика отметки. У родительской папки всегда оранжевый. */
+@Composable
+fun FilesCheckColorSetting() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var dlg by remember { mutableStateOf(false) }
+    HintTitle(stringResource(R.string.set_check_color), stringResource(R.string.set_check_color_hint))
+    EqChoices(listOf(
+        EqChoice(stringResource(R.string.check_theme), UiPrefs.checkMode == 0) { UiPrefs.setCheckTheme(ctx) },
+        EqChoice(stringResource(R.string.arrow_custom), UiPrefs.checkMode == 1) { dlg = true },
+    ), perRow = 2)
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        SelBox(true, parent = true); SelBox(true); SelBox(false, partial = true); SelBox(false)
+    }
+    if (dlg) PaletteDialog(stringResource(R.string.set_check_color), UiPrefs.checkCustom.takeIf { UiPrefs.checkMode == 1 }, { UiPrefs.setCheckCustom(ctx, it) }) { dlg = false }
 }
 
 @Composable

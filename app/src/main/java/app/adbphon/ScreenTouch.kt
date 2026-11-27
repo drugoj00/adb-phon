@@ -213,7 +213,7 @@ fun ScreenTouchSwitch(modifier: Modifier = Modifier) {
             Text(stringResource(R.string.kbtn_switch), fontSize = 14.sp)
             Text(stringResource(R.string.kbtn_switch_sub), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
         }
-        Switch(on, null, thumbContent = swCheck(on))
+        Switch(on, null)
     }
     if (dlg) {
         val need = !AutoPairService.isEnabled(ctx)

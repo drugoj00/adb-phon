@@ -83,6 +83,9 @@ object UiPrefs {
     var apkIcons by mutableStateOf(true)
     /** 20.11.2026: цвет стрелок раскрытия у папок: 0 авто (в цвет текста), 1 акцент темы, 2 синий (как раньше), 3 свой цвет [arrowCustom]. */
     var arrowMode by mutableStateOf(0)
+    /** 26.11.2026 (слово владелицы): цвет закрашенного квадратика отметки: 0 как в теме, 1 свой. */
+    var checkMode by mutableStateOf(0)
+    var checkCustom by mutableStateOf(0xFF43A047.toInt())
     var arrowCustom by mutableStateOf(0xFF1E88E5.toInt())
     /** 20.11.2026: компактные отступы дерева (точка слева, шаг уровня, стрелка): строки шире, место освобождается; по умолчанию включено. */
     var compactTree by mutableStateOf(true)
@@ -103,11 +106,14 @@ object UiPrefs {
 
     fun init(ctx: Context) {
         val p = sp(ctx)
-        narrow = true   // узкий шрифт в списках всегда (настройка убрана по слову владелицы 08.11.2026)
+        // 27.11.2026 (wad72, 4PDA p=146226768): выключенный узкий шрифт после перезапуска включался снова: выбор не читался
+        narrow = p.getBoolean("narrow_font", true)
         thumbs = p.getBoolean("thumbs", true)
         apkIcons = p.getBoolean("apk_icons", true)
         arrowMode = p.getInt("arrow_mode", 0).coerceIn(0, 3)
         arrowCustom = p.getInt("arrow_custom", 0xFF1E88E5.toInt())
+        checkMode = p.getInt("check_mode", 0).coerceIn(0, 1)
+        checkCustom = p.getInt("check_custom", 0xFF43A047.toInt())
         compactTree = p.getBoolean("compact_tree", true)
         sideScroll = p.getBoolean("side_scroll", false)
         sideScale = p.getInt("side_scale", 0).coerceIn(0, 2)
@@ -134,6 +140,8 @@ object UiPrefs {
     fun setApkIcons(ctx: Context, v: Boolean) { apkIcons = v; sp(ctx).edit().putBoolean("apk_icons", v).apply() }
     fun setArrowMode(ctx: Context, m: Int) { arrowMode = m; sp(ctx).edit().putInt("arrow_mode", m).apply() }
     fun setArrowCustom(ctx: Context, c: Int) { arrowCustom = c; arrowMode = 3; sp(ctx).edit().putInt("arrow_custom", c).putInt("arrow_mode", 3).apply() }
+    fun setCheckTheme(ctx: Context) { checkMode = 0; sp(ctx).edit().putInt("check_mode", 0).apply() }
+    fun setCheckCustom(ctx: Context, c: Int) { checkCustom = c; checkMode = 1; sp(ctx).edit().putInt("check_custom", c).putInt("check_mode", 1).apply() }
     fun setCompactTree(ctx: Context, v: Boolean) { compactTree = v; sp(ctx).edit().putBoolean("compact_tree", v).apply() }
     fun setSideScroll(ctx: Context, v: Boolean) { sideScroll = v; sp(ctx).edit().putBoolean("side_scroll", v).apply() }
     fun setSideScale(ctx: Context, v: Int) { sideScale = v; sp(ctx).edit().putInt("side_scale", v).apply() }

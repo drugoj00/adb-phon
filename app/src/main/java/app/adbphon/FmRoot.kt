@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.Lock
@@ -486,7 +487,9 @@ object FmRootCfg {
     /** Сколько элементов узла показывать сразу (остальное счётчиком): быстрая прокрутка длинных папок. */
     const val LIMIT = 200
     /** 10.0 (chk): сколько элементов узла хранить до сортировки (показывается LIMIT уже отсортированных). */
-    const val KEEP = 1000
+    const val KEEP = 5000
+    /** 26.11.2026 (mikolkavod, Android/data): узлы, где по нажатию на строку остатка показаны все записи. */
+    val showAll = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
     fun fsFor(c: NetConn): RemoteFs = fsCache.getOrPut(c.kind + "|" + c.host + "|" + c.user) { c.fs() }
     val appCount = PerKeyMap<String, Int>()
     /** 22.11.2026: число записей папки применяется вместе со списком (одним снимком), а не раньше: раньше это давало лишнюю перекомпоновку списка. */
@@ -556,7 +559,9 @@ object FmRootCfg {
                 // «ADB (оболочка)»: папки по ADB (нужна связь)
                 FmIo.ensurePriv()?.let { if (it == "pair" || it == "wifi") Fm.autoPairOnce(); error("FIX:" + it) }
                 val path = id.removePrefix("D|").ifEmpty { "/" }
-                AdbFs.list(path).filter { it.isDir }.take(300).map { TK(it.name, "D|" + it.path, it.path, true, 0L, it.date) }
+                val dirs = AdbFs.list(path).filter { it.isDir }
+                pendCnt[id] = dirs.size
+                dirs.take(KEEP).map { TK(it.name, "D|" + it.path, it.path, true, 0L, it.date) }
             } else if (id.startsWith("L|")) {
                 val path = id.removePrefix("L|")
                 val perfL = System.nanoTime()
@@ -896,7 +901,7 @@ internal class RootModel(val p: FmPane, val ctx: Context, prim0: Color, sig0: St
             visOpen += id
             val ks0 = FmRootCfg.kids[id]
             // 10.0 (chk): сначала сортировка по настройке, потом обрезка до LIMIT строк (раньше обрезалось по имени, и при «по дате»/«по размеру» в больших папках нужное отсекалось)
-            val ks = ks0?.let { PerfLog.t("sortKids(${it.size})", 1) { FmRootCfg.sortKids(p, id, it) } }?.let { if (id.startsWith("L|") || id.startsWith("N|")) it.take(FmRootCfg.LIMIT) else it }
+            val ks = ks0?.let { PerfLog.t("sortKids(${it.size})", 1) { FmRootCfg.sortKids(p, id, it) } }?.let { if ((id.startsWith("L|") || id.startsWith("N|")) && id !in FmRootCfg.showAll) it.take(FmRootCfg.LIMIT) else it }
             if (ks != null && AppLog.enabled) Thumbs.logList("дерево", id, ks.count { !it.isDir && it.name.substringAfterLast('.', "").lowercase().let { e -> e == "apk" || e == "apks" || e == "xapk" || e == "apkm" } })
             if (ks == null) {
                 val er0 = FmRootCfg.kidErr[id]; val ok = FmRootCfg.kidErrOwnKey[id]
@@ -990,7 +995,16 @@ internal class RootModel(val p: FmPane, val ctx: Context, prim0: Color, sig0: St
                 }
             }
             PerfLog.mark("addKids цикл ${ks.size} строк: ${(System.nanoTime() - perfLoop) / 1_000_000} мс")
-            FmRootCfg.appCount[id]?.takeIf { it > ks.size }?.let { rows += RR("t:" + id + ":more", "… " + it, Icons.Filled.Folder, Color(0xFF9E9E9E), level = level) }
+            // раньше тут стояла неактивная строка «… 403» со значком папки: её принимали за папку, а остальное было не открыть
+            FmRootCfg.appCount[id]?.takeIf { it > ks.size }?.let { total ->
+                val canMore = id !in FmRootCfg.showAll && (ks0?.size ?: 0) > ks.size
+                rows += RR("t:" + id + ":more", Fm.str(if (canMore) R.string.tr_show_all else R.string.tr_shown_part, ks.size, total), if (canMore) Icons.Filled.ExpandMore else Icons.Filled.ArrowForward, Color(0xFF64B5F6), level = level,
+                    act = {
+                        if (canMore) { FmRootCfg.showAll.add(id); FmRootCfg.ver++ }
+                        else if (c == null) fmOpenLocal(p, id.substringAfter('|'))
+                        else { fmLeaveRoot(p); Fm.connectNet(p, c, id.split('|', limit = 5).getOrNull(4)?.takeIf { it.isNotEmpty() && it != NetTrash.ROOT_MARK } ?: FmRootCfg.ownPath(c) ?: "/") }
+                    })
+            }
         }
         /** Раскрытое облако или сетевой источник с корзиной: две папки, «Корзина» первой и «диск» (корень источника) второй. */
         fun addVirt(c: NetConn, tid: String) {
@@ -1413,6 +1427,17 @@ fun FmRootList(p: FmPane, modifier: Modifier) {
                     val nearTop = v != null && v.top <= tolerancePx
                     if (!nearTop) st.scrollToItem(idx, 0)
                     FmRootCfg.scrollTarget.remove(p.id)
+                }
+            }
+            val upAtStart = remember { p.upTick }
+            LaunchedEffect(p.upTick) {
+                if (p.upTick != upAtStart) {
+                    val rows = model.built?.rows ?: return@LaunchedEffect
+                    val i = st.first.coerceIn(0, (rows.size - 1).coerceAtLeast(0))
+                    val level = rows.getOrNull(i)?.level ?: 0
+                    var j = i - 1
+                    while (j >= 0 && rows[j].level >= level) j--
+                    st.scrollToItem(j.coerceAtLeast(0))
                 }
             }
             val homeAtStartRv = remember { p.homeTick }
@@ -1913,8 +1938,8 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
     val chkBitsSt = remember(e0?.key, r.selAll) {
         androidx.compose.runtime.derivedStateOf {
             val ix = FmRootCfg.selIdx.value
-            if (e0 != null) { if (ix.direct(e0.key)) 1 else 0 }   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
-            else if (r.selAll.isNotEmpty()) { 0 }   // как в X-plore: у устройства галка не горит, отмечено содержимое
+            if (e0 != null) { if (ix.direct(e0.key)) 1 else if (e0.isDir && ix.partial(e0.key)) 2 else 0 }
+            else if (r.selAll.isNotEmpty()) { if (r.selAll.any { ix.direct(it.key) || ix.partial(it.key) }) 2 else 0 }
             else 0
         }
     }
@@ -2052,7 +2077,7 @@ private fun FmRootRowView(p: FmPane, r: RR, tv: Boolean, modifier: Modifier = Mo
             if (r.ro) Icon(Icons.Filled.Lock, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
             r.tog?.let { on -> BigCheck(on, tv) { r.act() } }
             if (r.level == 0) r.side?.let { Text(it, fontSize = (13 * bigFont).sp, maxLines = 1, fontFamily = UiPrefs.listFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)) }
-            if (chkClick != null) Box(Modifier.width(if (tv) 40.dp else 32.dp), contentAlignment = Alignment.CenterEnd) { SelBox(chkOn, chkPart, tv) }
+            if (chkClick != null) Box(Modifier.width(if (tv) 40.dp else 32.dp), contentAlignment = Alignment.CenterEnd) { SelBox(chkOn, chkPart, tv, parent = chkOn && e0?.isDir == true && r.treeId != null && r.treeId in p.rootOpen) }
         }
         // 10.2 (58, как в X-plore): у папок и файлов телефона слева незаметная точка: нажатие открывает свойства, строка не выделяется
         if (e0 != null && e0.net == null && e0.path.startsWith("/") && r.header == 0) Box(
@@ -2236,7 +2261,7 @@ internal fun FmRootRowMenu(p: FmPane, r: RR, close: () -> Unit, pickIcon: () -> 
             if (r.key == "wifi") {
                 // выбор способа связи с другим устройством
                 for ((m, res) in listOf("auto" to R.string.wf_mode_auto, "lan" to R.string.wf_mode_lan, "direct" to R.string.wf_mode_direct))
-                    DropdownMenuItem({ Text((if (WifiExplorer.mode == m) "✓ " else "") + stringResource(res), fontSize = 14.sp) }, { close(); WifiExplorer.setMode(ctx, m) })
+                    DropdownMenuItem({ Text((if (WifiExplorer.mode == m) "■ " else "") + stringResource(res), fontSize = 14.sp) }, { close(); WifiExplorer.setMode(ctx, m) })
             }
             r.pc?.let { h ->
                 item(R.string.dev_call_video) { devCall(ctx, h.name.ifBlank { h.ip }, listOf(h.ip), h.code, false) }
@@ -2252,6 +2277,13 @@ internal fun FmRootRowMenu(p: FmPane, r: RR, close: () -> Unit, pickIcon: () -> 
                 item(R.string.dev_window) { Fm.dlg = FmDlg.AndroidScreen(d) }
                 item(R.string.dev_files) { fmLeaveRoot(p); Fm.connectNet(p, d.conn()) }
                 item(R.string.dev_console) { Fm.dlg = FmDlg.AndroidConsole(d) }
+                item(R.string.papirus_on) {
+                    Fm.scope.launch {
+                        val out = runCatching { adbLinkFor(d.addrs).shell(PapirusIme.CMD) }.getOrElse { it.message ?: "error" }
+                        if (PapirusIme.parse(out) == PapirusIme.Result.NOT_INSTALLED) Fm.dlg = FmDlg.Papirus(d)
+                        else { val (id, args) = PapirusIme.message(out); Fm.say(d.title + ": " + Fm.str(id, *args)) }
+                    }
+                }
                 item(R.string.dev_ts) {
                     val ts = d.tsAddr
                     if (ts == null) { Fm.say(Fm.str(R.string.dev_ts_none)); Fm.dlg = FmDlg.DevAdd(null, d) }

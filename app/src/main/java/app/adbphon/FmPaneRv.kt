@@ -67,10 +67,10 @@ internal class PaneRvItem(val key: String, val item: FmItem?, val node: Any?, va
     val menuKey: String get() = if (depth == 0) (item?.name ?: key) else nodePath
 }
 
-internal class PaneModel(val sel: Boolean, val part: Boolean, val open: Boolean, val cnt: Pair<Int, Int>?, val iconKey: String?, val sub: String) {
+internal class PaneModel(val sel: Boolean, val part: Boolean, val open: Boolean, val cnt: Pair<Int, Int>?, val iconKey: String?, val sub: String, val chkColor: Int = 0) {
     /** Значок, уже вычисленный при сборке описания (не входит в сравнение). */
     var si: StaticIcon? = null
-    override fun equals(other: Any?) = other is PaneModel && sel == other.sel && part == other.part && open == other.open && cnt == other.cnt && iconKey == other.iconKey && sub == other.sub
+    override fun equals(other: Any?) = other is PaneModel && sel == other.sel && part == other.part && open == other.open && cnt == other.cnt && iconKey == other.iconKey && sub == other.sub && chkColor == other.chkColor
     override fun hashCode() = ((((sel.hashCode() * 31 + part.hashCode()) * 31 + open.hashCode()) * 31 + (cnt?.hashCode() ?: 0)) * 31 + (iconKey?.hashCode() ?: 0)) * 31 + sub.hashCode()
 }
 
@@ -115,7 +115,7 @@ private fun paneModel(e: RvEnv, it: PaneRvItem): PaneModel {
     val full = fullOf(p, it); val sk = selKeyOf(p, it)
     val ix = p.selIdx.value
     val sel = ix.direct(sk)
-    val part = false   // 26.11.2026 (слово владелицы): значок «частично» (минус) убран, как в X-plore
+    val part = f.isDir && !sel && ix.partial(sk)
     val open = e.p.expanded.let { ex -> it.node != null && f.isDir && it.nodePath in ex }
     val ck = countKey(p, f, full)
     val cnt = if (ck == null) null else { val t = FolderCounts.ver; if (t >= 0) FolderCounts.peek(ck) else null }
@@ -123,7 +123,7 @@ private fun paneModel(e: RvEnv, it: PaneRvItem): PaneModel {
     val cntTxt = cnt?.let { nbBlock(e.ctx.getString(if (narrow) R.string.rt_counts_s else R.string.rt_counts, it.first, it.second)) }
     val sub = (if (f.isDir) FmSub.fileLine(e.ctx, f.date, cntTxt, narrow) else FmSub.fileLine(e.ctx, f.date, if (Fm.showSize) fmSize(f.size) else null, narrow)) ?: ""
     val si0 = paneStaticIcon(e, p, it, open)
-    return PaneModel(sel, part, open, cnt, si0?.key, sub).also { it.si = si0 }
+    return PaneModel(sel, part, open, cnt, si0?.key, sub, checkFill(e.prim)).also { it.si = si0 }
 }
 
 internal interface PaneHost { fun openMenu(row: PaneRow, it: PaneRvItem); fun rowChanged(row: PaneRow) }
@@ -294,7 +294,7 @@ internal class PaneRow(val env0: () -> RvEnv, ctx: Context, val host: PaneHost) 
         title.applyStyle(e, if (dense) 15f else 14f, if (dense) 17f else 18f, 700, e.content)
         if (mm.sub.isNotEmpty()) { sub.visibility = VISIBLE; sub.text = mm.sub; sub.applyStyle(e, if (dense) 11f else 10f, if (dense) 13f else 12f, 600, e.alpha(e.content, .6f)) } else sub.visibility = GONE
         chk.layoutParams = LinearLayout.LayoutParams(e.dp(if (tv) 40 else 34).toInt(), e.dp(if (tv) 40 else 34).toInt()).also { it2 -> it2.marginStart = e.dp(4).toInt(); it2.marginEnd = e.dp(4).toInt() }
-        chk.on = mm.sel; chk.part = mm.part; chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.prim = e.prim; chk.onSurface = e.onSurface; chk.onPrimary = e.onPrimary; chk.invalidate()      // 24.11.2026: без этого галочка не перерисовывалась при смене отметки (жалоба wad72)
+        chk.on = mm.sel; chk.part = mm.part; chk.parent = mm.sel && mm.open; chk.boxPx = e.dp(if (tv) 29f else 23.5f); chk.strokePx = e.dp(2f); chk.fill = mm.chkColor; chk.onSurface = e.onSurface; chk.invalidate()      // 24.11.2026: без этого галочка не перерисовывалась при смене отметки (жалоба wad72)
         (zone.layoutParams as LayoutParams).width = e.dp(if (tv) 76 else 64).toInt()
         val ck = countKey(p, f, fullOf(p, it))
         if (ck != null && mm.cnt == null && !FolderCounts.has(ck)) {

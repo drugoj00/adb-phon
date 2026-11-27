@@ -154,7 +154,7 @@ private fun BtTopBar(ctx: Context, land: Boolean = false) {
     LaunchedEffect(Unit) { BtPower.refresh(ctx) }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Switch(BtPower.on, { BtPower.toggle(ctx) }, enabled = !BtPower.busy, thumbContent = swCheck(BtPower.on))
+            androidx.compose.material3.Switch(BtPower.on, { BtPower.toggle(ctx) }, enabled = !BtPower.busy)
             Text(stringResource(if (BtPower.busy) R.string.bt_pwr_busy else R.string.bt_pwr_title), Modifier.padding(start = 10.dp).weight(1f), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
             if (!land) androidx.compose.material3.IconButton({ opts = !opts }) { Icon(if (opts) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, stringResource(R.string.bt_pwr_opts)) }
         }
