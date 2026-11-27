@@ -16,17 +16,20 @@ ADB-phon connects to the ADB of the same phone (or of another device in your net
 
 ## Download
 
-**Version 23.0.** [ADB-phon-23.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
+**Version 24.0.** [ADB-phon-24.0.apk](https://github.com/drugoj00/adb-phon/releases/latest) (Assets) · [Releases](https://github.com/drugoj00/adb-phon/releases)
 
-SHA-256: `c4ef02db905c4d6efae22494bb07dbcf1485d0051c94868238b9bb55dbac0750`
+SHA-256: `71bc5ec0a6843b0eb29fb592312e437cbbcacd8b19e9391d0c6c00f1c2f45d24`
 
-## What's new in 23.0
+## What's new in 24.0
 
-- Clouds open faster, and folders you have opened before show up right away. The cloud settings let you keep the cloud engine running in the background.
-- Moving files over ADB is safer: the original is deleted only after the copy is checked.
-- The "Open with…" window now has a list of all apps. A long press on an app sets it for this file type.
-- The narrow font can be turned off. With "Full screen" on and auto-rotate off, the app shows its own rotate button.
-- Windows and menus now follow the theme color. Bug fixes.
+- A long folder in the tree no longer stops at 200 rows: "Show all"
+- The "Up" button works in the tree
+- The "=" button opens the same folder in the other panel
+- Marks without checkmarks, with your own color if you like
+- Papirus keyboard: install and turn on with one button
+- The narrow font stays off after a restart
+- In landscape the keyboard no longer covers the name field
+- Bug fixes
 
 **Requirements and limits**
 
@@ -94,7 +97,7 @@ SHA-256: `c4ef02db905c4d6efae22494bb07dbcf1485d0051c94868238b9bb55dbac0750`
 
 ## Quick start
 
-1. Download ADB-phon-23.0.apk and install it (allow installing from this source if Android asks).
+1. Download ADB-phon-24.0.apk and install it (allow installing from this source if Android asks).
 2. Android 11 and newer: Settings, Developer options, turn on “Wireless debugging”, tap “Pair device with pairing code”. Open ADB-phon in split screen or a floating window, enter the port and the code, tap “Pair”, then “Connect”.
 3. Android 8-10: once, from a computer with USB debugging, run adb tcpip 5555. In ADB-phon tap “Connect” and allow debugging on the phone.
 4. For another device (TV, second phone) tap it in the “Devices in the network” list or type its IP.
