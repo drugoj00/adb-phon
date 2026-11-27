@@ -94,10 +94,24 @@ fun FilesCheckColorSetting() {
         EqChoice(stringResource(R.string.check_theme), UiPrefs.checkMode == 0) { UiPrefs.setCheckTheme(ctx) },
         EqChoice(stringResource(R.string.arrow_custom), UiPrefs.checkMode == 1) { dlg = true },
     ), perRow = 2)
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        SelBox(true, parent = true); SelBox(true); SelBox(false, partial = true); SelBox(false)
+    // 27.11.2026 (4PDA wad72, пост 146236023): образец без подписей принимали за кнопки, поэтому у каждого квадратика своя подпись
+    Text(stringResource(R.string.check_ex_title), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, fontSize = 14.sp, modifier = Modifier.fillMaxWidth())
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CheckSample(R.string.check_ex_on) { SelBox(true) }
+        CheckSample(R.string.check_ex_parent) { SelBox(true, parent = true) }
+        CheckSample(R.string.check_ex_partial) { SelBox(false, partial = true) }
+        CheckSample(R.string.check_ex_off) { SelBox(false) }
     }
     if (dlg) PaletteDialog(stringResource(R.string.set_check_color), UiPrefs.checkCustom.takeIf { UiPrefs.checkMode == 1 }, { UiPrefs.setCheckCustom(ctx, it) }) { dlg = false }
+}
+
+/** Строка образца: квадратик и что он значит. Не нажимается. */
+@Composable
+private fun CheckSample(text: Int, box: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        box()
+        Text(stringResource(text), fontSize = 14.sp, modifier = Modifier.weight(1f))
+    }
 }
 
 @Composable

@@ -7,11 +7,17 @@ import android.content.res.Configuration
 import android.provider.Settings
 import android.view.OrientationEventListener
 import android.view.Surface
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -23,6 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
@@ -69,12 +80,27 @@ fun FullRotateButton(full: Boolean) {
     }
     val rot = offer ?: return
     LaunchedEffect(rot) { delay(7000); offer = null }
+    // 27.11.2026 (4PDA wad72, пост 146236023): вид как у кнопки смены панелей: серая с тонкой окантовкой, значок цвета её стрелки
+    val cs = MaterialTheme.colorScheme
+    val bg = cs.background
+    val dark = (0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue) < 0.5f
+    val purple = if (dark) Color(0xFFC4B5FD) else Color(0xFF6D28D9)
+    val src = remember { MutableInteractionSource() }
+    val focused by src.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(12.dp)
+    val desc = stringResource(R.string.fs_rotate)
     Popup(alignment = Alignment.BottomStart, offset = IntOffset(0, 0)) {
-        FloatingActionButton(
-            onClick = { act.requestedOrientation = orientationFor(act, rot); offer = null },
-            modifier = Modifier.padding(start = 16.dp, bottom = 80.dp),
-            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
-        ) { Icon(Icons.Filled.ScreenRotation, stringResource(R.string.fs_rotate), Modifier.size(28.dp)) }
+        Box(
+            Modifier.padding(start = 16.dp, bottom = 80.dp).size(56.dp).clip(shape)
+                // кнопка лежит поверх списка, поэтому серый цвет смешан с фоном и не просвечивает
+                .background(cs.onSurface.copy(alpha = .14f).compositeOver(bg))
+                .border(if (focused) 3.dp else 1.dp, if (focused) purple else cs.outline.copy(alpha = .5f), shape)
+                .clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current, onClickLabel = desc) {
+                    act.requestedOrientation = orientationFor(act, rot); offer = null
+                }
+                .semantics { contentDescription = desc },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.ScreenRotation, null, Modifier.size(30.dp), tint = purple) }
     }
 }
 
