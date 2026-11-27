@@ -42,8 +42,11 @@
     <string name="sb_unpin">Remove from panel</string>
     <string name="sb_customize">Customize panel...</string>
     <string name="sb_menu_title">Panel buttons</string>
-    <string name="sb_menu_hint">Check a button to put it on the side panel. Tap a name to run the action. The arrows change the order on the panel.</string>
+    <string name="sb_menu_hint">A filled square: the button is on the side panel. Tap a name to run the action. The arrows change the order on the panel.</string>
     <string name="sb_up">Up</string>
     <string name="sb_down">Down</string>
     <string name="sb_done">Done</string>
+    <string name="set_check_color">Mark colour</string>
+    <string name="set_check_color_hint">Colour of a marked square. A folder that contains marked items is always orange.</string>
+    <string name="check_theme">As theme</string>
 </resources>

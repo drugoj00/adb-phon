@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="papirus_on">Turn on the Papirus keyboard</string>
+    <string name="papirus_done">The Papirus keyboard is on</string>
+    <string name="papirus_none">Papirus is not installed on this device</string>
+    <string name="papirus_fail">Could not turn on Papirus: %1$s</string>
+    <string name="papirus_ask">There is no Papirus keyboard on this device. Download it (2 MB), install and turn it on?</string>
+    <string name="papirus_install">Install</string>
+    <string name="papirus_loading">Downloading and installing Papirus…</string>
+    <string name="papirus_install_fail">Papirus was not installed: %1$s</string>
+    <string name="papirus_wrong_file">the downloaded file is not our Papirus</string>
+    <string name="papirus_no_copy">the file could not be copied to the device</string>
+</resources>

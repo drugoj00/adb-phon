@@ -1289,6 +1289,8 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="tr_counting">Counting…</string>
     <string name="tr_open_dlg">Open trash window…</string>
     <string name="tr_none">Empty</string>
+    <string name="tr_show_all">Show all: %2$d</string>
+    <string name="tr_shown_part">Shown %1$d of %2$d. Tap to open the folder as a list</string>
     <string name="tr_drive">Cloud drive</string>
     <string name="ap_need_root">No access. Root is needed.</string>
     <string name="tr_restore_fail">Could not restore: the item stays in the trash.</string>
@@ -1897,4 +1899,5 @@ Icon sources: Google Drive and Yandex Disk, Wikimedia Commons (Google Drive icon
     <string name="panel_black">Black</string>
     <string name="panel_custom">Custom color</string>
     <string name="panel_bright">Brightness</string>
+    <string name="fm_twin_done">The other panel shows the same folder</string>
 </resources>
