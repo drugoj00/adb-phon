@@ -1275,6 +1275,8 @@
     <string name="tr_counting">Подсчёт…</string>
     <string name="tr_open_dlg">Открыть окно корзины…</string>
     <string name="tr_none">Пусто</string>
+    <string name="tr_show_all">Показать все: %2$d</string>
+    <string name="tr_shown_part">Показано %1$d из %2$d. Нажмите, чтобы открыть папку списком</string>
     <string name="tr_drive">Облачный диск</string>
     <string name="ap_need_root">Нет доступа. Нужен root.</string>
     <string name="tr_restore_fail">Не удалось восстановить, файл остался в корзине.</string>
@@ -1883,4 +1885,5 @@
     <string name="panel_black">Чёрный</string>
     <string name="panel_custom">Свой цвет</string>
     <string name="panel_bright">Яркость</string>
+    <string name="fm_twin_done">Во второй панели открыта та же папка</string>
 </resources>

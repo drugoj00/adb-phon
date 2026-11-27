@@ -7,7 +7,7 @@
     <string name="bt_forget_one">Забыть устройство</string>
     <string name="bt_forget_one_q">Убрать «%1$s» (%2$s) из сопряжённых?</string>
     <string name="bt_forget_yes">Забыть</string>
-    <string name="set_open_files_hint">Запомненное приложение для типа файла (например, .apk), которое ты выбрал с галочкой «Запомнить». «Забыть» возвращает вопрос. Пункт виден, только пока что-то запомнено.</string>
+    <string name="set_open_files_hint">Запомненное приложение для типа файла (например, .apk), которое ты выбрал, отметив «Запомнить». «Забыть» возвращает вопрос. Пункт виден, только пока что-то запомнено.</string>
     <string name="hint_more">Подробнее</string>
     <string name="pw_show">Показать пароль</string>
     <string name="pw_hide">Скрыть пароль</string>

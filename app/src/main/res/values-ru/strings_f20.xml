@@ -42,8 +42,11 @@
     <string name="sb_unpin">Убрать с панели</string>
     <string name="sb_customize">Настроить панель…</string>
     <string name="sb_menu_title">Кнопки панели</string>
-    <string name="sb_menu_hint">Галочка: кнопка на боковой панели. Нажми на название, чтобы выполнить действие. Стрелки меняют порядок на панели.</string>
+    <string name="sb_menu_hint">Закрашенный квадратик: кнопка есть на боковой панели. Нажми на название, чтобы выполнить действие. Стрелки меняют порядок на панели.</string>
     <string name="sb_up">Выше</string>
     <string name="sb_down">Ниже</string>
     <string name="sb_done">Готово</string>
+    <string name="set_check_color">Цвет отметки</string>
+    <string name="set_check_color_hint">Цвет закрашенного квадратика. Папка, внутри которой есть отмеченное, всегда оранжевая.</string>
+    <string name="check_theme">Как в теме</string>
 </resources>

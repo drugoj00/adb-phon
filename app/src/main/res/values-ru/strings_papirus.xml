@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="papirus_on">Включить клавиатуру Папирус</string>
+    <string name="papirus_done">Клавиатура Папирус включена</string>
+    <string name="papirus_none">На устройстве нет клавиатуры Папирус</string>
+    <string name="papirus_fail">Не удалось включить Папирус: %1$s</string>
+    <string name="papirus_ask">На устройстве нет клавиатуры Папирус. Скачать (2 МБ), установить и включить?</string>
+    <string name="papirus_install">Установить</string>
+    <string name="papirus_loading">Скачиваю и устанавливаю Папирус…</string>
+    <string name="papirus_install_fail">Папирус не установился: %1$s</string>
+    <string name="papirus_wrong_file">скачанный файл не наш Папирус</string>
+    <string name="papirus_no_copy">файл не удалось передать на устройство</string>
+</resources>
